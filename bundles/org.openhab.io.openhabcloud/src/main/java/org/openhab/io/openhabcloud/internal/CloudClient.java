@@ -248,9 +248,9 @@ public class CloudClient {
             @Override
             public void call(Object... args) {
                 if (args.length > 0) {
-                    logger.info("Socket.IO disconnected: {}", args[0]);
+                    logger.warn("Socket.IO disconnected: {}", args[0]);
                 } else {
-                    logger.info("Socket.IO disconnected");
+                    logger.warn("Socket.IO disconnected");
                 }
                 isConnected = false;
                 onDisconnect();
