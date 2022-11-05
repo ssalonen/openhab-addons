@@ -12,7 +12,8 @@
  */
 package org.openhab.binding.mqtt.homeassistant.internal.handler;
 
-import java.util.Collection;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -51,6 +52,7 @@ import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.ThingUID;
+import org.openhab.core.thing.binding.builder.ThingBuilder;
 import org.openhab.core.thing.type.ChannelDefinition;
 import org.openhab.core.thing.type.ChannelGroupDefinition;
 import org.openhab.core.thing.type.ChannelGroupType;
@@ -82,6 +84,8 @@ import com.google.gson.GsonBuilder;
 public class HomeAssistantThingHandler extends AbstractMQTTThingHandler
         implements ComponentDiscovered, Consumer<List<AbstractComponent<?>>> {
     public static final String AVAILABILITY_CHANNEL = "availability";
+    private static final Comparator<Channel> CHANNEL_COMPARATOR_BY_UID = Comparator
+            .comparing(channel -> channel.getUID().toString());;
 
     private final Logger logger = LoggerFactory.getLogger(HomeAssistantThingHandler.class);
 
@@ -260,7 +264,7 @@ public class HomeAssistantThingHandler extends AbstractMQTTThingHandler
      * Callback of {@link DelayedBatchProcessing}.
      * Add all newly discovered components to the Thing and start the components.
      */
-    @SuppressWarnings("null")
+    @SuppressWarnings({ "null" })
     @Override
     public void accept(List<AbstractComponent<?>> discoveredComponentsList) {
         MqttBrokerConnection connection = this.connection;
@@ -293,13 +297,44 @@ public class HomeAssistantThingHandler extends AbstractMQTTThingHandler
                     return null;
                 });
 
-                Collection<Channel> channels = discovered.getChannelMap().values().stream()
+                List<Channel> discoveredChannels = discovered.getChannelMap().values().stream()
                         .map(ComponentChannel::getChannel).collect(Collectors.toList());
-                ThingHelper.addChannelsToThing(thing, channels);
-            }
-        }
+                if (known != null) {
+                    // We had previously known component with different config hash
+                    // We remove all conflicting old channels, they will be re-added below based on the new discovery
+                    logger.debug(
+                            "Received component {} with slightly different config. Making sure we re-create conflicting channels...",
+                            discovered.getGroupUID());
+                    removeJustRediscoveredChannels(discoveredChannels);
+                }
 
-        updateThingType();
+                // Add newly discovered channels. We sort the channels
+                // for (mostly) consistent jsondb serialization
+                discoveredChannels.sort(CHANNEL_COMPARATOR_BY_UID);
+                ThingHelper.addChannelsToThing(thing, discoveredChannels);
+            }
+            updateThingType();
+        }
+    }
+
+    private void removeJustRediscoveredChannels(List<Channel> discoveredChannels) {
+        ArrayList<Channel> mutableChannels = new ArrayList<>(getThing().getChannels());
+        Set<ChannelUID> newChannelUIDs = discoveredChannels.stream().map(Channel::getUID).collect(Collectors.toSet());
+        // Take current channels but remove those channels that were just re-discovered
+        List<Channel> existingChannelsWithNewlyDiscoveredChannelsRemoved = mutableChannels.stream()
+                .filter(existingChannel -> !newChannelUIDs.contains(existingChannel.getUID()))
+                .collect(Collectors.toList());
+        if (existingChannelsWithNewlyDiscoveredChannelsRemoved.size() < mutableChannels.size()) {
+            // We sort the channels for (mostly) consistent jsondb serialization
+            existingChannelsWithNewlyDiscoveredChannelsRemoved.sort(CHANNEL_COMPARATOR_BY_UID);
+            updateThingChannels(existingChannelsWithNewlyDiscoveredChannelsRemoved);
+        }
+    }
+
+    private void updateThingChannels(List<Channel> channelList) {
+        ThingBuilder thingBuilder = editThing();
+        thingBuilder.withChannels(channelList);
+        updateThing(thingBuilder.build());
     }
 
     @Override
