@@ -66,13 +66,5 @@
 			<description>Interval to update unchanged values. Normally unchanged values are not updated. In milliseconds.</description>
 			<advanced>true</advanced>
 		</parameter>
-		<parameter name="cacheMillis" type="integer" min="0" unit="ms" groupName="advanced">
-			<label>Cache Duration</label>
-			<default>50</default>
-			<description><![CDATA[Duration for data cache to be valid, in milliseconds. This cache is used only to serve REFRESH commands.
-                    <br />
-                    <br />Use zero to disable the caching.]]></description>
-			<advanced>true</advanced>
-		</parameter>
 	</config-description>
 </config-description:config-descriptions>
