@@ -147,7 +147,8 @@ public abstract class AbstractModbusEndpointThingHandler<E extends ModbusSlaveEn
                 try {
                     comms = new CommunicationInterfaceWrapper(
                             modbusManager.newModbusCommunicationInterface(endpoint, poolConfiguration));
-                    updateStatus(ThingStatus.UNKNOWN);
+                    updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE,
+                            "Status will be updated after first read/write operation");
                 } catch (IllegalArgumentException e) {
                     updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
                             formatConflictingParameterError());
