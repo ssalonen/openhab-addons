@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="modbus"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+    <channel-type id="readIntoContact">
+        <item-type>Number</item-type>
+        <label>Interpret read data as Contact</label>
+        <config-description-ref uri="thing-type:modbus:read_into_contact_channel"></config-description-ref>
+    </channel-type>
+    <channel-type id="readIntoHexString">
+        <item-type>String</item-type>
+        <label>Interpret read data as hexadecimal string</label>
+        <description><![CDATA[Raw read data is presented in hexadecimal string format. For example e.g. 03FAFFFF can represent two 16bit words, 0x03FA and 0xFFFF.
+        This allows you get coherent access to raw data received from Modbus.]]></description>
+        <config-description-ref uri="thing-type:modbus:read_into_hexstring_channel"></config-description-ref>
+    </channel-type>
+	<channel-type id="readIntoNumber">
+		<item-type>Number</item-type>
+		<label>Interpret read data as Number</label>
+		<config-description-ref uri="thing-type:modbus:read_into_number_channel"></config-description-ref>
+	</channel-type>
+	<channel-type id="readIntoSwitch">
+        <item-type>Switch</item-type>
+        <label>Interpret read data as Switch</label>
+        <config-description-ref uri="thing-type:modbus:read_into_switch_channel"></config-description-ref>
+    </channel-type>
+	
+</thing:thing-descriptions>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config-description:config-descriptions
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:config-description="https://openhab.org/schemas/config-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/config-description/v1.0.0 https://openhab.org/schemas/config-description-1.0.0.xsd">
+
+	<config-description uri="thing-type:modbus:read_into_hexstring_channel">
+		<parameter-group name="advanced">
+			<label>Advanced</label>
+			<description>These configuration parameters allow you to alter advanced behaviour with reads.</description>
+			<advanced>true</advanced>
+		</parameter-group>
+		<parameter name="address" type="text" pattern="^(0|[0-9][0-9]*(\.[0-9]{1,2})?)?$">
+			<label>Read Address</label>
+			<description><![CDATA[Start address for value to be read.
+                <br />
+                <br />Input as zero-based index number, e.g. in place of 400001 (first holding register), use the address 0.  Must be between (poller start) and (poller start + poller length - 1) (inclusive).
+                ]]>
+                </description>
+		</parameter>
+		<parameter name="length" type="integer" required="true">
+			<label>Length</label>
+			<description>Number of elements (registers, coils or discrete inputs) to return</description>
+		</parameter>
+		<parameter name="updateUnchangedValuesEveryMillis" type="integer" min="0" unit="ms" groupName="advanced">
+			<label>Interval for Updating Unchanged Values</label>
+			<default>1000</default>
+			<description>Interval to update unchanged values. Normally unchanged values are not updated. In milliseconds.</description>
+			<advanced>true</advanced>
+		</parameter>		
+		<parameter name="cacheMillis" type="integer" min="0" unit="ms" groupName="advanced">
+			<label>Cache Duration</label>
+			<default>50</default>
+			<description><![CDATA[Duration for data cache to be valid, in milliseconds. This cache is used only to serve REFRESH commands.
+                    <br />
+                    <br />Use zero to disable the caching.]]></description>
+			<advanced>true</advanced>
+		</parameter>
+	</config-description>
+</config-description:config-descriptions>
