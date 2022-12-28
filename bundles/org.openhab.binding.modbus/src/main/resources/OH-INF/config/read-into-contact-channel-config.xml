@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config-description:config-descriptions
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:config-description="https://openhab.org/schemas/config-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/config-description/v1.0.0 https://openhab.org/schemas/config-description-1.0.0.xsd">
+
+	<config-description uri="thing-type:modbus:read_into_contact_channel">
+		<parameter-group name="advanced">
+			<label>Advanced</label>
+			<description>These configuration parameters allow you to alter advanced behaviour with reads.</description>
+			<advanced>true</advanced>
+		</parameter-group>
+		<parameter name="address" type="text" pattern="^(0|[0-9][0-9]*(\.[0-9]{1,2})?)?$">
+			<label>Read Address</label>
+			<description><![CDATA[Start address for value to be read.
+                <br />
+                <br />Input as zero-based index number, e.g. in place of 400001 (first holding register), use the address 0.  Must be between (poller start) and (poller start + poller length - 1) (inclusive).
+                <br />
+                <br />With registers and value type less than 16 bits, you must use X.Y format where Y specifies the sub-element to read from the 16 bit register:
+                <ul>
+                    <li>For example, 3.1 would mean pick second (least significant) bit from register index 3 with bit value type. </li>
+                    <li>With int8 valuetype, it would pick the high byte of register index 3.</li>
+                </ul>
+                ]]>
+                </description>
+		</parameter>
+		<parameter name="valueType" type="text">
+			<label>Read Value Type</label>
+			<description>Method to decode the binary data from Modbus to number</description>
+			<options>
+				<option value="int64">64bit signed integer (int64)</option>
+				<option value="uint64">64bit unsigned integer (uint64)</option>
+				<option value="int64_swap">64bit signed integer, 16bit words in reverse order (dcba) (int64_swap)</option>
+				<option value="uint64_swap">64bit unsigned integer, 16bit words in reverse order (dcba) (uint64_swap)</option>
+
+				<option value="float32">32bit floating point (float32)</option>
+				<option value="float32_swap">32bit floating point, 16bit words swapped (float32_swap)</option>
+
+				<option value="int32">32bit signed integer (int32)</option>
+				<option value="uint32">32bit unsigned integer (uint32)</option>
+				<option value="int32_swap">32bit signed integer, 16bit words swapped (int32_swap)</option>
+				<option value="uint32_swap">32bit unsigned integer, 16bit words swapped (uint32_swap)</option>
+
+				<option value="int16">16bit signed integer (int16)</option>
+				<option value="uint16">16bit unsigned integer (uint16)</option>
+
+				<option value="int8">8bit signed integer (int8)</option>
+				<option value="uint8">8bit unsigned integer (uint8)</option>
+
+				<option value="bit">individual bit (bit)</option>
+			</options>
+		</parameter>
+        <parameter name="closedValue" type="decimal" >
+            <label>CLOSED value</label>
+            <description>Consider this decoded number as CLOSED</description>
+            <default>0</default>
+        </parameter>
+        <parameter name="inverted" type="boolean">
+            <label>Inverted logic</label>
+            <description>Whether to invert CLOSED/OPEN decoding logic</description>
+            <default>false</default>
+        </parameter>
+		<parameter name="updateUnchangedValuesEveryMillis" type="integer" min="0" unit="ms" groupName="advanced">
+			<label>Interval for Updating Unchanged Values</label>
+			<default>1000</default>
+			<description>Interval to update unchanged values. Normally unchanged values are not updated. In milliseconds.</description>
+			<advanced>true</advanced>
+		</parameter>
+		<parameter name="cacheMillis" type="integer" min="0" unit="ms" groupName="advanced">
+			<label>Cache Duration</label>
+			<default>50</default>
+			<description><![CDATA[Duration for data cache to be valid, in milliseconds. This cache is used only to serve REFRESH commands.
+                    <br />
+                    <br />Use zero to disable the caching.]]></description>
+			<advanced>true</advanced>
+		</parameter>
+	</config-description>
+</config-description:config-descriptions>
