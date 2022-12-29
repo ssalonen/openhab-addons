@@ -214,7 +214,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
             logger.debug("Bridge is null");
             return null;
         }
-        if (bridge.getStatus() != ThingStatus.ONLINE) {
+        if (bridge.getStatus() != ThingStatus.ONLINE && bridge.getStatus() != ThingStatus.UNKNOWN) {
             logger.debug("Bridge is not online");
             return null;
         }
@@ -360,13 +360,13 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
 
         if (config.getRefresh() <= 0L) {
             logger.debug("Not registering polling with ModbusManager since refresh disabled");
-            updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE, "Not polling");
+            updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE, "Not polling");
         } else {
             logger.debug("Registering polling with ModbusManager");
             pollTask = localComms.registerRegularPoll(localRequest, config.getRefresh(), 0, callbackDelegator,
                     callbackDelegator);
             assert pollTask != null;
-            updateStatus(ThingStatus.ONLINE);
+            updateStatus(ThingStatus.UNKNOWN);
         }
     }
 
@@ -378,11 +378,15 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
 
     @Override
     public synchronized void bridgeStatusChanged(ThingStatusInfo bridgeStatusInfo) {
-        logger.debug("bridgeStatusChanged for {}. Reseting handler", this.getThing().getUID());
-        this.dispose();
-        this.initialize();
+        if (bridgeStatusInfo.getStatus() == ThingStatus.ONLINE) {
+            logger.debug("bridgeStatusChanged to {}. Reseting handler {} to pick up possible configuration changes",
+                    bridgeStatusInfo.getStatus(), this.getThing().getUID());
+            this.dispose();
+            this.initialize();
+        }
     }
 
+    // TODO: make similar stuff with channels (in initialize, with configured channels)
     @Override
     public void childHandlerInitialized(ThingHandler childHandler, Thing childThing) {
         if (childHandler instanceof ModbusDataThingHandler) {
@@ -390,7 +394,8 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
         }
     }
 
-    @SuppressWarnings("unlikely-arg-type")
+    // TODO: make similar stuff with channels (in initialize, with configured channels)
+    // @SuppressWarnings("unlikely-arg-type")
     @Override
     public void childHandlerDisposed(ThingHandler childHandler, Thing childThing) {
         if (childHandler instanceof ModbusDataThingHandler) {

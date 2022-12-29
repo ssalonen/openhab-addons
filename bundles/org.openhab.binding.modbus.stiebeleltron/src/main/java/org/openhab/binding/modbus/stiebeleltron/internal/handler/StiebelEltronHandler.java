@@ -59,7 +59,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The {@link Modbus.StiebelEltronHandler} is responsible for handling commands,
+ * The {@link StiebelEltronHandler} is responsible for handling commands,
  * which are sent to one of the channels and for polling the modbus.
  *
  * @author Paul Frank - Initial contribution
@@ -468,7 +468,7 @@ public class StiebelEltronHandler extends BaseThingHandler {
             logger.debug("Bridge is null");
             return null;
         }
-        if (bridge.getStatus() != ThingStatus.ONLINE) {
+        if (bridge.getStatus() != ThingStatus.ONLINE && bridge.getStatus() != ThingStatus.UNKNOWN) {
             logger.debug("Bridge is not online");
             return null;
         }
@@ -637,7 +637,7 @@ public class StiebelEltronHandler extends BaseThingHandler {
     public void bridgeStatusChanged(ThingStatusInfo bridgeStatusInfo) {
         super.bridgeStatusChanged(bridgeStatusInfo);
 
-        if (bridgeStatusInfo.getStatus() == ThingStatus.ONLINE) {
+        if (bridgeStatusInfo.getStatus() == ThingStatus.ONLINE || bridgeStatusInfo.getStatus() == ThingStatus.UNKNOWN) {
             startUp();
         } else if (bridgeStatusInfo.getStatus() == ThingStatus.OFFLINE) {
             tearDown();
