@@ -245,7 +245,7 @@ public abstract class AbstractSunSpecHandler extends BaseThingHandler {
             logger.debug("Bridge is null");
             return null;
         }
-        if (bridge.getStatus() != ThingStatus.ONLINE) {
+        if (bridge.getStatus() != ThingStatus.ONLINE && bridge.getStatus() != ThingStatus.UNKNOWN) {
             logger.debug("Bridge is not online");
             return null;
         }
