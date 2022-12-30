@@ -298,149 +298,149 @@ public class ModbusDataHandlerTest extends AbstractModbusOSGiTest {
         assertSingleStateUpdate(handler, channel, is(equalTo(state)));
     }
 
-    private void testOutOfBoundsGeneric(int pollStart, int pollLength, String start,
-            ModbusReadFunctionCode functionCode, ValueType valueType, ThingStatus expectedStatus) {
-        testOutOfBoundsGeneric(pollStart, pollLength, start, functionCode, valueType, expectedStatus, null);
-    }
+    // private void testOutOfBoundsGeneric(int pollStart, int pollLength, String start,
+    // ModbusReadFunctionCode functionCode, ValueType valueType, ThingStatus expectedStatus) {
+    // testOutOfBoundsGeneric(pollStart, pollLength, start, functionCode, valueType, expectedStatus, null);
+    // }
 
-    private void testOutOfBoundsGeneric(int pollStart, int pollLength, String start,
-            ModbusReadFunctionCode functionCode, ValueType valueType, ThingStatus expectedStatus,
-            BundleContext context) {
-        ModbusSlaveEndpoint endpoint = new ModbusTCPSlaveEndpoint("thisishost", 502, false);
-
-        // Minimally mocked request
-        ModbusReadRequestBlueprint request = Mockito.mock(ModbusReadRequestBlueprint.class);
-        doReturn(pollStart).when(request).getReference();
-        doReturn(pollLength).when(request).getDataLength();
-        doReturn(functionCode).when(request).getFunctionCode();
-
-        PollTask task = Mockito.mock(PollTask.class);
-        doReturn(endpoint).when(task).getEndpoint();
-        doReturn(request).when(task).getRequest();
-
-        Bridge pollerThing = createPollerMock("poller1", task);
-
-        Configuration dataConfig = new Configuration();
-        dataConfig.put("readStart", start);
-        dataConfig.put("readTransform", "default");
-        dataConfig.put("readValueType", valueType.getConfigValue());
-        ModbusDataThingHandler dataHandler = createDataHandler("data1", pollerThing,
-                builder -> builder.withConfiguration(dataConfig), context);
-        assertThat(dataHandler.getThing().getStatusInfo().getDescription(), dataHandler.getThing().getStatus(),
-                is(equalTo(expectedStatus)));
-    }
-
-    @Test
-    public void testInitCoilsOutOfIndex() {
-        testOutOfBoundsGeneric(4, 3, "8", ModbusReadFunctionCode.READ_COILS, ModbusConstants.ValueType.BIT,
-                ThingStatus.OFFLINE);
-    }
-
-    @Test
-    public void testInitCoilsOutOfIndex2() {
-        // Reading coils 4, 5, 6. Coil 7 is out of bounds
-        testOutOfBoundsGeneric(4, 3, "7", ModbusReadFunctionCode.READ_COILS, ModbusConstants.ValueType.BIT,
-                ThingStatus.OFFLINE);
-    }
-
-    @Test
-    public void testInitCoilsOK() {
-        // Reading coils 4, 5, 6. Coil 6 is OK
-        testOutOfBoundsGeneric(4, 3, "6", ModbusReadFunctionCode.READ_COILS, ModbusConstants.ValueType.BIT,
-                ThingStatus.ONLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithBitOutOfIndex() {
-        testOutOfBoundsGeneric(4, 3, "8.0", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.BIT, ThingStatus.OFFLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithBitOutOfIndex2() {
-        testOutOfBoundsGeneric(4, 3, "7.16", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.BIT, ThingStatus.OFFLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithBitOK() {
-        testOutOfBoundsGeneric(4, 3, "6.0", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.BIT, ThingStatus.ONLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithBitOK2() {
-        testOutOfBoundsGeneric(4, 3, "6.15", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.BIT, ThingStatus.ONLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithInt8OutOfIndex() {
-        testOutOfBoundsGeneric(4, 3, "8.0", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.INT8, ThingStatus.OFFLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithInt8OutOfIndex2() {
-        testOutOfBoundsGeneric(4, 3, "7.2", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.INT8, ThingStatus.OFFLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithInt8OK() {
-        testOutOfBoundsGeneric(4, 3, "6.0", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.INT8, ThingStatus.ONLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithInt8OK2() {
-        testOutOfBoundsGeneric(4, 3, "6.1", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.INT8, ThingStatus.ONLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithInt16OK() {
-        // Poller reading registers 4, 5, 6. Register 6 is OK
-        testOutOfBoundsGeneric(4, 3, "6", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.INT16, ThingStatus.ONLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithInt16OutOfBounds() {
-        // Poller reading registers 4, 5, 6. Register 7 is out-of-bounds
-        testOutOfBoundsGeneric(4, 3, "7", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.INT16, ThingStatus.OFFLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithInt16OutOfBounds2() {
-        testOutOfBoundsGeneric(4, 3, "8", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.INT16, ThingStatus.OFFLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithInt16NoDecimalFormatAllowed() {
-        testOutOfBoundsGeneric(4, 3, "7.0", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.INT16, ThingStatus.OFFLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithInt32OK() {
-        testOutOfBoundsGeneric(4, 3, "5", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.INT32, ThingStatus.ONLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithInt32OutOfBounds() {
-        testOutOfBoundsGeneric(4, 3, "6", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.INT32, ThingStatus.OFFLINE);
-    }
-
-    @Test
-    public void testInitRegistersWithInt32AtTheEdge() {
-        testOutOfBoundsGeneric(4, 3, "5", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
-                ModbusConstants.ValueType.INT32, ThingStatus.ONLINE);
-    }
+    // private void testOutOfBoundsGeneric(int pollStart, int pollLength, String start,
+    // ModbusReadFunctionCode functionCode, ValueType valueType, ThingStatus expectedStatus,
+    // BundleContext context) {
+    // ModbusSlaveEndpoint endpoint = new ModbusTCPSlaveEndpoint("thisishost", 502, false);
+    //
+    // // Minimally mocked request
+    // ModbusReadRequestBlueprint request = Mockito.mock(ModbusReadRequestBlueprint.class);
+    // doReturn(pollStart).when(request).getReference();
+    // doReturn(pollLength).when(request).getDataLength();
+    // doReturn(functionCode).when(request).getFunctionCode();
+    //
+    // PollTask task = Mockito.mock(PollTask.class);
+    // doReturn(endpoint).when(task).getEndpoint();
+    // doReturn(request).when(task).getRequest();
+    //
+    // Bridge pollerThing = createPollerMock("poller1", task);
+    //
+    // Configuration dataConfig = new Configuration();
+    // dataConfig.put("readStart", start);
+    // dataConfig.put("readTransform", "default");
+    // dataConfig.put("readValueType", valueType.getConfigValue());
+    // ModbusDataThingHandler dataHandler = createDataHandler("data1", pollerThing,
+    // builder -> builder.withConfiguration(dataConfig), context);
+    // assertThat(dataHandler.getThing().getStatusInfo().getDescription(), dataHandler.getThing().getStatus(),
+    // is(equalTo(expectedStatus)));
+    // }
+    //
+    // @Test
+    // public void testInitCoilsOutOfIndex() {
+    // testOutOfBoundsGeneric(4, 3, "8", ModbusReadFunctionCode.READ_COILS, ModbusConstants.ValueType.BIT,
+    // ThingStatus.OFFLINE);
+    // }
+    //
+    // @Test
+    // public void testInitCoilsOutOfIndex2() {
+    // // Reading coils 4, 5, 6. Coil 7 is out of bounds
+    // testOutOfBoundsGeneric(4, 3, "7", ModbusReadFunctionCode.READ_COILS, ModbusConstants.ValueType.BIT,
+    // ThingStatus.OFFLINE);
+    // }
+    //
+    // @Test
+    // public void testInitCoilsOK() {
+    // // Reading coils 4, 5, 6. Coil 6 is OK
+    // testOutOfBoundsGeneric(4, 3, "6", ModbusReadFunctionCode.READ_COILS, ModbusConstants.ValueType.BIT,
+    // ThingStatus.ONLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithBitOutOfIndex() {
+    // testOutOfBoundsGeneric(4, 3, "8.0", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.BIT, ThingStatus.OFFLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithBitOutOfIndex2() {
+    // testOutOfBoundsGeneric(4, 3, "7.16", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.BIT, ThingStatus.OFFLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithBitOK() {
+    // testOutOfBoundsGeneric(4, 3, "6.0", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.BIT, ThingStatus.ONLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithBitOK2() {
+    // testOutOfBoundsGeneric(4, 3, "6.15", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.BIT, ThingStatus.ONLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithInt8OutOfIndex() {
+    // testOutOfBoundsGeneric(4, 3, "8.0", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.INT8, ThingStatus.OFFLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithInt8OutOfIndex2() {
+    // testOutOfBoundsGeneric(4, 3, "7.2", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.INT8, ThingStatus.OFFLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithInt8OK() {
+    // testOutOfBoundsGeneric(4, 3, "6.0", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.INT8, ThingStatus.ONLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithInt8OK2() {
+    // testOutOfBoundsGeneric(4, 3, "6.1", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.INT8, ThingStatus.ONLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithInt16OK() {
+    // // Poller reading registers 4, 5, 6. Register 6 is OK
+    // testOutOfBoundsGeneric(4, 3, "6", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.INT16, ThingStatus.ONLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithInt16OutOfBounds() {
+    // // Poller reading registers 4, 5, 6. Register 7 is out-of-bounds
+    // testOutOfBoundsGeneric(4, 3, "7", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.INT16, ThingStatus.OFFLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithInt16OutOfBounds2() {
+    // testOutOfBoundsGeneric(4, 3, "8", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.INT16, ThingStatus.OFFLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithInt16NoDecimalFormatAllowed() {
+    // testOutOfBoundsGeneric(4, 3, "7.0", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.INT16, ThingStatus.OFFLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithInt32OK() {
+    // testOutOfBoundsGeneric(4, 3, "5", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.INT32, ThingStatus.ONLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithInt32OutOfBounds() {
+    // testOutOfBoundsGeneric(4, 3, "6", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.INT32, ThingStatus.OFFLINE);
+    // }
+    //
+    // @Test
+    // public void testInitRegistersWithInt32AtTheEdge() {
+    // testOutOfBoundsGeneric(4, 3, "5", ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS,
+    // ModbusConstants.ValueType.INT32, ThingStatus.ONLINE);
+    // }
 
     private ModbusDataThingHandler testReadHandlingGeneric(ModbusReadFunctionCode functionCode, String start,
             String transform, ValueType valueType, BitArray bits, ModbusRegisterArray registers, Exception error) {
