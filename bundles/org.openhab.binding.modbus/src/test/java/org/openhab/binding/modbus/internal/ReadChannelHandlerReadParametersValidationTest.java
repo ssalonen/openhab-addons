@@ -31,7 +31,14 @@ public class ReadChannelHandlerReadParametersValidationTest {
     private static Stream<Arguments> provideArgsForTestValidateConfig()
 
     {
-        // expected validity, poll function, poll start, poll length, channel start address, channel value type
+        // Arguments:
+        // 1. expected validity (if false, expecting to throw!)
+        // 2. poll function
+        // 3. poll start
+        // 4. poll length
+        // 5. channel start
+        // 6. address
+        // 7. channel value type
         Arguments.of(true, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "6.1", ValueType.BIT);
         return Stream.of(
         //@formatter:off
