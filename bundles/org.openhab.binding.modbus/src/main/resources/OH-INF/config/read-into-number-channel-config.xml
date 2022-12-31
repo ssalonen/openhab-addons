@@ -50,7 +50,7 @@
 				<option value="bit">individual bit (bit)</option>
 			</options>
 		</parameter>
-		<parameter name="pre-gain-offset" type="decimal">
+		<parameter name="preGainOffset" type="decimal">
 			<label>Pre-gain Offset</label>
 			<description>Offset to add to raw decoded number towards the item (before the gain).</description>
 		</parameter>

@@ -10,20 +10,22 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.modbus.internal.config;
+package org.openhab.binding.modbus.config;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 
 /**
- * Handler for read channels, responsible of necessary transformations
+ * Configuration for readIntoNumber channels
  *
  * @author Sami Salonen - Initial contribution
  *
  */
 @NonNullByDefault
-public class ReadChannelConfiguration {
+public class NumberReadChannelConfiguration extends ReadChannelBaseConfiguration {
 
-    public @Nullable String address;
-
+    public @Nullable ValueType valueType;
+    public String gain = "1";
+    public String preGainOffset = "0";
 }

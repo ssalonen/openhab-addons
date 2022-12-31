@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.modbus.internal;
+package org.openhab.binding.modbus.internal.handler;
 
 import static org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal.WRITE_TYPE_COIL;
 
@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.OptionalInt;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.openhab.binding.modbus.internal.ChannelConfigValidationMessage;
+import org.openhab.binding.modbus.internal.handler.ReadChannelHandler.Address;
 import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
 
@@ -34,9 +36,6 @@ public class WriteChannelHandler {
     //
     // defaults:
     // - assume BIT if writing coil
-
-    // TODO: Validation below assumes that we support writing bit, uint8, and int8 into registers. Do we support all?
-    // Old code might support only bit at this time. See ModbusDataThingHandler.requestFromCommand
 
     /**
      * Validate write parameters used to specify transformation of openHAB command to modbus request
@@ -68,29 +67,24 @@ public class WriteChannelHandler {
      * @param channelValueType value type for encoding
      * @return Empty list when validation passes without errors. Otherwise list of validation errors is returned.
      */
-    public static List<ChannelConfigValidationMessage> validateConfigCase1(ModbusReadFunctionCode pollerFunctionCode,
-            int pollerStart, int pollerLength, String writeType, String channelStart, ValueType channelValueType) {
+    public static List<ChannelConfigValidationMessage> validateWriteParameters(
+            ModbusReadFunctionCode pollerFunctionCode, int pollerStart, int pollerLength, String writeType,
+            String channelStart, ValueType channelValueType) {
 
         List<ChannelConfigValidationMessage> validationIssues = new ArrayList<>();
 
         // CHECK 0
         final int channelStartElement;
         final OptionalInt channelStartElementSub;
-        {
-            String[] readParts = channelStart.split("\\.", 2);
-            try {
-                channelStartElement = Integer.parseInt(readParts[0]);
-                if (readParts.length == 2) {
-                    channelStartElementSub = OptionalInt.of(Integer.parseInt(readParts[1]));
-                } else {
-                    channelStartElementSub = OptionalInt.empty();
-                }
-            } catch (IllegalArgumentException e) {
-                String errmsg = String.format("Invalid address=%s, expecting X or X.Y", channelStart);
-                validationIssues.add(new ChannelConfigValidationMessage(errmsg));
-                // Critical validation issue, stop validating other things
-                return validationIssues;
-            }
+        try {
+            Address parsedAddress = ReadChannelHandler.parseAddress(channelStart);
+            channelStartElement = parsedAddress.channelStartElement;
+            channelStartElementSub = parsedAddress.channelStartElementSub;
+        } catch (IllegalArgumentException e) {
+            String errmsg = String.format("Invalid address=%s, expecting X or X.Y", channelStart);
+            validationIssues.add(new ChannelConfigValidationMessage(errmsg));
+            // Critical validation issue, stop validating other things
+            return validationIssues;
         }
 
         if (writeType == WRITE_TYPE_COIL) {

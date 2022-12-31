@@ -10,15 +10,23 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.modbus.internal;
+package org.openhab.binding.modbus.internal.handler;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalInt;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.openhab.binding.modbus.internal.ChannelConfigValidationMessage;
+import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
+import org.openhab.core.io.transport.modbus.AsyncModbusReadResult;
+import org.openhab.core.io.transport.modbus.BitArray;
 import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
+import org.openhab.core.io.transport.modbus.ModbusFailureCallback;
+import org.openhab.core.io.transport.modbus.ModbusReadCallback;
 import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
+import org.openhab.core.io.transport.modbus.ModbusReadRequestBlueprint;
+import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
 
 /**
  * Handler for read channels, decoding raw binary data from modbus according to channel configuration.
@@ -27,7 +35,20 @@ import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
  *
  */
 @NonNullByDefault
-public class ReadChannelHandler {
+public abstract class ReadChannelHandler
+        implements ModbusReadCallback, ModbusFailureCallback<ModbusReadRequestBlueprint> {
+
+    public static class Address {
+
+        public final int channelStartElement;
+        public final OptionalInt channelStartElementSub;
+
+        public Address(int channelStartElement, OptionalInt channelStartElementSub) {
+            this.channelStartElement = channelStartElement;
+            this.channelStartElementSub = channelStartElementSub;
+        }
+
+    }
 
     // defaults
     // 1. assume bit value type if poller is readingDiscreteOrCoil
@@ -36,6 +57,22 @@ public class ReadChannelHandler {
     // CASE 2 INPUT: poller data type, poll start, poll length, channel start, channel length (hex string)
     // [CASE 1&2] 6. check that readStart is within limits of polled data
     // [CASE 1&2] 7. check that last byte/bit expected is within limits of polled data
+
+    static Address parseAddress(String channelStart) throws IllegalArgumentException {
+        final int channelStartElement;
+        final OptionalInt channelStartElementSub;
+        {
+            String[] readParts = channelStart.split("\\.", 2);
+            channelStartElement = Integer.parseInt(readParts[0]);
+            if (readParts.length == 2) {
+                channelStartElementSub = OptionalInt.of(Integer.parseInt(readParts[1]));
+            } else {
+                channelStartElementSub = OptionalInt.empty();
+            }
+        }
+        Address parsedAddress = new Address(channelStartElement, channelStartElementSub);
+        return parsedAddress;
+    }
 
     /**
      * Validate read parameters used to specify decoding of binary data polled from modbus
@@ -57,7 +94,7 @@ public class ReadChannelHandler {
      * @param channelValueType value type for decoding
      * @return Empty list when validation passes without errors. Otherwise list of validation errors is returned.
      */
-    public static List<ChannelConfigValidationMessage> validateConfigCase1(ModbusReadFunctionCode pollerFunctionCode,
+    public static List<ChannelConfigValidationMessage> validateReadParameters(ModbusReadFunctionCode pollerFunctionCode,
             int pollerStart, int pollerLength, String channelStart, ValueType channelValueType) {
 
         List<ChannelConfigValidationMessage> validationIssues = new ArrayList<>();
@@ -65,21 +102,15 @@ public class ReadChannelHandler {
         // CHECK 0
         final int channelStartElement;
         final OptionalInt channelStartElementSub;
-        {
-            String[] readParts = channelStart.split("\\.", 2);
-            try {
-                channelStartElement = Integer.parseInt(readParts[0]);
-                if (readParts.length == 2) {
-                    channelStartElementSub = OptionalInt.of(Integer.parseInt(readParts[1]));
-                } else {
-                    channelStartElementSub = OptionalInt.empty();
-                }
-            } catch (IllegalArgumentException e) {
-                String errmsg = String.format("Invalid address=%s, expecting X or X.Y", channelStart);
-                validationIssues.add(new ChannelConfigValidationMessage(errmsg));
-                // Critical validation issue, stop validating other things
-                return validationIssues;
-            }
+        try {
+            Address parsedAddress = parseAddress(channelStart);
+            channelStartElement = parsedAddress.channelStartElement;
+            channelStartElementSub = parsedAddress.channelStartElementSub;
+        } catch (IllegalArgumentException e) {
+            String errmsg = String.format("Invalid address=%s, expecting X or X.Y", channelStart);
+            validationIssues.add(new ChannelConfigValidationMessage(errmsg));
+            // Critical validation issue, stop validating other things
+            return validationIssues;
         }
 
         if (pollerFunctionCode == ModbusReadFunctionCode.READ_COILS
@@ -151,5 +182,22 @@ public class ReadChannelHandler {
 
         return validationIssues;
     }
+
+    @Override
+    public void handle(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+        process(failure.getCause());
+    }
+
+    @Override
+    public void handle(AsyncModbusReadResult result) {
+        result.getRegisters().ifPresent(registers -> process(registers));
+        result.getBits().ifPresent(bits -> process(bits));
+    }
+
+    public abstract void process(BitArray bits);
+
+    public abstract void process(ModbusRegisterArray registers);
+
+    public abstract void process(Exception readError);
 
 }
