@@ -852,27 +852,27 @@ public class ModbusDataHandlerTest extends AbstractModbusOSGiTest {
         assertThat(dataHandler.getThing().getStatus(), is(equalTo(expectedStatus)));
     }
 
-    @Test
-    public void testCoilDoesNotAcceptFloat32ValueType() {
-        testValueTypeGeneric(ModbusReadFunctionCode.READ_COILS, ModbusConstants.ValueType.FLOAT32, ThingStatus.OFFLINE);
-    }
+    // @Test
+    // public void testCoilDoesNotAcceptFloat32ValueType() {
+    // testValueTypeGeneric(ModbusReadFunctionCode.READ_COILS, ModbusConstants.ValueType.FLOAT32, ThingStatus.OFFLINE);
+    // }
 
-    @Test
-    public void testCoilAcceptsBitValueType() {
-        testValueTypeGeneric(ModbusReadFunctionCode.READ_COILS, ModbusConstants.ValueType.BIT, ThingStatus.ONLINE);
-    }
+    // @Test
+    // public void testCoilAcceptsBitValueType() {
+    // testValueTypeGeneric(ModbusReadFunctionCode.READ_COILS, ModbusConstants.ValueType.BIT, ThingStatus.ONLINE);
+    // }
 
-    @Test
-    public void testDiscreteInputDoesNotAcceptFloat32ValueType() {
-        testValueTypeGeneric(ModbusReadFunctionCode.READ_INPUT_DISCRETES, ModbusConstants.ValueType.FLOAT32,
-                ThingStatus.OFFLINE);
-    }
+    // @Test
+    // public void testDiscreteInputDoesNotAcceptFloat32ValueType() {
+    // testValueTypeGeneric(ModbusReadFunctionCode.READ_INPUT_DISCRETES, ModbusConstants.ValueType.FLOAT32,
+    // ThingStatus.OFFLINE);
+    // }
 
-    @Test
-    public void testDiscreteInputAcceptsBitValueType() {
-        testValueTypeGeneric(ModbusReadFunctionCode.READ_INPUT_DISCRETES, ModbusConstants.ValueType.BIT,
-                ThingStatus.ONLINE);
-    }
+    // @Test
+    // public void testDiscreteInputAcceptsBitValueType() {
+    // testValueTypeGeneric(ModbusReadFunctionCode.READ_INPUT_DISCRETES, ModbusConstants.ValueType.BIT,
+    // ThingStatus.ONLINE);
+    // }
 
     @Test
     public void testRefreshOnData() throws InterruptedException {
