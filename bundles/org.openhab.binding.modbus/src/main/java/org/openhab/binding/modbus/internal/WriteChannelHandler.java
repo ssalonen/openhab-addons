@@ -36,6 +36,7 @@ public class WriteChannelHandler {
     // - assume BIT if writing coil
 
     // TODO: Validation below assumes that we support writing bit, uint8, and int8 into registers. Do we support all?
+    // Old code might support only bit at this time. See ModbusDataThingHandler.requestFromCommand
 
     /**
      * Validate write parameters used to specify transformation of openHAB command to modbus request
@@ -55,6 +56,9 @@ public class WriteChannelHandler {
      * Since writing to register with channelStart=X.Y actually uses polled data to construct register to write:
      * 6. if writing registers, and channelStart=X.Y, check that we are within limits of polled data
      * 7. if writing registers, and channelStart=X.Y, check that we are within limits of polled data
+     *
+     * 8. if writing registers, and channelValueType < 16 bit, support for channelValueType=bit only implemented now,
+     * not for (u)int8.
      *
      * @param pollerFunctionCode function code used for polled data
      * @param pollerStart start address for polled data
@@ -117,6 +121,13 @@ public class WriteChannelHandler {
                 }
                 // CHECK 3b & 4 (check only if channelStartElementSub is present -- i.e. above CHECK 3a passes)
                 else {
+                    // CHECK 8
+                    if (channelValueType != ValueType.BIT) {
+                        validationIssues.add(new ChannelConfigValidationMessage(String.format(
+                                "Invalid valueType=%s. With address=X.Y, only valueType=bit is supported (bit of register)",
+                                channelValueType)));
+                    }
+
                     // CHECK 3b
                     if (pollerFunctionCode != ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS) {
                         validationIssues.add(new ChannelConfigValidationMessage(

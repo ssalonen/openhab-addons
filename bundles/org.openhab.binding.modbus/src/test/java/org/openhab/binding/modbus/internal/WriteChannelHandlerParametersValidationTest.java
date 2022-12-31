@@ -50,13 +50,13 @@ public class WriteChannelHandlerParametersValidationTest {
                 Arguments.of(true, ModbusReadFunctionCode.READ_COILS, 4, 3, WRITE_TYPE_HOLDING, "8", ValueType.INT16),
 
                 //
-                // writing byte-of-register
+                // writing byte-of-register (NOT IMPLEMENTED CURRENTLY, thus all invalid)
                 //
                 // Invalid write address, expecting to specify byte-within-register index with address=X.Y
                 Arguments.of(false, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 8, 3, WRITE_TYPE_HOLDING, "8", ValueType.INT8),
                 // Same test now with address=X.Y -> OK
-                Arguments.of(true, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 8, 3, WRITE_TYPE_HOLDING, "8.0", ValueType.INT8),
-                Arguments.of(true, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 8, 3, WRITE_TYPE_HOLDING, "8.1", ValueType.INT8),
+                Arguments.of(/*true*/ false, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 8, 3, WRITE_TYPE_HOLDING, "8.0", ValueType.INT8),
+                Arguments.of(/*true*/ false, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 8, 3, WRITE_TYPE_HOLDING, "8.1", ValueType.INT8),
                 // out-of-bounds Y (there is no 3rd byte in register)
                 Arguments.of(false, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 8, 3, WRITE_TYPE_HOLDING, "8.2", ValueType.INT8),
                 // out-of-bounds X (register 7 not polled)
