@@ -23,6 +23,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
+import org.openhab.binding.modbus.internal.handler.WriteChannelHandler;
 import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
 
 /**
@@ -103,7 +104,7 @@ public class WriteChannelHandlerParametersValidationTest {
     public void testValidateConfig(boolean expectedValidity, ModbusReadFunctionCode pollerFunctionCode, int pollerStart,
             int pollerLength, String writeType, String channelStart, ValueType channelValueType) {
 
-        List<ChannelConfigValidationMessage> validationErrors = WriteChannelHandler.validateConfigCase1(
+        List<ChannelConfigValidationMessage> validationErrors = WriteChannelHandler.validateWriteParameters(
                 pollerFunctionCode, pollerStart, pollerLength, writeType, channelStart, channelValueType);
         assertEquals(expectedValidity, validationErrors.isEmpty(), validationErrors.toString());
     }

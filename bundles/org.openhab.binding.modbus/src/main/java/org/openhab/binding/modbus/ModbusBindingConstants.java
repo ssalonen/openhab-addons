@@ -25,4 +25,9 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 public class ModbusBindingConstants {
 
     public static final String BINDING_ID = "modbus";
+
+    public static final String CHANNEL_READ_INTO_NUMBER = "readIntoNumber";
+    public static final String CHANNEL_READ_INTO_SWITCH = "readIntoSwitch";
+    public static final String CHANNEL_READ_INTO_CONTACT = "readIntoContact";
+    public static final String CHANNEL_READ_INTO_HEX_STRNG = "readIntoHexString";
 }

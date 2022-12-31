@@ -12,22 +12,33 @@
  */
 package org.openhab.binding.modbus.handler;
 
+import static org.openhab.binding.modbus.ModbusBindingConstants.CHANNEL_READ_INTO_NUMBER;
+
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.modbus.config.NumberReadChannelConfiguration;
 import org.openhab.binding.modbus.internal.AtomicStampedValue;
+import org.openhab.binding.modbus.internal.ChannelConfigValidationMessage;
 import org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal;
 import org.openhab.binding.modbus.internal.config.ModbusPollerConfiguration;
 import org.openhab.binding.modbus.internal.handler.ModbusDataThingHandler;
+import org.openhab.binding.modbus.internal.handler.NumberChannelHandler;
+import org.openhab.binding.modbus.internal.handler.ReadChannelHandler;
+import org.openhab.core.config.core.Configuration;
 import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
 import org.openhab.core.io.transport.modbus.AsyncModbusReadResult;
 import org.openhab.core.io.transport.modbus.ModbusCommunicationInterface;
 import org.openhab.core.io.transport.modbus.ModbusConstants;
+import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.io.transport.modbus.ModbusFailureCallback;
 import org.openhab.core.io.transport.modbus.ModbusReadCallback;
 import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
@@ -35,6 +46,7 @@ import org.openhab.core.io.transport.modbus.ModbusReadRequestBlueprint;
 import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
 import org.openhab.core.io.transport.modbus.PollTask;
 import org.openhab.core.thing.Bridge;
+import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
@@ -193,6 +205,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
     private volatile boolean disposed;
     private volatile List<ModbusDataThingHandler> childCallbacks = new CopyOnWriteArrayList<>();
     private volatile AtomicReference<@Nullable ModbusRegisterArray> lastPolledDataCache = new AtomicReference<>();
+    private volatile Map<ChannelUID, ReadChannelHandler> readChannelHandlers = new ConcurrentHashMap<>();
     private @NonNullByDefault({}) ModbusCommunicationInterface comms;
 
     private ReadCallbackDelegator callbackDelegator = new ReadCallbackDelegator();
@@ -276,7 +289,9 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                     break;
             }
             cacheMillis = this.config.getCacheMillis();
-            registerPollTask();
+            if (initializeChannelHandlers()) {
+                registerPollTask();
+            }
         } catch (EndpointNotInitializedException e) {
             logger.debug("Exception during initialization", e);
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, String
@@ -318,13 +333,53 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
         updateStatus(ThingStatus.OFFLINE);
     }
 
+    private synchronized boolean initializeChannelHandlers() {
+        boolean allValid = true;
+        for (Channel channel : thing.getChannels()) {
+            boolean validChannel = initChannel(channel.getUID(), channel.getConfiguration());
+            allValid &= validChannel;
+        }
+        return allValid;
+    }
+
+    private boolean initChannel(ChannelUID channelUID, Configuration configuration) {
+        final List<ChannelConfigValidationMessage> validationErrors;
+        switch (channelUID.getId()) {
+            case CHANNEL_READ_INTO_NUMBER:
+                NumberReadChannelConfiguration channelConfig = configuration.as(NumberReadChannelConfiguration.class);
+                String address = channelConfig.address;
+                Objects.requireNonNull(address);
+                ValueType valueType = channelConfig.valueType;
+                Objects.requireNonNull(valueType);
+                ModbusReadFunctionCode localFunctionCode = functionCode;
+                Objects.requireNonNull(localFunctionCode);
+                validationErrors = ReadChannelHandler.validateReadParameters(localFunctionCode, config.getStart(),
+                        config.getLength(), address, valueType);
+                if (validationErrors.isEmpty()) {
+                    readChannelHandlers.put(channelUID, new NumberChannelHandler(config.getStart(), channelConfig)); // TODO
+                }
+                break;
+            // TODO: parsing of gain and preGainOffset
+            // TODO:other channels
+            default:
+                throw new IllegalStateException();
+
+        }
+        if (!validationErrors.isEmpty()) {
+            // TODO: format errors
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
+            return false;
+        } else {
+            return true;
+        }
+    }
+
     /**
      * Register poll task
      *
      * @throws EndpointNotInitializedException in case the bridge initialization is not complete. This should only
      *             happen in transient conditions, for example, when bridge is initializing.
      */
-    @SuppressWarnings("null")
     private synchronized void registerPollTask() throws EndpointNotInitializedException {
         logger.trace("registerPollTask()");
         if (pollTask != null) {

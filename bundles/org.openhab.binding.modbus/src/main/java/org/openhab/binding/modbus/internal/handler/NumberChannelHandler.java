@@ -1,0 +1,106 @@
+/**
+ * Copyright (c) 2010-2022 Contributors to the openHAB project
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ */
+package org.openhab.binding.modbus.internal.handler;
+
+import java.math.BigDecimal;
+import java.util.Objects;
+
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.openhab.binding.modbus.config.NumberReadChannelConfiguration;
+import org.openhab.core.io.transport.modbus.BitArray;
+import org.openhab.core.io.transport.modbus.ModbusBitUtilities;
+import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
+import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
+import org.openhab.core.library.types.DecimalType;
+import org.openhab.core.types.State;
+import org.openhab.core.types.UnDefType;
+
+/**
+ * Handler for readIntoNumber channels, decoding raw binary data from modbus according to channel configuration.
+ *
+ * @author Sami Salonen - Initial contribution
+ *
+ */
+@NonNullByDefault
+public class NumberChannelHandler extends ReadChannelHandler {
+
+    private NumberReadChannelConfiguration config;
+    private int pollStart;
+    private Address parsedAddress;
+    private ValueType valueType;
+
+    public NumberChannelHandler(int pollStart, NumberReadChannelConfiguration config) {
+        this.pollStart = pollStart;
+        this.config = config;
+        String address = config.address;
+        Objects.requireNonNull(address);
+        ValueType valueType = config.valueType;
+        Objects.requireNonNull(valueType);
+        this.valueType = valueType;
+        parsedAddress = ReadChannelHandler.parseAddress(address);
+    }
+
+    @Override
+    public void process(BitArray bits) {
+        boolean boolValue = bits.getBit(parsedAddress.channelStartElement - pollStart);
+        DecimalType numericState = boolValue ? new DecimalType(BigDecimal.ONE) : DecimalType.ZERO;
+        processUpdatedValue(numericState, boolValue);
+    }
+
+    @Override
+    public void process(ModbusRegisterArray registers) {
+        State numericState;
+
+        // extractIndex:
+        // e.g. with bit, extractIndex=4 means 5th bit (from right) ("10.4" -> 5th bit of register 10, "10.4" -> 5th bit
+        // of register 10)
+        // bit of second register)
+        // e.g. with 8bit integer, extractIndex=3 means high byte of second register
+        //
+        // with <16 bit types, this is the index of the N'th 1-bit/8-bit item. Each register has 16/2 items,
+        // respectively.
+        // with >=16 bit types, this is index of first register
+        int extractIndex;
+        if (valueType.getBits() >= 16) {
+            extractIndex = parsedAddress.channelStartElement - pollStart;
+        } else {
+            int subIndex = parsedAddress.channelStartElementSub.orElse(0);
+            int itemsPerRegister = 16 / valueType.getBits();
+            extractIndex = (parsedAddress.channelStartElement - pollStart) * itemsPerRegister + subIndex;
+        }
+        numericState = ModbusBitUtilities.extractStateFromRegisters(registers, extractIndex, valueType)
+                .map(state -> (State) state).orElse(UnDefType.UNDEF);
+
+        boolean boolValue = !numericState.equals(DecimalType.ZERO);
+        processUpdatedValue(numericState, boolValue);
+    }
+
+    @Override
+    public void process(Exception readError) {
+        // TODO: update UNDEF?
+    }
+
+    /**
+     *
+     * @param numericState DecimalType or UNDEF
+     * @param boolValue
+     */
+    private void processUpdatedValue(State numericState, boolean boolValue) {
+        // handle UNDEF
+
+        // TODO: handle gain and offset
+
+        return;
+    }
+
+}
