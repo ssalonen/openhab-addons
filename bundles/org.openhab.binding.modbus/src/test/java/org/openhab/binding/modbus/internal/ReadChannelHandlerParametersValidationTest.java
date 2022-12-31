@@ -45,10 +45,14 @@ public class ReadChannelHandlerParametersValidationTest {
         //@formatter:off
                 //
                 // reading coils 4, 5, 6. Coil 7 & 8 are out of bounds. Coil 6 within bounds
+                // (same test for discrete inputs)
                 //
                 Arguments.of(false, ModbusReadFunctionCode.READ_COILS, 4, 3, "8", ValueType.BIT),
+                Arguments.of(false, ModbusReadFunctionCode.READ_INPUT_DISCRETES, 4, 3, "8", ValueType.BIT),
                 Arguments.of(false, ModbusReadFunctionCode.READ_COILS, 4, 3, "7", ValueType.BIT),
+                Arguments.of(false, ModbusReadFunctionCode.READ_INPUT_DISCRETES, 4, 3, "7", ValueType.BIT),
                 Arguments.of(true, ModbusReadFunctionCode.READ_COILS, 4, 3, "6", ValueType.BIT),
+                Arguments.of(true, ModbusReadFunctionCode.READ_INPUT_DISCRETES, 4, 3, "6", ValueType.BIT),
                 //
                 // reading registers 4, 5, 6, and decoding individual BIT from registers
                 // - Register 8 bit 0: out of bounds
@@ -58,26 +62,49 @@ public class ReadChannelHandlerParametersValidationTest {
                 // - 6.0 OK: least significant bit of register 6
                 // - 6.1 OK: 2nd least significant bit of register 6
                 //
+                // (same test for discrete inputs)
+                //
                 Arguments.of(false, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "8.0", ValueType.BIT),
+                Arguments.of(false, ModbusReadFunctionCode.READ_INPUT_REGISTERS, 4, 3, "8.0", ValueType.BIT),
                 Arguments.of(false, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "7.16", ValueType.BIT),
+                Arguments.of(false, ModbusReadFunctionCode.READ_INPUT_REGISTERS, 4, 3, "7.16", ValueType.BIT),
                 Arguments.of(false, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "6.16", ValueType.BIT),
+                Arguments.of(false, ModbusReadFunctionCode.READ_INPUT_REGISTERS, 4, 3, "6.16", ValueType.BIT),
                 Arguments.of(true, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "6.15", ValueType.BIT),
+                Arguments.of(true, ModbusReadFunctionCode.READ_INPUT_REGISTERS, 4, 3, "6.15", ValueType.BIT),
                 Arguments.of(true, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "6.0", ValueType.BIT),
+                Arguments.of(true, ModbusReadFunctionCode.READ_INPUT_REGISTERS, 4, 3, "6.0", ValueType.BIT),
                 //
                 // reading registers 4, 5, 6, and decoding with INT16
                 // - register 6 OK
                 // - register 7 & 8 out of bounds
                 // - address 6.0 invalid (not expecting sub-index)
+                //
+                // (same test for discrete inputs)
+                //
                 Arguments.of(true, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "6", ValueType.INT16),
+                Arguments.of(true, ModbusReadFunctionCode.READ_INPUT_REGISTERS, 4, 3, "6", ValueType.INT16),
                 Arguments.of(false, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "7", ValueType.INT16),
+                Arguments.of(false, ModbusReadFunctionCode.READ_INPUT_REGISTERS, 4, 3, "7", ValueType.INT16),
                 Arguments.of(false, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "8", ValueType.INT16),
+                Arguments.of(false, ModbusReadFunctionCode.READ_INPUT_REGISTERS, 4, 3, "8", ValueType.INT16),
                 Arguments.of(false, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "6.0", ValueType.INT16),
+                Arguments.of(false, ModbusReadFunctionCode.READ_INPUT_REGISTERS, 4, 3, "6.0", ValueType.INT16),
                 //
                 // reading registers 4, 5, 6, and decoding with INT32
                 // - address 5 OK (decodes registers 5 & 6 as INT32)
                 // - address 6 out-of-bounds (would need register 7 for decoding INT32)
+                //
+                // (same test for discrete inputs)
+                //
                 Arguments.of(true, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "5", ValueType.INT32),
-                Arguments.of(false, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "6", ValueType.INT32)
+                Arguments.of(true, ModbusReadFunctionCode.READ_INPUT_REGISTERS, 4, 3, "5", ValueType.INT32),
+                Arguments.of(false, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "6", ValueType.INT32),
+                Arguments.of(false, ModbusReadFunctionCode.READ_INPUT_REGISTERS, 4, 3, "6", ValueType.INT32),
+
+                // Decoding coils into FLOAT32 not supported
+                Arguments.of(false, ModbusReadFunctionCode.READ_COILS, 0, 3, "0", ValueType.FLOAT32),
+                Arguments.of(false, ModbusReadFunctionCode.READ_INPUT_DISCRETES, 0, 3, "0", ValueType.FLOAT32)
                 //@formatter:on
         );
 
