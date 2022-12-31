@@ -12,8 +12,9 @@
  */
 package org.openhab.binding.modbus.internal;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.util.List;
 import java.util.stream.Stream;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
@@ -27,12 +28,12 @@ import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
  * @author Sami Salonen - Initial contribution
  */
 @NonNullByDefault
-public class ReadChannelHandlerReadParametersValidationTest {
+public class ReadChannelHandlerParametersValidationTest {
     private static Stream<Arguments> provideArgsForTestValidateConfig()
 
     {
         // Arguments:
-        // 1. expected validity (if false, expecting to throw!)
+        // 1. expected validity
         // 2. poll function
         // 3. poll start
         // 4. poll length
@@ -86,20 +87,10 @@ public class ReadChannelHandlerReadParametersValidationTest {
     @MethodSource("provideArgsForTestValidateConfig")
     public void testValidateConfig(boolean expectedValidity, ModbusReadFunctionCode pollerFunctionCode, int pollerStart,
             int pollerLength, String channelStart, ValueType channelValueType) {
-        if (!expectedValidity) {
-            assertThrows(ModbusConfigurationException.class, () -> {
-                ReadChannelHandler.validateConfigCase1(pollerFunctionCode, pollerStart, pollerLength, channelStart,
-                        channelValueType);
-            });
-        } else {
-            final boolean[] actualValidity = new boolean[1];
-            assertDoesNotThrow(() -> {
-                actualValidity[0] = ReadChannelHandler.validateConfigCase1(pollerFunctionCode, pollerStart,
-                        pollerLength, channelStart, channelValueType);
-            });
-            assertEquals(expectedValidity, actualValidity[0]);
-        }
 
+        List<ChannelConfigValidationMessage> validationErrors = ReadChannelHandler
+                .validateConfigCase1(pollerFunctionCode, pollerStart, pollerLength, channelStart, channelValueType);
+        assertEquals(expectedValidity, validationErrors.isEmpty(), validationErrors.toString());
     }
 
 }
