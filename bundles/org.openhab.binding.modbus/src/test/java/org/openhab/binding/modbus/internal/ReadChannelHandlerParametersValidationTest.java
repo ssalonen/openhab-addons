@@ -53,6 +53,10 @@ public class ReadChannelHandlerParametersValidationTest {
                 Arguments.of(false, ModbusReadFunctionCode.READ_INPUT_DISCRETES, 4, 3, "7", ValueType.BIT),
                 Arguments.of(true, ModbusReadFunctionCode.READ_COILS, 4, 3, "6", ValueType.BIT),
                 Arguments.of(true, ModbusReadFunctionCode.READ_INPUT_DISCRETES, 4, 3, "6", ValueType.BIT),
+
+                // not allowed to have sub-index with discrete inputs or coils
+                Arguments.of(false, ModbusReadFunctionCode.READ_INPUT_DISCRETES, 4, 3, "6.0", ValueType.BIT),
+                Arguments.of(false, ModbusReadFunctionCode.READ_COILS, 4, 3, "6.0", ValueType.BIT),
                 //
                 // reading registers 4, 5, 6, and decoding individual BIT from registers
                 // - Register 8 bit 0: out of bounds
