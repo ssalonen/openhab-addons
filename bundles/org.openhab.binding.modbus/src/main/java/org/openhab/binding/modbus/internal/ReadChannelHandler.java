@@ -12,6 +12,8 @@
  */
 package org.openhab.binding.modbus.internal;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.OptionalInt;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
@@ -19,7 +21,7 @@ import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
 
 /**
- * Handler for read channels, responsible of necessary transformations
+ * Handler for read channels, decoding raw binary data from modbus according to channel configuration.
  *
  * @author Sami Salonen - Initial contribution
  *
@@ -31,22 +33,12 @@ public class ReadChannelHandler {
     // 1. assume bit value type if poller is readingDiscreteOrCoil
 
     // validation input:
-    // CASE 1 INPUT: poller data type, poll start, poll length, channel start, channel value type (other than hex
-    // string)
     // CASE 2 INPUT: poller data type, poll start, poll length, channel start, channel length (hex string)
-    // [CASE 1] 1. if poller is readingDiscreteOrCoil check that bit value type
-    // [CASE 1] 2. if poller is readingDiscreteOrCoil, check that readStart=X not readStart=X.Y
-    // [CASE 1] 3. if poller is reading registers, and valueType < 16 bit, check that readStart=X.Y
-    // [CASE 1] 4. if having readStart=X.Y, check that Y is within limits (0...1, 0...15)
-    // [CASE 1] 5. if poller is reading registers, and valueType >= 16 bit, check that readStart=X
     // [CASE 1&2] 6. check that readStart is within limits of polled data
     // [CASE 1&2] 7. check that last byte/bit expected is within limits of polled data
 
     /**
      * Validate read parameters used to specify decoding of binary data polled from modbus
-     *
-     * Exceptions are thrown for user display
-     *
      *
      * Checks
      * 0. validate format of channelStart. Should be X or X.Y
@@ -63,12 +55,12 @@ public class ReadChannelHandler {
      * @param pollerLength length of elements for polled data
      * @param channelStart start address to start decoding
      * @param channelValueType value type for decoding
-     * @return true when channelStart and channelValueType are within limits of polled data and are of correct
-     *         syntax/format
-     * @throws ModbusConfigurationException with attempt to decode out-of-bounds data or when syntax is incorrect
+     * @return Empty list when validation passes without errors. Otherwise list of validation errors is returned.
      */
-    public static boolean validateConfigCase1(ModbusReadFunctionCode pollerFunctionCode, int pollerStart,
-            int pollerLength, String channelStart, ValueType channelValueType) throws ModbusConfigurationException {
+    public static List<ChannelConfigValidationMessage> validateConfigCase1(ModbusReadFunctionCode pollerFunctionCode,
+            int pollerStart, int pollerLength, String channelStart, ValueType channelValueType) {
+
+        List<ChannelConfigValidationMessage> validationIssues = new ArrayList<>();
 
         // CHECK 0
         final int channelStartElement;
@@ -83,8 +75,10 @@ public class ReadChannelHandler {
                     channelStartElementSub = OptionalInt.empty();
                 }
             } catch (IllegalArgumentException e) {
-                String errmsg = String.format("Invalid address=%s, expecting X or X.Y!", channelStart);
-                throw new ModbusConfigurationException(errmsg);
+                String errmsg = String.format("Invalid address=%s, expecting X or X.Y", channelStart);
+                validationIssues.add(new ChannelConfigValidationMessage(errmsg));
+                // Critical validation issue, stop validating other things
+                return validationIssues;
             }
         }
 
@@ -94,38 +88,41 @@ public class ReadChannelHandler {
 
             // CHECK 1: BIT value type supported only with READ_COILS and READ_INPUT_DISCRETES
             if (channelValueType != ValueType.BIT) {
-                return false;
+                validationIssues.add(new ChannelConfigValidationMessage(String.format(
+                        "Invalid valueType=%s, only \"bit\" is supported when reading coils or discrete inputs",
+                        channelValueType)));
             }
             // CHECK 2: channelStart=X.Y not supported with READ_COILS and READ_INPUT_DISCRETES, only channelStart=X
             if (channelStartElementSub.isPresent()) {
                 String errmsg = String
-                        .format("Invalid address format X.Y, only address=X allowed with coils or discrete inputs!");
-                throw new ModbusConfigurationException(errmsg);
+                        .format("Invalid address=X.Y, only address=X allowed when reading coils or discrete inputs");
+                validationIssues.add(new ChannelConfigValidationMessage(errmsg));
             }
-
         } else {
             // Reading register data
 
             if (channelValueType.getBits() < 16) {
                 // CHECK 3
                 if (channelStartElementSub.isEmpty()) {
-                    throw new ModbusConfigurationException(
-                            "Invalid address format X, only address=X.Y allowed with valueType less than 16bit!");
+                    validationIssues.add(new ChannelConfigValidationMessage(String.format(
+                            "Invalid address=X, must use address=X.Y with valueType=%s to ambiguously refer to data inside the register",
+                            channelValueType)));
                 }
-                // CHECK 4
-                {
+                // CHECK 4 (check only if channelStartElementSub is present -- i.e. above CHECK 3 passes)
+                else {
                     int subAddress = channelStartElementSub.getAsInt();
                     if (subAddress > 16 / channelValueType.getBits() - 1) {
-                        throw new ModbusConfigurationException(String.format(
-                                "Invalid address=X.Y=%s, value Y is referring to data outside register. Maximum value for Y is %d",
-                                channelStart, 16 / channelValueType.getBits() - 1));
+                        validationIssues.add(new ChannelConfigValidationMessage(String.format(
+                                "Invalid address=X.Y=%s, value Y is referring to data outside register. Maximum value for Y with valueType=%s is %d",
+                                channelStart, channelValueType, 16 / channelValueType.getBits() - 1)));
                     }
                 }
             } else {
                 // CHECK 5
                 if (channelStartElementSub.isPresent()) {
-                    throw new ModbusConfigurationException(
-                            "address=X must be used with valueType greater than or equal 16bit!");
+                    validationIssues.add(new ChannelConfigValidationMessage(String.format(
+                            "Invalid address=X.Y, only address=X allowed with valueType=%s, denoting first register address to start decoding the valueType %s",
+                            channelValueType, channelValueType)));
                 }
             }
         }
@@ -145,15 +142,14 @@ public class ReadChannelHandler {
 
             if (decodeStartBitIndex < polledFirstBitIndex || decodeEndBitIndex > polledLastBitIndex) {
                 String errmsg = String.format(
-                        "Out-of-bounds: Poller is reading from index %d to %d (inclusive) but this thing configured to read '%s' starting from element %d. Exceeds polled data bounds.",
-                        polledFirstBitIndex / dataElementBits, polledLastBitIndex / dataElementBits, channelValueType,
-                        channelStartElement);
-                throw new ModbusConfigurationException(errmsg);
+                        "Invalid address=X=%d, decoding %s would need data outside polled data. Poller is reading elements from address %d to %d (inclusive) but decoding of valueType=%s starting from address %d would exceeds polled data bounds",
+                        channelStartElement, channelValueType, polledFirstBitIndex / dataElementBits,
+                        polledLastBitIndex / dataElementBits, channelValueType, channelStartElement);
+                validationIssues.add(new ChannelConfigValidationMessage(errmsg));
             }
         }
 
-        // All checks passed, OK
-        return true;
+        return validationIssues;
     }
 
 }
