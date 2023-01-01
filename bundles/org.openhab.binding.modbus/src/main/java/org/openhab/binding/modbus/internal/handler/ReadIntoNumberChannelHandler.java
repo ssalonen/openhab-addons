@@ -13,13 +13,12 @@
 package org.openhab.binding.modbus.internal.handler;
 
 import java.math.BigDecimal;
-import java.util.Objects;
+import java.util.function.Consumer;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.openhab.binding.modbus.config.NumberReadChannelConfiguration;
+import org.openhab.binding.modbus.config.ReadChannelConfiguration;
 import org.openhab.core.io.transport.modbus.BitArray;
 import org.openhab.core.io.transport.modbus.ModbusBitUtilities;
-import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.types.State;
@@ -32,29 +31,17 @@ import org.openhab.core.types.UnDefType;
  *
  */
 @NonNullByDefault
-public class NumberChannelHandler extends ReadChannelHandler {
+public class ReadIntoNumberChannelHandler extends ReadIntoChannelHandler {
 
-    private NumberReadChannelConfiguration config;
-    private int pollStart;
-    private Address parsedAddress;
-    private ValueType valueType;
-
-    public NumberChannelHandler(int pollStart, NumberReadChannelConfiguration config) {
-        this.pollStart = pollStart;
-        this.config = config;
-        String address = config.address;
-        Objects.requireNonNull(address);
-        ValueType valueType = config.valueType;
-        Objects.requireNonNull(valueType);
-        this.valueType = valueType;
-        parsedAddress = ReadChannelHandler.parseAddress(address);
+    public ReadIntoNumberChannelHandler(int pollStart, ReadChannelConfiguration config, Consumer<State> stateUpdater) {
+        super(pollStart, config, stateUpdater);
     }
 
     @Override
     public void process(BitArray bits) {
         boolean boolValue = bits.getBit(parsedAddress.channelStartElement - pollStart);
         DecimalType numericState = boolValue ? new DecimalType(BigDecimal.ONE) : DecimalType.ZERO;
-        processUpdatedValue(numericState, boolValue);
+        processUpdatedValue(numericState);
     }
 
     @Override
@@ -81,13 +68,13 @@ public class NumberChannelHandler extends ReadChannelHandler {
         numericState = ModbusBitUtilities.extractStateFromRegisters(registers, extractIndex, valueType)
                 .map(state -> (State) state).orElse(UnDefType.UNDEF);
 
-        boolean boolValue = !numericState.equals(DecimalType.ZERO);
-        processUpdatedValue(numericState, boolValue);
+        // boolean boolValue = !numericState.equals(DecimalType.ZERO);
+        processUpdatedValue(numericState);
     }
 
     @Override
     public void process(Exception readError) {
-        // TODO: update UNDEF?
+        processUpdatedValue(UnDefType.UNDEF);
     }
 
     /**
@@ -95,12 +82,10 @@ public class NumberChannelHandler extends ReadChannelHandler {
      * @param numericState DecimalType or UNDEF
      * @param boolValue
      */
-    private void processUpdatedValue(State numericState, boolean boolValue) {
-        // handle UNDEF
-
+    protected void processUpdatedValue(State numericState) {
         // TODO: handle gain and offset
-
-        return;
+        // handle UNDEF
+        updateExpiredChannel(System.currentTimeMillis(), numericState);
     }
 
 }

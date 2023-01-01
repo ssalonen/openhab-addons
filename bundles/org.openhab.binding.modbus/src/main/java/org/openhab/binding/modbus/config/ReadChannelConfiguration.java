@@ -12,20 +12,29 @@
  */
 package org.openhab.binding.modbus.config;
 
+import java.math.BigDecimal;
+
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 
 /**
- * Configuration for readIntoNumber channels
+ * Base configuration for read channels
  *
  * @author Sami Salonen - Initial contribution
  *
  */
 @NonNullByDefault
-public class NumberReadChannelConfiguration extends ReadChannelBaseConfiguration {
+public class ReadChannelConfiguration {
 
-    public @Nullable ValueType valueType;
-    public String gain = "1";
-    public String preGainOffset = "0";
+    public @Nullable String address;
+    public long updateUnchangedValuesEveryMillis = 1000L;
+
+    public @Nullable String valueType; // Number, Switch, Contact
+    public String gain = "1"; // Number
+    public String preGainOffset = "0"; // Number
+    public BigDecimal closedValue = BigDecimal.ZERO; // Contact
+    public BigDecimal offValue = BigDecimal.ZERO; // Switch
+    public boolean inverted; // Contact, Switch
+    public int length; // HexString
+
 }

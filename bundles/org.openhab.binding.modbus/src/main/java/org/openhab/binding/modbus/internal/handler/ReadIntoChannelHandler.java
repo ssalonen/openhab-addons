@@ -14,9 +14,14 @@ package org.openhab.binding.modbus.internal.handler;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.function.Consumer;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.modbus.config.ReadChannelConfiguration;
 import org.openhab.binding.modbus.internal.ChannelConfigValidationMessage;
 import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
 import org.openhab.core.io.transport.modbus.AsyncModbusReadResult;
@@ -27,6 +32,7 @@ import org.openhab.core.io.transport.modbus.ModbusReadCallback;
 import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
 import org.openhab.core.io.transport.modbus.ModbusReadRequestBlueprint;
 import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
+import org.openhab.core.types.State;
 
 /**
  * Handler for read channels, decoding raw binary data from modbus according to channel configuration.
@@ -35,8 +41,30 @@ import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
  *
  */
 @NonNullByDefault
-public abstract class ReadChannelHandler
+public abstract class ReadIntoChannelHandler
         implements ModbusReadCallback, ModbusFailureCallback<ModbusReadRequestBlueprint> {
+
+    private @Nullable State lastState;
+    private @Nullable Long lastUpdatedMillis;
+    private final Consumer<State> stateUpdater;
+
+    protected final ReadChannelConfiguration config;
+    protected final int pollStart;
+    protected final Address parsedAddress;
+    protected final ValueType valueType;
+
+    public ReadIntoChannelHandler(int pollStart, ReadChannelConfiguration config, Consumer<State> stateUpdater) {
+        this.pollStart = pollStart;
+        this.config = config;
+        this.stateUpdater = stateUpdater;
+        String address = config.address;
+        Objects.requireNonNull(address);
+        String valueTypeString = config.valueType;
+        Objects.requireNonNull(valueTypeString);
+        this.valueType = ValueType.fromConfigValue(valueTypeString);
+        // throws on parse error. XML config description validates format however
+        parsedAddress = ReadIntoChannelHandler.parseAddress(address);
+    }
 
     public static class Address {
 
@@ -181,6 +209,18 @@ public abstract class ReadChannelHandler
         }
 
         return validationIssues;
+    }
+
+    protected void updateExpiredChannel(long now, State state) {
+        @Nullable
+        State localLastState = lastState;
+        long localLastUpdatedMillis = Optional.ofNullable(this.lastUpdatedMillis).orElse(0L);
+        long millisSinceLastUpdate = now - localLastUpdatedMillis;
+        if (localLastUpdatedMillis <= 0L || localLastState == null || config.updateUnchangedValuesEveryMillis <= 0L
+                || millisSinceLastUpdate > config.updateUnchangedValuesEveryMillis || !state.equals(localLastState)) {
+            stateUpdater.accept(state);
+            localLastUpdatedMillis = now;
+        }
     }
 
     @Override

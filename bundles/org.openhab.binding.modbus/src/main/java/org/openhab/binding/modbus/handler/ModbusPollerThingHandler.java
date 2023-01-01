@@ -12,7 +12,7 @@
  */
 package org.openhab.binding.modbus.handler;
 
-import static org.openhab.binding.modbus.ModbusBindingConstants.CHANNEL_READ_INTO_NUMBER;
+import static org.openhab.binding.modbus.ModbusBindingConstants.*;
 
 import java.util.List;
 import java.util.Map;
@@ -25,14 +25,16 @@ import java.util.stream.Collectors;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.modbus.config.NumberReadChannelConfiguration;
+import org.openhab.binding.modbus.config.ReadChannelConfiguration;
 import org.openhab.binding.modbus.internal.AtomicStampedValue;
 import org.openhab.binding.modbus.internal.ChannelConfigValidationMessage;
 import org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal;
 import org.openhab.binding.modbus.internal.config.ModbusPollerConfiguration;
+import org.openhab.binding.modbus.internal.handler.ReadIntoContactChannelHandler;
 import org.openhab.binding.modbus.internal.handler.ModbusDataThingHandler;
-import org.openhab.binding.modbus.internal.handler.NumberChannelHandler;
-import org.openhab.binding.modbus.internal.handler.ReadChannelHandler;
+import org.openhab.binding.modbus.internal.handler.ReadIntoNumberChannelHandler;
+import org.openhab.binding.modbus.internal.handler.ReadIntoChannelHandler;
+import org.openhab.binding.modbus.internal.handler.ReadIntoSwitchChannelHandler;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
 import org.openhab.core.io.transport.modbus.AsyncModbusReadResult;
@@ -54,7 +56,9 @@ import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingStatusInfo;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.thing.binding.ThingHandler;
+import org.openhab.core.thing.type.ChannelTypeUID;
 import org.openhab.core.types.Command;
+import org.openhab.core.types.State;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -124,8 +128,9 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
 
         private void resetCommunicationError() {
             ThingStatusInfo statusInfo = thing.getStatusInfo();
-            if (ThingStatus.OFFLINE.equals(statusInfo.getStatus())
-                    && ThingStatusDetail.COMMUNICATION_ERROR.equals(statusInfo.getStatusDetail())) {
+            if (ThingStatus.UNKNOWN.equals(statusInfo.getStatus())
+                    || (ThingStatus.OFFLINE.equals(statusInfo.getStatus())
+                            && ThingStatusDetail.COMMUNICATION_ERROR.equals(statusInfo.getStatusDetail()))) {
                 updateStatus(ThingStatus.ONLINE);
             }
         }
@@ -156,6 +161,13 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                     handler.onReadResult(result);
                 } else if (failure != null) {
                     handler.handleReadError(failure);
+                }
+            });
+            readChannelHandlers.forEach((channelUID, handler) -> {
+                if (result != null) {
+                    handler.handle(result);
+                } else if (failure != null) {
+                    handler.handle(failure);
                 }
             });
         }
@@ -205,7 +217,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
     private volatile boolean disposed;
     private volatile List<ModbusDataThingHandler> childCallbacks = new CopyOnWriteArrayList<>();
     private volatile AtomicReference<@Nullable ModbusRegisterArray> lastPolledDataCache = new AtomicReference<>();
-    private volatile Map<ChannelUID, ReadChannelHandler> readChannelHandlers = new ConcurrentHashMap<>();
+    private volatile Map<ChannelUID, ReadIntoChannelHandler> readChannelHandlers = new ConcurrentHashMap<>();
     private @NonNullByDefault({}) ModbusCommunicationInterface comms;
 
     private ReadCallbackDelegator callbackDelegator = new ReadCallbackDelegator();
@@ -336,33 +348,55 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
     private synchronized boolean initializeChannelHandlers() {
         boolean allValid = true;
         for (Channel channel : thing.getChannels()) {
-            boolean validChannel = initChannel(channel.getUID(), channel.getConfiguration());
+            boolean validChannel = initChannelHandler(channel, channel.getConfiguration());
             allValid &= validChannel;
         }
         return allValid;
     }
 
-    private boolean initChannel(ChannelUID channelUID, Configuration configuration) {
+    private boolean initChannelHandler(Channel channel, Configuration configuration) {
         final List<ChannelConfigValidationMessage> validationErrors;
-        switch (channelUID.getId()) {
+        final ReadChannelConfiguration channelConfig = configuration.as(ReadChannelConfiguration.class);
+        ChannelUID channelUID = channel.getUID();
+        ChannelTypeUID channelTypeUID = channel.getChannelTypeUID();
+        Objects.requireNonNull(channelTypeUID, "channel type not defined for " + channelUID);
+        String channelTypeId = channelTypeUID.getId();
+        switch (channelTypeId) {
             case CHANNEL_READ_INTO_NUMBER:
-                NumberReadChannelConfiguration channelConfig = configuration.as(NumberReadChannelConfiguration.class);
+            case CHANNEL_READ_INTO_SWITCH:
+            case CHANNEL_READ_INTO_CONTACT:
                 String address = channelConfig.address;
-                Objects.requireNonNull(address);
-                ValueType valueType = channelConfig.valueType;
-                Objects.requireNonNull(valueType);
+                // required in xml config description,
+                // cannot be null
+                Objects.requireNonNull(address, "address missing " + channelUID);
+
+                String valueTypeString = channelConfig.valueType;
+                // required in xml config description, cannot be null
+                Objects.requireNonNull(valueTypeString, "valueType missing for " + channelUID);
+                ValueType valueType = ValueType.fromConfigValue(valueTypeString);
                 ModbusReadFunctionCode localFunctionCode = functionCode;
-                Objects.requireNonNull(localFunctionCode);
-                validationErrors = ReadChannelHandler.validateReadParameters(localFunctionCode, config.getStart(),
+
+                // required in xml config description, cannot be null
+                Objects.requireNonNull(localFunctionCode, "poller function code unknown");
+                validationErrors = ReadIntoChannelHandler.validateReadParameters(localFunctionCode, config.getStart(),
                         config.getLength(), address, valueType);
                 if (validationErrors.isEmpty()) {
-                    readChannelHandlers.put(channelUID, new NumberChannelHandler(config.getStart(), channelConfig)); // TODO
+                    if (CHANNEL_READ_INTO_NUMBER.equals(channelTypeId)) {
+                        readChannelHandlers.put(channelUID, new ReadIntoNumberChannelHandler(config.getStart(), channelConfig,
+                                state -> this.tryUpdateState(channelUID, state)));
+                    } else if (CHANNEL_READ_INTO_SWITCH.equals(channelTypeId)) {
+                        readChannelHandlers.put(channelUID, new ReadIntoSwitchChannelHandler(config.getStart(), channelConfig,
+                                state -> this.tryUpdateState(channelUID, state)));
+                    } else if (CHANNEL_READ_INTO_CONTACT.equals(channelTypeId)) {
+                        readChannelHandlers.put(channelUID, new ReadIntoContactChannelHandler(config.getStart(), channelConfig,
+                                state -> this.tryUpdateState(channelUID, state)));
+                    }
                 }
                 break;
             // TODO: parsing of gain and preGainOffset
             // TODO:other channels
             default:
-                throw new IllegalStateException();
+                throw new IllegalStateException(channelTypeId);
 
         }
         if (!validationErrors.isEmpty()) {
@@ -522,5 +556,15 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
 
     public AtomicReference<@Nullable ModbusRegisterArray> getLastPolledDataCache() {
         return lastPolledDataCache;
+    }
+
+    private void tryUpdateState(ChannelUID uid, State state) {
+        try {
+            updateState(uid, state);
+        } catch (IllegalArgumentException e) {
+            logger.warn("Error updating state '{}' (type {}) to channel {}: {} {}", state,
+                    Optional.ofNullable(state).map(s -> s.getClass().getName()).orElse("null"), uid,
+                    e.getClass().getName(), e.getMessage());
+        }
     }
 }

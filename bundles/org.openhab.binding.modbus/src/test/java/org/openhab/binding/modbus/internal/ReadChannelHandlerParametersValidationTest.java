@@ -22,7 +22,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
-import org.openhab.binding.modbus.internal.handler.ReadChannelHandler;
+import org.openhab.binding.modbus.internal.handler.ReadIntoChannelHandler;
 import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
 
 /**
@@ -120,7 +120,7 @@ public class ReadChannelHandlerParametersValidationTest {
     public void testValidateConfig(boolean expectedValidity, ModbusReadFunctionCode pollerFunctionCode, int pollerStart,
             int pollerLength, String channelStart, ValueType channelValueType) {
 
-        List<ChannelConfigValidationMessage> validationErrors = ReadChannelHandler
+        List<ChannelConfigValidationMessage> validationErrors = ReadIntoChannelHandler
                 .validateReadParameters(pollerFunctionCode, pollerStart, pollerLength, channelStart, channelValueType);
         assertEquals(expectedValidity, validationErrors.isEmpty(), validationErrors.toString());
     }

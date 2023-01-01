@@ -49,21 +49,25 @@
 
 				<option value="bit">individual bit (bit)</option>
 			</options>
+            <required>true</required>
 		</parameter>
         <parameter name="offValue" type="decimal" >
             <label>OFF value</label>
             <description>Consider this decoded number as OFF</description>
+            <required>false</required>
             <default>0</default>
         </parameter>
         <parameter name="inverted" type="boolean">
             <label>Inverted logic</label>
             <description>Whether to invert OFF/ON decoding logic</description>
+            <required>false</required>
             <default>false</default>
         </parameter>
 		<parameter name="updateUnchangedValuesEveryMillis" type="integer" min="0" unit="ms" groupName="advanced">
 			<label>Interval for Updating Unchanged Values</label>
-			<default>1000</default>
 			<description>Interval to update unchanged values. Normally unchanged values are not updated. In milliseconds.</description>
+            <required>false</required>
+            <default>1000</default>
 			<advanced>true</advanced>
 		</parameter>
 	</config-description>
