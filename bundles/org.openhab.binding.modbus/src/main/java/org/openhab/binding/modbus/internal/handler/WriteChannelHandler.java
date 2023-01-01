@@ -20,7 +20,7 @@ import java.util.OptionalInt;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.modbus.internal.ChannelConfigValidationMessage;
-import org.openhab.binding.modbus.internal.handler.ReadChannelHandler.Address;
+import org.openhab.binding.modbus.internal.handler.ReadIntoChannelHandler.Address;
 import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
 
@@ -77,7 +77,7 @@ public class WriteChannelHandler {
         final int channelStartElement;
         final OptionalInt channelStartElementSub;
         try {
-            Address parsedAddress = ReadChannelHandler.parseAddress(channelStart);
+            Address parsedAddress = ReadIntoChannelHandler.parseAddress(channelStart);
             channelStartElement = parsedAddress.channelStartElement;
             channelStartElementSub = parsedAddress.channelStartElementSub;
         } catch (IllegalArgumentException e) {
