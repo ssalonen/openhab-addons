@@ -31,7 +31,8 @@ import org.openhab.core.types.UnDefType;
 @NonNullByDefault
 public class ReadIntoSwitchChannelHandler extends ReadIntoNumberChannelHandler {
 
-    public ReadIntoSwitchChannelHandler(int pollStart, ReadChannelConfiguration config, Consumer<@NonNull State> stateUpdater) {
+    public ReadIntoSwitchChannelHandler(int pollStart, ReadChannelConfiguration config,
+            Consumer<@NonNull State> stateUpdater) {
         super(pollStart, config, stateUpdater);
     }
 
@@ -43,6 +44,9 @@ public class ReadIntoSwitchChannelHandler extends ReadIntoNumberChannelHandler {
         }
         DecimalType decimalState = (DecimalType) numericState; // cast always succeeds
         boolean isOff = config.offValue.equals(decimalState.toBigDecimal());
+        if (config.inverted) {
+            isOff = !isOff;
+        }
         super.processUpdatedValue(isOff ? OnOffType.OFF : OnOffType.ON);
     }
 }
