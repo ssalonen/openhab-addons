@@ -44,6 +44,9 @@ public class ReadIntoContactChannelHandler extends ReadIntoNumberChannelHandler 
         }
         DecimalType decimalState = (DecimalType) numericState; // cast always succeeds
         boolean isClosed = config.closedValue.equals(decimalState.toBigDecimal());
+        if (config.inverted) {
+            isClosed = !isClosed;
+        }
         super.processUpdatedValue(isClosed ? OpenClosedType.CLOSED : OpenClosedType.OPEN);
     }
 }
