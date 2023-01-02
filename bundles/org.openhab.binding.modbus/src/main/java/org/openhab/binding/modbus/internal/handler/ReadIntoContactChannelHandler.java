@@ -37,16 +37,15 @@ public class ReadIntoContactChannelHandler extends ReadIntoNumberChannelHandler 
     }
 
     @Override
-    protected void processUpdatedValue(@NonNull State numericState) {
-        if (numericState instanceof UnDefType) {
-            super.processUpdatedValue(numericState);
-            return;
+    protected void processUpdatedValue(@NonNull State state) {
+        final boolean isClosed;
+        if (state instanceof UnDefType) {
+            // UNDEF means we have either infinite or NaN floating point number
+            isClosed = false;
+        } else {
+            DecimalType decimalState = (DecimalType) state; // cast always succeeds
+            isClosed = config.closedValue.equals(decimalState.toBigDecimal());
         }
-        DecimalType decimalState = (DecimalType) numericState; // cast always succeeds
-        boolean isClosed = config.closedValue.equals(decimalState.toBigDecimal());
-        if (config.inverted) {
-            isClosed = !isClosed;
-        }
-        super.processUpdatedValue(isClosed ? OpenClosedType.CLOSED : OpenClosedType.OPEN);
+        super.processUpdatedValue((config.inverted ^ isClosed) ? OpenClosedType.CLOSED : OpenClosedType.OPEN);
     }
 }

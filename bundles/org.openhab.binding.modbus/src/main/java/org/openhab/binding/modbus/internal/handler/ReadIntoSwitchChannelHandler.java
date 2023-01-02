@@ -37,16 +37,15 @@ public class ReadIntoSwitchChannelHandler extends ReadIntoNumberChannelHandler {
     }
 
     @Override
-    protected void processUpdatedValue(@NonNull State numericState) {
-        if (numericState instanceof UnDefType) {
-            super.processUpdatedValue(numericState);
-            return;
+    protected void processUpdatedValue(@NonNull State state) {
+        final boolean isOff;
+        if (state instanceof UnDefType) {
+            // UNDEF means we have either infinite or NaN floating point number
+            isOff = false;
+        } else {
+            DecimalType decimalState = (DecimalType) state; // cast always succeeds
+            isOff = config.offValue.equals(decimalState.toBigDecimal());
+            super.processUpdatedValue((config.inverted ^ isOff) ? OnOffType.OFF : OnOffType.ON);
         }
-        DecimalType decimalState = (DecimalType) numericState; // cast always succeeds
-        boolean isOff = config.offValue.equals(decimalState.toBigDecimal());
-        if (config.inverted) {
-            isOff = !isOff;
-        }
-        super.processUpdatedValue(isOff ? OnOffType.OFF : OnOffType.ON);
     }
 }
