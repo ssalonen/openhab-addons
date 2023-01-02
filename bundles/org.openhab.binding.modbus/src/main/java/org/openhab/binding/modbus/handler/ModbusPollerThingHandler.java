@@ -30,10 +30,10 @@ import org.openhab.binding.modbus.internal.AtomicStampedValue;
 import org.openhab.binding.modbus.internal.ChannelConfigValidationMessage;
 import org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal;
 import org.openhab.binding.modbus.internal.config.ModbusPollerConfiguration;
-import org.openhab.binding.modbus.internal.handler.ReadIntoContactChannelHandler;
 import org.openhab.binding.modbus.internal.handler.ModbusDataThingHandler;
-import org.openhab.binding.modbus.internal.handler.ReadIntoNumberChannelHandler;
 import org.openhab.binding.modbus.internal.handler.ReadIntoChannelHandler;
+import org.openhab.binding.modbus.internal.handler.ReadIntoContactChannelHandler;
+import org.openhab.binding.modbus.internal.handler.ReadIntoNumberChannelHandler;
 import org.openhab.binding.modbus.internal.handler.ReadIntoSwitchChannelHandler;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
@@ -383,14 +383,14 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                         config.getLength(), address, valueType);
                 if (validationErrors.isEmpty()) {
                     if (CHANNEL_READ_INTO_NUMBER.equals(channelTypeId)) {
-                        readChannelHandlers.put(channelUID, new ReadIntoNumberChannelHandler(config.getStart(), channelConfig,
-                                state -> this.tryUpdateState(channelUID, state)));
+                        readChannelHandlers.put(channelUID, new ReadIntoNumberChannelHandler(config.getStart(),
+                                channelConfig, state -> this.tryUpdateState(channelUID, state)));
                     } else if (CHANNEL_READ_INTO_SWITCH.equals(channelTypeId)) {
-                        readChannelHandlers.put(channelUID, new ReadIntoSwitchChannelHandler(config.getStart(), channelConfig,
-                                state -> this.tryUpdateState(channelUID, state)));
+                        readChannelHandlers.put(channelUID, new ReadIntoSwitchChannelHandler(config.getStart(),
+                                channelConfig, state -> this.tryUpdateState(channelUID, state)));
                     } else if (CHANNEL_READ_INTO_CONTACT.equals(channelTypeId)) {
-                        readChannelHandlers.put(channelUID, new ReadIntoContactChannelHandler(config.getStart(), channelConfig,
-                                state -> this.tryUpdateState(channelUID, state)));
+                        readChannelHandlers.put(channelUID, new ReadIntoContactChannelHandler(config.getStart(),
+                                channelConfig, state -> this.tryUpdateState(channelUID, state)));
                     }
                 }
                 break;
