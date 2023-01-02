@@ -67,8 +67,8 @@ public class ReadIntoNumberChannelHandler extends ReadIntoChannelHandler {
         }
         numericState = ModbusBitUtilities.extractStateFromRegisters(registers, extractIndex, valueType)
                 .map(state -> (State) state).orElse(UnDefType.UNDEF);
+        // numericState is UNDEF with infinite or NaN float values
 
-        // boolean boolValue = !numericState.equals(DecimalType.ZERO);
         processUpdatedValue(numericState);
     }
 
@@ -82,10 +82,10 @@ public class ReadIntoNumberChannelHandler extends ReadIntoChannelHandler {
      * @param numericState DecimalType or UNDEF
      * @param boolValue
      */
-    protected void processUpdatedValue(State numericState) {
+    protected void processUpdatedValue(State state) {
         // TODO: handle gain and offset
         // handle UNDEF
-        updateExpiredChannel(System.currentTimeMillis(), numericState);
+        updateExpiredChannel(System.currentTimeMillis(), state);
     }
 
 }
