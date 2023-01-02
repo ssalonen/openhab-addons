@@ -269,6 +269,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
         this.callbackDelegator.resetCache();
         comms = null;
         request = null;
+        readChannelHandlers.clear();
         disposed = false;
         logger.trace("Initializing {} from status {}", this.getThing().getUID(), this.getThing().getStatus());
         try {
@@ -319,6 +320,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
         logger.debug("dispose()");
         // Mark handler as disposed as soon as possible to halt processing of callbacks
         disposed = true;
+        readChannelHandlers.clear();
         unregisterPollTask();
         this.callbackDelegator.resetCache();
         comms = null;
