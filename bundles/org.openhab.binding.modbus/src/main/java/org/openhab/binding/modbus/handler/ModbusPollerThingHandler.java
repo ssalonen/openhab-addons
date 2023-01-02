@@ -393,7 +393,6 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                     }
                 }
                 break;
-            // TODO: parsing of gain and preGainOffset
             // TODO:other channels
             default:
                 throw new IllegalStateException(channelTypeId);
