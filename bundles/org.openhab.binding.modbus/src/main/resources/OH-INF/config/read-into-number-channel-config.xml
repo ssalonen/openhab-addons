@@ -52,18 +52,6 @@
 			</options>
             <required>true</required>
 		</parameter>
-		<parameter name="preGainOffset" type="decimal">
-			<label>Pre-gain Offset</label>
-			<description>Offset to add to raw decoded number towards the item (before the gain).</description>
-            <required>false</required>
-            <default>0</default>
-		</parameter>
-		<parameter name="gain" type="text">
-			<label>Gain</label>
-			<description>Gain to apply to the state towards the item.</description>
-            <required>false</required>
-            <default>1</default>
-		</parameter>
 		<parameter name="updateUnchangedValuesEveryMillis" type="integer" min="0" unit="ms" groupName="advanced">
 			<label>Interval for Updating Unchanged Values</label>
 			<description>Interval to update unchanged values. Normally unchanged values are not updated. In milliseconds.</description>

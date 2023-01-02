@@ -30,8 +30,6 @@ public class ReadChannelConfiguration {
     public long updateUnchangedValuesEveryMillis = 1000L;
 
     public @Nullable String valueType; // Number, Switch, Contact
-    public String gain = "1"; // Number
-    public String preGainOffset = "0"; // Number
     public BigDecimal closedValue = BigDecimal.ZERO; // Contact
     public BigDecimal offValue = BigDecimal.ZERO; // Switch
     public boolean inverted; // Contact, Switch
