@@ -27,7 +27,8 @@ public class ModbusBindingConstants {
     public static final String BINDING_ID = "modbus";
 
     public static final String CHANNEL_READ_INTO_NUMBER = "readIntoNumber";
-    public static final String CHANNEL_READ_INTO_SWITCH = "readIntoSwitch";
-    public static final String CHANNEL_READ_INTO_CONTACT = "readIntoContact";
+    public static final String CHANNEL_READ_INTO_PERCENT = "readIntoPercent";
+    public static final String CHANNEL_READ_INTO_ON_OFF = "readIntoOnOff";
+    public static final String CHANNEL_READ_INTO_OPEN_CLOSED = "readIntoOpenClosed";
     public static final String CHANNEL_READ_INTO_HEX_STRNG = "readIntoHexString";
 }

@@ -29,10 +29,12 @@ public class ReadChannelConfiguration {
     public @Nullable String address;
     public long updateUnchangedValuesEveryMillis = 1000L;
 
-    public @Nullable String valueType; // Number, Switch, Contact
-    public BigDecimal closedValue = BigDecimal.ZERO; // Contact
-    public BigDecimal offValue = BigDecimal.ZERO; // Switch
-    public boolean inverted; // Contact, Switch
+    public @Nullable String valueType; // Number, Percent, OPEN/CLOSED, ON/OFF
+    public BigDecimal closedValue = BigDecimal.ZERO; // OPEN/CLOSED, ON/OFF
+    public BigDecimal offValue = BigDecimal.ZERO; // ON/OFF
+    public BigDecimal minValue = BigDecimal.ZERO; // Percent
+    public BigDecimal maxValue = BigDecimal.valueOf(100L); // Percent
+    public boolean inverted; // OPEN/CLOSED, ON/OFF
     public int length; // HexString
 
 }
