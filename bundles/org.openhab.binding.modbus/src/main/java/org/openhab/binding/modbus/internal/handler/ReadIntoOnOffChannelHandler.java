@@ -23,15 +23,15 @@ import org.openhab.core.types.State;
 import org.openhab.core.types.UnDefType;
 
 /**
- * Handler for readIntoSwitch channels, decoding raw binary data from modbus according to channel configuration.
+ * Handler for readIntoOnOff channels, decoding raw binary data from modbus according to channel configuration.
  *
  * @author Sami Salonen - Initial contribution
  *
  */
 @NonNullByDefault
-public class ReadIntoSwitchChannelHandler extends ReadIntoNumberChannelHandler {
+public class ReadIntoOnOffChannelHandler extends ReadIntoNumberChannelHandler {
 
-    public ReadIntoSwitchChannelHandler(int pollStart, ReadChannelConfiguration config,
+    public ReadIntoOnOffChannelHandler(int pollStart, ReadChannelConfiguration config,
             Consumer<@NonNull State> stateUpdater) {
         super(pollStart, config, stateUpdater);
     }
@@ -45,7 +45,7 @@ public class ReadIntoSwitchChannelHandler extends ReadIntoNumberChannelHandler {
         } else {
             DecimalType decimalState = (DecimalType) state; // cast always succeeds
             isOff = config.offValue.equals(decimalState.toBigDecimal());
-            super.processUpdatedValue((config.inverted ^ isOff) ? OnOffType.OFF : OnOffType.ON);
         }
+        super.processUpdatedValue((config.inverted ^ isOff) ? OnOffType.OFF : OnOffType.ON);
     }
 }

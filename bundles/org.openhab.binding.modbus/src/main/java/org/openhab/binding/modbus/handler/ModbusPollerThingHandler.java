@@ -32,9 +32,10 @@ import org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal;
 import org.openhab.binding.modbus.internal.config.ModbusPollerConfiguration;
 import org.openhab.binding.modbus.internal.handler.ModbusDataThingHandler;
 import org.openhab.binding.modbus.internal.handler.ReadIntoChannelHandler;
-import org.openhab.binding.modbus.internal.handler.ReadIntoContactChannelHandler;
 import org.openhab.binding.modbus.internal.handler.ReadIntoNumberChannelHandler;
-import org.openhab.binding.modbus.internal.handler.ReadIntoSwitchChannelHandler;
+import org.openhab.binding.modbus.internal.handler.ReadIntoOnOffChannelHandler;
+import org.openhab.binding.modbus.internal.handler.ReadIntoOpenClosedChannelHandler;
+import org.openhab.binding.modbus.internal.handler.ReadIntoPercentChannelHandler;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
 import org.openhab.core.io.transport.modbus.AsyncModbusReadResult;
@@ -365,8 +366,8 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
         String channelTypeId = channelTypeUID.getId();
         switch (channelTypeId) {
             case CHANNEL_READ_INTO_NUMBER:
-            case CHANNEL_READ_INTO_SWITCH:
-            case CHANNEL_READ_INTO_CONTACT:
+            case CHANNEL_READ_INTO_ON_OFF:
+            case CHANNEL_READ_INTO_OPEN_CLOSED:
                 String address = channelConfig.address;
                 // required in xml config description,
                 // cannot be null
@@ -386,11 +387,14 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                     if (CHANNEL_READ_INTO_NUMBER.equals(channelTypeId)) {
                         readChannelHandlers.put(channelUID, new ReadIntoNumberChannelHandler(config.getStart(),
                                 channelConfig, state -> this.tryUpdateState(channelUID, state)));
-                    } else if (CHANNEL_READ_INTO_SWITCH.equals(channelTypeId)) {
-                        readChannelHandlers.put(channelUID, new ReadIntoSwitchChannelHandler(config.getStart(),
+                    } else if (CHANNEL_READ_INTO_PERCENT.equals(channelTypeId)) {
+                        readChannelHandlers.put(channelUID, new ReadIntoPercentChannelHandler(config.getStart(),
                                 channelConfig, state -> this.tryUpdateState(channelUID, state)));
-                    } else if (CHANNEL_READ_INTO_CONTACT.equals(channelTypeId)) {
-                        readChannelHandlers.put(channelUID, new ReadIntoContactChannelHandler(config.getStart(),
+                    } else if (CHANNEL_READ_INTO_ON_OFF.equals(channelTypeId)) {
+                        readChannelHandlers.put(channelUID, new ReadIntoOnOffChannelHandler(config.getStart(),
+                                channelConfig, state -> this.tryUpdateState(channelUID, state)));
+                    } else if (CHANNEL_READ_INTO_OPEN_CLOSED.equals(channelTypeId)) {
+                        readChannelHandlers.put(channelUID, new ReadIntoOpenClosedChannelHandler(config.getStart(),
                                 channelConfig, state -> this.tryUpdateState(channelUID, state)));
                     }
                 }

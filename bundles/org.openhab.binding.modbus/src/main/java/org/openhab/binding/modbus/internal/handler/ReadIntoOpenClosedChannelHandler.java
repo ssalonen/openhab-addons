@@ -23,15 +23,15 @@ import org.openhab.core.types.State;
 import org.openhab.core.types.UnDefType;
 
 /**
- * Handler for readIntoContact channels, decoding raw binary data from modbus according to channel configuration.
+ * Handler for readIntoOpenClosed channels, decoding raw binary data from modbus according to channel configuration.
  *
  * @author Sami Salonen - Initial contribution
  *
  */
 @NonNullByDefault
-public class ReadIntoContactChannelHandler extends ReadIntoNumberChannelHandler {
+public class ReadIntoOpenClosedChannelHandler extends ReadIntoNumberChannelHandler {
 
-    public ReadIntoContactChannelHandler(int pollStart, ReadChannelConfiguration config,
+    public ReadIntoOpenClosedChannelHandler(int pollStart, ReadChannelConfiguration config,
             Consumer<@NonNull State> stateUpdater) {
         super(pollStart, config, stateUpdater);
     }
