@@ -14,6 +14,7 @@ package org.openhab.binding.modbus.internal.handler;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.OptionalInt;
@@ -24,11 +25,14 @@ import java.util.stream.Stream;
 
 import org.eclipse.jdt.annotation.NonNull;
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import org.openhab.binding.modbus.config.ReadChannelConfiguration;
+import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
 import org.openhab.core.io.transport.modbus.AsyncModbusReadResult;
+import org.openhab.core.io.transport.modbus.BitArray;
 import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.io.transport.modbus.ModbusReadRequestBlueprint;
 import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
@@ -326,7 +330,6 @@ public class ReadIntoNumberChannelHandlerTest {
     @MethodSource("provideArgsForReadIntoNumberFromRegistersTest")
     public void testReadIntoNumberFromRegisters(State expectedState, ValueType type, ModbusRegisterArray registers,
             int index) {
-
         String address = calculateRelativeAdress(index, type);
         doTestReadIntoNumberFromRegisters(expectedState, type, registers, address, 0);
     }
@@ -341,13 +344,142 @@ public class ReadIntoNumberChannelHandlerTest {
         AtomicReference<State> updatedState = new AtomicReference<>();
         Consumer<State> stateUpdater = state -> updatedState.set(state);
         ReadIntoNumberChannelHandler handler = new ReadIntoNumberChannelHandler(pollerStart, config, stateUpdater);
-
         handler.handle(new AsyncModbusReadResult(requestMock, registers));
         assertEquals(expectedState, updatedState.get());
     }
 
-    // TODO: testReadIntoNumberFromBits
-    // TODO: testReadIntoNumberFromError
+    @ParameterizedTest
+    @MethodSource("provideArgsForReadIntoNumberFromRegistersTest")
+    public void testReadIntoSubclasedFromRegisters(State expectedState, ValueType type, ModbusRegisterArray registers,
+            int index) {
+        String address = calculateRelativeAdress(index, type);
+        doTestReadIntoSubclasedFromRegisters(expectedState, type, registers, address, 0);
+    }
+
+    public static Collection<Object[]> provideArgsForReadIntoNumberFromBitsTest() {
+        return Collections.unmodifiableList(Stream
+                .of(new Object[] { new DecimalType("0"), new BitArray(false, false, true), "0", 0 },
+                        new Object[] { new DecimalType("0"), new BitArray(false, false, true), "1", 0 },
+                        new Object[] { new DecimalType("1"), new BitArray(false, false, true), "2", 0 },
+                        new Object[] { new DecimalType("0"), new BitArray(false, false, true), "11", 11 },
+                        new Object[] { new DecimalType("0"), new BitArray(false, false, true), "12", 11 },
+                        new Object[] { new DecimalType("1"), new BitArray(false, false, true), "13", 11 })//
+                .toList());
+    }
+
+    @ParameterizedTest
+    @MethodSource("provideArgsForReadIntoNumberFromBitsTest")
+    public void testReadIntoNumberFromBits(State expectedState, BitArray bits, String address, int pollerStart) {
+        ModbusReadRequestBlueprint requestMock = Mockito.mock(ModbusReadRequestBlueprint.class);
+
+        ReadChannelConfiguration config = new ReadChannelConfiguration();
+        config.address = address;
+        // We receive BitArray only with coils and discrete inputs, and with those only allowed value type is BIT
+        config.valueType = ValueType.BIT.getConfigValue();
+        AtomicReference<State> updatedState = new AtomicReference<>();
+        Consumer<State> stateUpdater = state -> updatedState.set(state);
+        ReadIntoNumberChannelHandler handler = new ReadIntoNumberChannelHandler(pollerStart, config, stateUpdater);
+        handler.handle(new AsyncModbusReadResult(requestMock, bits));
+        assertEquals(expectedState, updatedState.get());
+    }
+
+    @Test
+    public void testReadIntoNumberError() {
+        ModbusReadRequestBlueprint requestMock = Mockito.mock(ModbusReadRequestBlueprint.class);
+
+        ReadChannelConfiguration config = new ReadChannelConfiguration();
+        config.address = "0";
+        config.valueType = ValueType.BIT.getConfigValue();
+        AtomicReference<State> updatedState = new AtomicReference<>();
+        Consumer<State> stateUpdater = state -> updatedState.set(state);
+        ReadIntoNumberChannelHandler handler = new ReadIntoNumberChannelHandler(0, config, stateUpdater);
+        handler.handle(new AsyncModbusFailure<ModbusReadRequestBlueprint>(requestMock, new Exception("foobar")));
+        assertEquals(UnDefType.UNDEF, updatedState.get());
+    }
+
+    /**
+     * Testing subclassing ReadIntoNumberChannelHandler (similar to how ReadInto{OnOff,OpenClosed,Percent} are
+     * implemented)
+     *
+     * All numbers are multiplied by ten, and UNDEF is converter to -6
+     *
+     * @author Sami Salonen
+     *
+     */
+    private class ReadIntoSubclassedHandler extends ReadIntoNumberChannelHandler {
+        public ReadIntoSubclassedHandler(int pollStart, ReadChannelConfiguration config, Consumer<State> stateUpdater) {
+            super(pollStart, config, stateUpdater);
+        }
+
+        @Override
+        protected State postProcessNumberState(State state) {
+            if (state instanceof UnDefType) {
+                return new DecimalType(-6);
+            }
+            DecimalType dec = (DecimalType) state;
+            return new DecimalType(dec.toBigDecimal().multiply(BigDecimal.TEN));
+        }
+    }
+
+    public void doTestReadIntoSubclasedFromRegisters(State baseExpectedState, ValueType valueType,
+            ModbusRegisterArray registers, String address, int pollerStart) {
+        final State expectedState;
+        if (baseExpectedState instanceof UnDefType) {
+            expectedState = new DecimalType(-6);
+        } else {
+            DecimalType dec = (DecimalType) baseExpectedState;
+            expectedState = new DecimalType(dec.toBigDecimal().multiply(BigDecimal.TEN));
+        }
+
+        ModbusReadRequestBlueprint requestMock = Mockito.mock(ModbusReadRequestBlueprint.class);
+
+        ReadChannelConfiguration config = new ReadChannelConfiguration();
+        config.address = address;
+        config.valueType = valueType.getConfigValue();
+        AtomicReference<State> updatedState = new AtomicReference<>();
+        Consumer<State> stateUpdater = state -> updatedState.set(state);
+        ReadIntoNumberChannelHandler handler = new ReadIntoSubclassedHandler(pollerStart, config, stateUpdater);
+        handler.handle(new AsyncModbusReadResult(requestMock, registers));
+        assertEquals(expectedState, updatedState.get());
+    }
+
+    @ParameterizedTest
+    @MethodSource("provideArgsForReadIntoNumberFromBitsTest")
+    public void testReadIntoSubclasedFromBits(State baseExpectedState, BitArray bits, String address, int pollerStart) {
+        final State expectedState;
+        if (baseExpectedState instanceof UnDefType) {
+            expectedState = new DecimalType(-6);
+        } else {
+            DecimalType dec = (DecimalType) baseExpectedState;
+            expectedState = new DecimalType(dec.toBigDecimal().multiply(BigDecimal.TEN));
+        }
+
+        ModbusReadRequestBlueprint requestMock = Mockito.mock(ModbusReadRequestBlueprint.class);
+
+        ReadChannelConfiguration config = new ReadChannelConfiguration();
+        config.address = address;
+        // We receive BitArray only with coils and discrete inputs, and with those only allowed value type is BIT
+        config.valueType = ValueType.BIT.getConfigValue();
+        AtomicReference<State> updatedState = new AtomicReference<>();
+        Consumer<State> stateUpdater = state -> updatedState.set(state);
+        ReadIntoNumberChannelHandler handler = new ReadIntoSubclassedHandler(pollerStart, config, stateUpdater);
+        handler.handle(new AsyncModbusReadResult(requestMock, bits));
+        assertEquals(expectedState, updatedState.get());
+    }
+
+    @Test
+    public void testReadIntoSubclassedError() {
+        ModbusReadRequestBlueprint requestMock = Mockito.mock(ModbusReadRequestBlueprint.class);
+
+        ReadChannelConfiguration config = new ReadChannelConfiguration();
+        config.address = "0";
+        config.valueType = ValueType.BIT.getConfigValue();
+        AtomicReference<State> updatedState = new AtomicReference<>();
+        Consumer<State> stateUpdater = state -> updatedState.set(state);
+        ReadIntoNumberChannelHandler handler = new ReadIntoSubclassedHandler(0, config, stateUpdater);
+        handler.handle(new AsyncModbusFailure<ModbusReadRequestBlueprint>(requestMock, new Exception("foobar")));
+        assertEquals(new DecimalType(-6), updatedState.get());
+    }
 
     public static Collection<Object[]> provideArgsForExtractIndexFromRelativeTest() {
         return Collections.unmodifiableList(Stream.of(//

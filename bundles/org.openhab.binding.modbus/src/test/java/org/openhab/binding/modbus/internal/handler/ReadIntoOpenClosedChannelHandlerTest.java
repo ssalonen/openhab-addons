@@ -28,7 +28,8 @@ import org.openhab.binding.modbus.config.ReadChannelConfiguration;
 import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OpenClosedType;
-import org.openhab.core.types.State;;
+import org.openhab.core.types.State;
+import org.openhab.core.types.UnDefType;;
 
 /**
  * @author Sami Salonen - Initial contribution
@@ -51,7 +52,13 @@ public class ReadIntoOpenClosedChannelHandlerTest {
                                 new Object[] { OpenClosedType.CLOSED, DecimalType.valueOf("255"), BigDecimal.valueOf(255), false},
                                 new Object[] { OpenClosedType.OPEN, DecimalType.valueOf("255"), BigDecimal.valueOf(255), true},
                                 new Object[] { OpenClosedType.OPEN, DecimalType.valueOf("0"), BigDecimal.valueOf(255), false},
-                                new Object[] { OpenClosedType.CLOSED, DecimalType.valueOf("0"), BigDecimal.valueOf(255), true}
+                                new Object[] { OpenClosedType.CLOSED, DecimalType.valueOf("0"), BigDecimal.valueOf(255), true},
+
+
+                                // We decode into UNDEF number when we have float NaN or float inf. The channel treats
+                                // it same way as any other number.
+                                new Object[] { OpenClosedType.OPEN, UnDefType.UNDEF, BigDecimal.valueOf(255), false},
+                                new Object[] { OpenClosedType.CLOSED, UnDefType.UNDEF, BigDecimal.valueOf(255), true}
 
                         //@formatter:on
         ).collect(Collectors.toList()));
