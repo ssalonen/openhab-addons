@@ -401,11 +401,11 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                 break;
             // TODO:other channels
             default:
-                throw new IllegalStateException(channelTypeId);
+                throw new IllegalStateException("Unexpected channel: " + channelTypeId);
 
         }
         if (!validationErrors.isEmpty()) {
-            // TODO: format errors
+            // TODO: format errors in a nice summary channel x errors: .., channel y errors: ...
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
             return false;
         } else {

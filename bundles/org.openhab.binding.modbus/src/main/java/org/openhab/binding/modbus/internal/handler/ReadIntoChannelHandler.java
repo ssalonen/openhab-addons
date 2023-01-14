@@ -53,19 +53,6 @@ public abstract class ReadIntoChannelHandler
     protected final Address parsedAddress;
     protected final ValueType valueType;
 
-    public ReadIntoChannelHandler(int pollStart, ReadChannelConfiguration config, Consumer<State> stateUpdater) {
-        this.pollStart = pollStart;
-        this.config = config;
-        this.stateUpdater = stateUpdater;
-        String address = config.address;
-        Objects.requireNonNull(address);
-        String valueTypeString = config.valueType;
-        Objects.requireNonNull(valueTypeString);
-        this.valueType = ValueType.fromConfigValue(valueTypeString);
-        // throws on parse error. XML config description validates format however
-        parsedAddress = ReadIntoChannelHandler.parseAddress(address);
-    }
-
     public static class Address {
 
         public final int channelStartElement;
@@ -76,30 +63,44 @@ public abstract class ReadIntoChannelHandler
             this.channelStartElementSub = channelStartElementSub;
         }
 
+        /**
+         * Parse Address from string
+         *
+         * @param channelStart Address string, e.g. "3" or "3.1"
+         * @return parsed address
+         * @throws IllegalArgumentException on invalid formats
+         */
+        static ReadIntoChannelHandler.Address parse(String channelStart)
+                throws IllegalArgumentException {
+            final int channelStartElement;
+            final OptionalInt channelStartElementSub;
+            {
+                String[] readParts = channelStart.split("\\.", 2);
+                channelStartElement = Integer.parseInt(readParts[0]);
+                if (readParts.length == 2) {
+                    channelStartElementSub = OptionalInt.of(Integer.parseInt(readParts[1]));
+                } else {
+                    channelStartElementSub = OptionalInt.empty();
+                }
+            }
+            ReadIntoChannelHandler.Address parsedAddress = new ReadIntoChannelHandler.Address(channelStartElement,
+                    channelStartElementSub);
+            return parsedAddress;
+        }
+
     }
 
-    // defaults
-    // 1. assume bit value type if poller is readingDiscreteOrCoil
-
-    // validation input:
-    // CASE 2 INPUT: poller data type, poll start, poll length, channel start, channel length (hex string)
-    // [CASE 1&2] 6. check that readStart is within limits of polled data
-    // [CASE 1&2] 7. check that last byte/bit expected is within limits of polled data
-
-    static Address parseAddress(String channelStart) throws IllegalArgumentException {
-        final int channelStartElement;
-        final OptionalInt channelStartElementSub;
-        {
-            String[] readParts = channelStart.split("\\.", 2);
-            channelStartElement = Integer.parseInt(readParts[0]);
-            if (readParts.length == 2) {
-                channelStartElementSub = OptionalInt.of(Integer.parseInt(readParts[1]));
-            } else {
-                channelStartElementSub = OptionalInt.empty();
-            }
-        }
-        Address parsedAddress = new Address(channelStartElement, channelStartElementSub);
-        return parsedAddress;
+    public ReadIntoChannelHandler(int pollStart, ReadChannelConfiguration config, Consumer<State> stateUpdater) {
+        this.pollStart = pollStart;
+        this.config = config;
+        this.stateUpdater = stateUpdater;
+        String address = config.address;
+        Objects.requireNonNull(address);
+        String valueTypeString = config.valueType;
+        Objects.requireNonNull(valueTypeString);
+        this.valueType = ValueType.fromConfigValue(valueTypeString);
+        // throws on parse error. XML config description validates format however
+        parsedAddress = Address.parse(address);
     }
 
     /**
@@ -131,7 +132,7 @@ public abstract class ReadIntoChannelHandler
         final int channelStartElement;
         final OptionalInt channelStartElementSub;
         try {
-            Address parsedAddress = parseAddress(channelStart);
+            Address parsedAddress = Address.parse(channelStart);
             channelStartElement = parsedAddress.channelStartElement;
             channelStartElementSub = parsedAddress.channelStartElementSub;
         } catch (IllegalArgumentException e) {

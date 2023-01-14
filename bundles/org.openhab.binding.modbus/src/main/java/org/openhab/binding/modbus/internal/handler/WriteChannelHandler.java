@@ -77,7 +77,7 @@ public class WriteChannelHandler {
         final int channelStartElement;
         final OptionalInt channelStartElementSub;
         try {
-            Address parsedAddress = ReadIntoChannelHandler.parseAddress(channelStart);
+            Address parsedAddress = Address.parse(channelStart);
             channelStartElement = parsedAddress.channelStartElement;
             channelStartElementSub = parsedAddress.channelStartElementSub;
         } catch (IllegalArgumentException e) {
