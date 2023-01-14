@@ -19,6 +19,7 @@ import org.eclipse.jdt.annotation.NonNull;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.binding.modbus.config.ReadChannelConfiguration;
 import org.openhab.core.library.types.DecimalType;
+import org.openhab.core.library.types.PercentType;
 import org.openhab.core.types.State;
 import org.openhab.core.types.UnDefType;
 
@@ -31,30 +32,27 @@ import org.openhab.core.types.UnDefType;
 @NonNullByDefault
 public class ReadIntoPercentChannelHandler extends ReadIntoNumberChannelHandler {
 
+    private static BigDecimal HUNDRED = BigDecimal.valueOf(100);
+    private BigDecimal range;
+
     public ReadIntoPercentChannelHandler(int pollStart, ReadChannelConfiguration config,
             Consumer<@NonNull State> stateUpdater) {
         super(pollStart, config, stateUpdater);
+        range = config.maxValue.subtract(config.minValue);
     }
 
     @Override
-    protected void processUpdatedValue(@NonNull State state) {
+    protected State postProcessNumberState(State state) {
         if (state instanceof UnDefType) {
             // UNDEF means we have either infinite or NaN floating point number
-            super.processUpdatedValue(state);
-            return;
+            return state;
         } else {
             DecimalType decimalState = (DecimalType) state; // cast always succeeds
 
             BigDecimal value = decimalState.toBigDecimal();
+            value = value.max(config.minValue).min(config.maxValue);
+            return new PercentType(value.subtract(config.minValue).divide(range).multiply(HUNDRED));
 
-            // TODO: clip to minValue and maxValue
-            // TODO: then scale linearly
-            // if (value.compareTo(this.config.minValue) > 0) {
-            //
-            // }
-            // TODO: scale
-            super.processUpdatedValue(state);
-            return;
         }
     }
 }

@@ -21,8 +21,8 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.binding.modbus.internal.handler.ReadIntoChannelHandler;
+import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
 
 /**
@@ -40,7 +40,7 @@ public class ReadChannelHandlerParametersValidationTest {
         // 4. poll length
         // 5. channel start
         // 6. address
-        // 7. channel value type
+        // 7. value type
         Arguments.of(true, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "6.1", ValueType.BIT);
         return Stream.of(
         //@formatter:off
