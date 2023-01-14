@@ -48,11 +48,9 @@ public class ReadIntoPercentChannelHandler extends ReadIntoNumberChannelHandler 
             return state;
         } else {
             DecimalType decimalState = (DecimalType) state; // cast always succeeds
-
             BigDecimal value = decimalState.toBigDecimal();
             value = value.max(config.minValue).min(config.maxValue);
             return new PercentType(value.subtract(config.minValue).divide(range).multiply(HUNDRED));
-
         }
     }
 }
