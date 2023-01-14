@@ -61,7 +61,7 @@ public class ReadIntoPercentChannelHandlerTest {
     }
 
     /**
-     * Unit test OpenClosed channel
+     * Unit test Percent channel
      *
      * Here we test post-processing step of the channel, starting from 'decoded number'
      */
