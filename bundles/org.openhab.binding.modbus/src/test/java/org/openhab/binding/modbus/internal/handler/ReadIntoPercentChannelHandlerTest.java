@@ -28,7 +28,8 @@ import org.openhab.binding.modbus.config.ReadChannelConfiguration;
 import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.PercentType;
-import org.openhab.core.types.State;;
+import org.openhab.core.types.State;
+import org.openhab.core.types.UnDefType;;
 
 /**
  * @author Sami Salonen - Initial contribution
@@ -50,10 +51,11 @@ public class ReadIntoPercentChannelHandlerTest {
                                 // out-of-bounds, clipped to min
                                 new Object[] { new PercentType(0), DecimalType.valueOf("-110"), BigDecimal.valueOf(-100), BigDecimal.valueOf(100)},
                                 // at lower limit
-                                new Object[] { new PercentType(0), DecimalType.valueOf("-100"), BigDecimal.valueOf(-100), BigDecimal.valueOf(100)}
+                                new Object[] { new PercentType(0), DecimalType.valueOf("-100"), BigDecimal.valueOf(-100), BigDecimal.valueOf(100)},
 
-
-
+                                // We decode into UNDEF number when we have float NaN or float inf. We return UNDEF.
+                                new Object[] { UnDefType.UNDEF, UnDefType.UNDEF, BigDecimal.valueOf(0), BigDecimal.valueOf(1000)},
+                                new Object[] { UnDefType.UNDEF, UnDefType.UNDEF, BigDecimal.valueOf(0), BigDecimal.valueOf(1000)}
                         //@formatter:on
         ).collect(Collectors.toList()));
     }
