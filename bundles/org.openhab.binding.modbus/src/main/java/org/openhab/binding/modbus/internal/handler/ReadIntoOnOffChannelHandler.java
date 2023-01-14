@@ -37,7 +37,7 @@ public class ReadIntoOnOffChannelHandler extends ReadIntoNumberChannelHandler {
     }
 
     @Override
-    protected void processUpdatedValue(@NonNull State state) {
+    protected State postProcessNumberState(State state) {
         final boolean isOff;
         if (state instanceof UnDefType) {
             // UNDEF means we have either infinite or NaN floating point number
@@ -46,6 +46,6 @@ public class ReadIntoOnOffChannelHandler extends ReadIntoNumberChannelHandler {
             DecimalType decimalState = (DecimalType) state; // cast always succeeds
             isOff = config.offValue.equals(decimalState.toBigDecimal());
         }
-        super.processUpdatedValue((config.inverted ^ isOff) ? OnOffType.OFF : OnOffType.ON);
+        return (config.inverted ^ isOff) ? OnOffType.OFF : OnOffType.ON;
     }
 }

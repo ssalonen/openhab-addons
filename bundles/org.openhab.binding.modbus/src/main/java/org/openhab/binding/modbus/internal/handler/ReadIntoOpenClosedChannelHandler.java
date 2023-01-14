@@ -37,7 +37,7 @@ public class ReadIntoOpenClosedChannelHandler extends ReadIntoNumberChannelHandl
     }
 
     @Override
-    protected void processUpdatedValue(@NonNull State state) {
+    protected State postProcessNumberState(State state) {
         final boolean isClosed;
         if (state instanceof UnDefType) {
             // UNDEF means we have either infinite or NaN floating point number
@@ -46,6 +46,6 @@ public class ReadIntoOpenClosedChannelHandler extends ReadIntoNumberChannelHandl
             DecimalType decimalState = (DecimalType) state; // cast always succeeds
             isClosed = config.closedValue.equals(decimalState.toBigDecimal());
         }
-        super.processUpdatedValue((config.inverted ^ isClosed) ? OpenClosedType.CLOSED : OpenClosedType.OPEN);
+        return (config.inverted ^ isClosed) ? OpenClosedType.CLOSED : OpenClosedType.OPEN;
     }
 }
