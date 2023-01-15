@@ -49,6 +49,7 @@
             <required>false</required>
             <default>100</default>
         </parameter>
+        <!-- TODO: Should we have parameters to handle ON and OFF as well? Or perhaps having transform for the incoming command? -->
 		<parameter name="writeMultiple" type="boolean" groupName="advanced">
 			<label>Write using FC16 always</label>
 			<description><![CDATA[Whether single register of data is written using FC16 ("Write Multiple Holding Registers").
