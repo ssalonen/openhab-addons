@@ -30,6 +30,7 @@ import org.openhab.core.types.Command;
 @NonNullByDefault
 public class WriteRegisterFromPercent extends WriteRegisterFromNumber {
 
+    private static BigDecimal HUNDRED = BigDecimal.valueOf(100);
     private BigDecimal range;
 
     public WriteRegisterFromPercent(WriteChannelConfiguration config, @Nullable RegisterCache registerCache) {
@@ -45,7 +46,7 @@ public class WriteRegisterFromPercent extends WriteRegisterFromNumber {
     @Override
     protected Optional<BigDecimal> preProcessCommand(Command command) {
         return preProcessOnlyIf(PercentType.class, command, percent -> {
-            return percent.toBigDecimal().multiply(range).add(config.minValue);
+            return percent.toBigDecimal().multiply(range).divide(HUNDRED).add(config.minValue);
         });
     }
 }

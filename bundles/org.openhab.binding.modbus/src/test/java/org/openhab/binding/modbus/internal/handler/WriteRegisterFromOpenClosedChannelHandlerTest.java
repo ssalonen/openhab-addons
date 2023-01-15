@@ -40,16 +40,16 @@ public class WriteRegisterFromOpenClosedChannelHandlerTest {
     public static Collection<Object[]> provideArgsForPreProcessTest() {
         return Collections.unmodifiableList(Stream.of(
 //        @formatter:off
-                                new Object[] { BigDecimal.ZERO,          OpenClosedType.CLOSED, BigDecimal.valueOf(0),   BigDecimal.valueOf(1)},
-                                new Object[] { BigDecimal.valueOf(1),    OpenClosedType.OPEN,  BigDecimal.valueOf(0),   BigDecimal.valueOf(1)},
-                                new Object[] { new BigDecimal("3.14"),   OpenClosedType.OPEN,  new BigDecimal("-3.14"),   new BigDecimal("3.14")},
-                                new Object[] { new BigDecimal("-3.14"),  OpenClosedType.CLOSED, new BigDecimal("-3.14"),   new BigDecimal("3.14")},
+                                new Object[] { BigDecimal.ZERO,          OpenClosedType.CLOSED, BigDecimal.valueOf(0),   BigDecimal.valueOf(1) },
+                                new Object[] { BigDecimal.valueOf(1),    OpenClosedType.OPEN,   BigDecimal.valueOf(0),   BigDecimal.valueOf(1) },
+                                new Object[] { new BigDecimal("3.14"),   OpenClosedType.OPEN,   new BigDecimal("-3.14"), new BigDecimal("3.14") },
+                                new Object[] { new BigDecimal("-3.14"),  OpenClosedType.CLOSED, new BigDecimal("-3.14"), new BigDecimal("3.14") },
 
-                                new Object[] { BigDecimal.valueOf(1337), OpenClosedType.CLOSED, new BigDecimal("1337"),   new BigDecimal("1337")},
-                                new Object[] { BigDecimal.valueOf(1337), OpenClosedType.CLOSED, new BigDecimal("1337"),   new BigDecimal("1337")},
+                                new Object[] { BigDecimal.valueOf(1337), OpenClosedType.CLOSED, new BigDecimal("1337"),  new BigDecimal("1337") },
+                                new Object[] { BigDecimal.valueOf(1337), OpenClosedType.CLOSED, new BigDecimal("1337"),  new BigDecimal("1337") },
 
                                 // DecimalType command is not processed, only OpenClosed comamnds
-                                new Object[] { null,  DecimalType.ZERO, BigDecimal.valueOf(0),   BigDecimal.valueOf(1)}
+                                new Object[] { null,  DecimalType.ZERO, BigDecimal.valueOf(0),   BigDecimal.valueOf(1) }
 
                         //@formatter:on
         ).collect(Collectors.toList()));
@@ -63,8 +63,8 @@ public class WriteRegisterFromOpenClosedChannelHandlerTest {
      */
     @ParameterizedTest
     @MethodSource("provideArgsForPreProcessTest")
-    public void testWriteWholeRegisterFromOnOffPostProcess(@Nullable BigDecimal expectedEncodedNumber, Command command,
-            BigDecimal closedValue, BigDecimal openValue) {
+    public void testWriteWholeRegisterFromOnOffPreProcess(@Nullable BigDecimal expectedPreprocessedNumber,
+            Command command, BigDecimal closedValue, BigDecimal openValue) {
         WriteChannelConfiguration config = new WriteChannelConfiguration();
         config.address = "0"; // not used in test
         // value type relevant in this test, we test the number that will be encoded
@@ -73,7 +73,7 @@ public class WriteRegisterFromOpenClosedChannelHandlerTest {
         config.openValue = openValue;
         WriteRegisterFromOpenClosed handler = new WriteRegisterFromOpenClosed(config, null);
 
-        assertEquals(Optional.ofNullable(expectedEncodedNumber), handler.preProcessCommand(command));
+        assertEquals(Optional.ofNullable(expectedPreprocessedNumber), handler.preProcessCommand(command));
     }
 
 }
