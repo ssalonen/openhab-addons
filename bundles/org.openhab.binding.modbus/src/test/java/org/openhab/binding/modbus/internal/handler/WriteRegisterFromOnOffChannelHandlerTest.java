@@ -37,6 +37,8 @@ import org.openhab.core.types.Command;;
 @NonNullByDefault
 public class WriteRegisterFromOnOffChannelHandlerTest {
 
+    private static int SLAVE_ID = 6;
+
     public static Collection<Object[]> provideArgsForPreProcessTest() {
         return Collections.unmodifiableList(Stream.of(
 //        @formatter:off
@@ -71,7 +73,8 @@ public class WriteRegisterFromOnOffChannelHandlerTest {
         config.valueType = ValueType.INT16.getConfigValue();
         config.offValue = offValue;
         config.onValue = onValue;
-        WriteRegisterFromOnOff handler = new WriteRegisterFromOnOff(config, null);
+        WriteRegisterFromOnOff handler = new WriteRegisterFromOnOff(SLAVE_ID, config, null, r -> {
+        });
 
         assertEquals(Optional.ofNullable(expectedPreprocessedNumber), handler.preProcessCommand(command));
     }

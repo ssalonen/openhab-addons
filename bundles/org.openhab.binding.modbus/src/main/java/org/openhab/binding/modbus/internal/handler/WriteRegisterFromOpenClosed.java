@@ -14,10 +14,12 @@ package org.openhab.binding.modbus.internal.handler;
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.modbus.config.WriteChannelConfiguration;
+import org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprint;
 import org.openhab.core.library.types.OpenClosedType;
 import org.openhab.core.types.Command;
 
@@ -30,8 +32,9 @@ import org.openhab.core.types.Command;
 @NonNullByDefault
 public class WriteRegisterFromOpenClosed extends WriteRegisterFromNumber {
 
-    public WriteRegisterFromOpenClosed(WriteChannelConfiguration config, @Nullable RegisterCache registerCache) {
-        super(config, registerCache);
+    public WriteRegisterFromOpenClosed(int slaveId, WriteChannelConfiguration config, @Nullable RegisterCache cache,
+            Consumer<ModbusWriteRequestBlueprint> writer) {
+        super(slaveId, config, cache, writer);
     }
 
     /**

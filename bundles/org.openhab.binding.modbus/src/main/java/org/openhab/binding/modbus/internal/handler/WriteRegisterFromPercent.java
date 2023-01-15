@@ -14,10 +14,12 @@ package org.openhab.binding.modbus.internal.handler;
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.modbus.config.WriteChannelConfiguration;
+import org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprint;
 import org.openhab.core.library.types.PercentType;
 import org.openhab.core.types.Command;
 
@@ -33,8 +35,9 @@ public class WriteRegisterFromPercent extends WriteRegisterFromNumber {
     private static BigDecimal HUNDRED = BigDecimal.valueOf(100);
     private BigDecimal range;
 
-    public WriteRegisterFromPercent(WriteChannelConfiguration config, @Nullable RegisterCache registerCache) {
-        super(config, registerCache);
+    public WriteRegisterFromPercent(int slaveId, WriteChannelConfiguration config, @Nullable RegisterCache cache,
+            Consumer<ModbusWriteRequestBlueprint> writer) {
+        super(slaveId, config, cache, writer);
         range = config.maxValue.subtract(config.minValue);
     }
 

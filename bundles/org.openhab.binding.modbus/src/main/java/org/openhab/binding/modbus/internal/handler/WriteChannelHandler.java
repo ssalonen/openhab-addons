@@ -16,8 +16,8 @@ import static org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.OptionalInt;
+import java.util.function.Consumer;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -26,6 +26,8 @@ import org.openhab.binding.modbus.internal.ChannelConfigValidationMessage;
 import org.openhab.binding.modbus.internal.handler.ReadIntoChannelHandler.Address;
 import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
+import org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprint;
+import org.openhab.core.types.Command;
 
 /**
  * Handler for write channels, transforming openHAB commands into raw binary data and modbus write requests
@@ -34,31 +36,28 @@ import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
  *
  */
 @NonNullByDefault
-public class WriteChannelHandler {
+public abstract class WriteChannelHandler {
 
     protected WriteChannelConfiguration config;
     protected @Nullable RegisterCache cache;
-    private Address address;
-    private ValueType valueType;
+    protected Address address;
+    protected ValueType valueType;
+    protected Consumer<ModbusWriteRequestBlueprint> writer;
 
     /**
      * Create new write channel handler
      *
-     * cache parameter can be omitted with full-register writes (i.e. not having address=X)
-     *
      * @param config channel config
-     * @param cache cache to registers. Used with "partial" register updates
+     * @param writer consumer to accept write commands
      */
-    public WriteChannelHandler(WriteChannelConfiguration config, @Nullable RegisterCache cache) {
+    public WriteChannelHandler(WriteChannelConfiguration config, Consumer<ModbusWriteRequestBlueprint> writer) {
         this.config = config;
+        this.writer = writer;
         this.address = Address.parse(config.address);
         this.valueType = ValueType.fromConfigValue(config.valueType);
-        if (valueType.getBits() < 16) {
-            Objects.requireNonNull(cache, "Cache must be provided with channels having partial register writes, "
-                    + "i.e. when writing values less than register size (less than 16bit)");
-            this.cache = cache;
-        }
     }
+
+    public abstract void processCommand(Command command);
 
     /**
      * Validate write parameters used to specify transformation of openHAB command to modbus request
@@ -141,8 +140,11 @@ public class WriteChannelHandler {
                     // CHECK 8
                     if (channelValueType != ValueType.BIT) {
                         validationIssues.add(new ChannelConfigValidationMessage(String.format(
-                                "Invalid valueType=%s. With address=X.Y, only valueType=bit is supported (bit of register)",
-                                channelValueType)));
+                                "Invalid valueType=%s. With address=X.Y, only valueType=bit is supported (bit of register).%s",
+                                channelValueType,
+                                channelValueType.getBits() == 8
+                                        ? " If you would like to see this implemented, raise a github issue."
+                                        : "")));
                     }
 
                     // CHECK 3b

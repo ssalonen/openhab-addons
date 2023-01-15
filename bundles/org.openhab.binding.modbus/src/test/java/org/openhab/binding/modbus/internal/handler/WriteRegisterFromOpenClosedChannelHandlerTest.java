@@ -37,6 +37,8 @@ import org.openhab.core.types.Command;;
 @NonNullByDefault
 public class WriteRegisterFromOpenClosedChannelHandlerTest {
 
+    private static int SLAVE_ID = 6;
+
     public static Collection<Object[]> provideArgsForPreProcessTest() {
         return Collections.unmodifiableList(Stream.of(
 //        @formatter:off
@@ -71,7 +73,8 @@ public class WriteRegisterFromOpenClosedChannelHandlerTest {
         config.valueType = ValueType.INT16.getConfigValue();
         config.closedValue = closedValue;
         config.openValue = openValue;
-        WriteRegisterFromOpenClosed handler = new WriteRegisterFromOpenClosed(config, null);
+        WriteRegisterFromOpenClosed handler = new WriteRegisterFromOpenClosed(SLAVE_ID, config, null, r -> {
+        });
 
         assertEquals(Optional.ofNullable(expectedPreprocessedNumber), handler.preProcessCommand(command));
     }
