@@ -52,6 +52,7 @@
 			</options>
             <required>true</required>
 		</parameter>
+		<!-- TODO: Should we have transform for the parsed state? -->
 		<parameter name="updateUnchangedValuesEveryMillis" type="integer" min="0" unit="ms" groupName="advanced">
 			<label>Interval for Updating Unchanged Values</label>
 			<description>Interval to update unchanged values. Normally unchanged values are not updated. In milliseconds.</description>
