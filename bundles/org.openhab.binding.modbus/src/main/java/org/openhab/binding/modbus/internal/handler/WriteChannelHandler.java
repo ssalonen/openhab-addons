@@ -16,9 +16,12 @@ import static org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.OptionalInt;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.modbus.config.WriteChannelConfiguration;
 import org.openhab.binding.modbus.internal.ChannelConfigValidationMessage;
 import org.openhab.binding.modbus.internal.handler.ReadIntoChannelHandler.Address;
 import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
@@ -33,9 +36,29 @@ import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
 @NonNullByDefault
 public class WriteChannelHandler {
 
-    //
-    // defaults:
-    // - assume BIT if writing coil
+    protected WriteChannelConfiguration config;
+    protected @Nullable RegisterCache cache;
+    private Address address;
+    private ValueType valueType;
+
+    /**
+     * Create new write channel handler
+     *
+     * cache parameter can be omitted with full-register writes (i.e. not having address=X)
+     *
+     * @param config channel config
+     * @param cache cache to registers. Used with "partial" register updates
+     */
+    public WriteChannelHandler(WriteChannelConfiguration config, @Nullable RegisterCache cache) {
+        this.config = config;
+        this.address = Address.parse(config.address);
+        this.valueType = ValueType.fromConfigValue(config.valueType);
+        if (valueType.getBits() < 16) {
+            Objects.requireNonNull(cache, "Cache must be provided with channels having partial register writes, "
+                    + "i.e. when writing values less than register size (less than 16bit)");
+            this.cache = cache;
+        }
+    }
 
     /**
      * Validate write parameters used to specify transformation of openHAB command to modbus request

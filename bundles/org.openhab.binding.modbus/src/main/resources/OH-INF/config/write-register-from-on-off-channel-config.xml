@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config-description:config-descriptions
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:config-description="https://openhab.org/schemas/config-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/config-description/v1.0.0 https://openhab.org/schemas/config-description-1.0.0.xsd">
+
+	<config-description uri="thing-type:modbus:write_register_from_number_channel">
+		<parameter-group name="advanced">
+			<label>Advanced</label>
+			<description>These configuration parameters allow you to alter advanced behaviour with writes.</description>
+			<advanced>true</advanced>
+		</parameter-group>
+		<parameter name="address" type="text" pattern="^(0|[0-9][0-9]*(\.[0-9]{1,2})?)?$"><!-- format X or X.Y -->
+			<label>Read Address</label>
+                <description><![CDATA[Start address of the first holding register or coil in the write. Use empty for read-only things.
+                <br />Use zero based address, e.g. in place of 400001 (first holding register), use the address 0. This address is passed to data frame as is.
+                <br />One can write individual bits of a register using X.Y format where X is the register and Y is the bit (0 refers to least significant bit).
+                ]]></description>
+			<required>true</required>
+		</parameter>
+		<parameter name="valueType" type="text">
+			<label>Write Value Type</label>
+			<description>Method to encode the number command to Modbus binary</description>
+			<options>
+                    <option value="int64">64bit positive or negative integer, 4 registers (int64, uint64)</option>
+                    <option value="int64_swap">64bit positive or negative integer, 4 registers but with 16bit words/registers in reverse
+                        order (dcba)
+                        (int64_swap, uint64_swap)</option>
+                    <option value="float32">32bit floating point (float32)</option>
+                    <option value="float32_swap">32bit floating point, 16bit words swapped (float32_swap)</option>
+                    <option value="int32">32bit positive or negative integer, 2 registers (int32, uint32)</option>
+                    <option value="int32_swap">32bit positive or negative integer, 2 registers but with 16bit words/registers in reverse
+                        order (ba)
+                        (int32_swap, uint32_swap)</option>
+                    <option value="int16">16bit positive or negative integer, 1 register (int16, uint16)</option>
+                    <option value="bit">individual bit (bit)</option>
+			</options>
+			<required>true</required>
+		</parameter>
+        <parameter name="offValue" type="decimal" groupName="advanced">
+            <label>OFF value</label>
+            <description>Consider OFF representing this number when writing.</description>
+            <required>false</required>
+            <default>0</default>
+        </parameter>
+        <parameter name="onValue" type="decimal" groupName="advanced">
+            <label>ON value</label>
+            <description>Consider ON representing this number when writing.</description>
+            <required>false</required>
+            <default>1</default>
+        </parameter>
+		<parameter name="writeMultiple" type="boolean" groupName="advanced">
+			<label>Write using FC16 always</label>
+			<description><![CDATA[Whether single register of data is written using FC16 ("Write Multiple Holding Registers").
+                <br />
+                <br />If false, FC6 is used with single register. Some devices only accept FC16.]]></description>
+			<required>false</required>
+			<default>false</default>
+		</parameter>
+		<parameter name="writeMaxTries" type="integer" min="1">
+			<label>Maximum Tries When Writing</label>
+			<description>Number of tries when writing data, if some of the writes fail. For single try, enter 1.</description>
+            <required>false</required>
+            <default>3</default>
+		</parameter>
+	</config-description>
+</config-description:config-descriptions>
