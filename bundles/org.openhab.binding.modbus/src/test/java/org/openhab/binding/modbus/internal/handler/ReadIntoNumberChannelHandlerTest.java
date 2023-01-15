@@ -412,7 +412,7 @@ public class ReadIntoNumberChannelHandlerTest {
         }
 
         @Override
-        protected State postProcessNumberState(State state) {
+        protected State postProcessDecodedNumberState(State state) {
             if (state instanceof UnDefType) {
                 return new DecimalType(-6);
             }

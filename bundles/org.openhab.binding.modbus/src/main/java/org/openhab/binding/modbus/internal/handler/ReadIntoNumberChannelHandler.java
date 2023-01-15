@@ -132,16 +132,16 @@ public class ReadIntoNumberChannelHandler extends ReadIntoChannelHandler {
     private void processUpdatedValue(State state) {
         // TODO: handle gain and offset
         // handle UNDEF
-        State postProcessedState = postProcessNumberState(state);
+        State postProcessedState = postProcessDecodedNumberState(state);
         updateExpiredChannel(System.currentTimeMillis(), postProcessedState);
     }
 
     /**
      * Post-process decoded state.
      *
-     * @param numericState DecimalType or UNDEF (
+     * @param numericState DecimalType or UNDEF
      */
-    protected State postProcessNumberState(State state) {
+    protected State postProcessDecodedNumberState(State state) {
         return state;
     }
 
