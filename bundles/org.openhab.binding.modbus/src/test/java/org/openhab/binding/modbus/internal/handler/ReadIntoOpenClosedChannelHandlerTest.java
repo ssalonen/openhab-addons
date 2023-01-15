@@ -83,7 +83,7 @@ public class ReadIntoOpenClosedChannelHandlerTest {
         ReadIntoOpenClosedChannelHandler handler = new ReadIntoOpenClosedChannelHandler(0 /* not used in test */,
                 config, stateUpdater);
 
-        assertEquals(expectedState, handler.postProcessNumberState(decodedNumberState));
+        assertEquals(expectedState, handler.postProcessDecodedNumberState(decodedNumberState));
     }
 
 }

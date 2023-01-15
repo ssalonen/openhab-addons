@@ -37,7 +37,7 @@ public class ReadIntoOpenClosedChannelHandler extends ReadIntoNumberChannelHandl
     }
 
     @Override
-    protected State postProcessNumberState(State state) {
+    protected State postProcessDecodedNumberState(State state) {
         final boolean isClosed;
         if (state instanceof UnDefType) {
             // UNDEF means we have either infinite or NaN floating point number

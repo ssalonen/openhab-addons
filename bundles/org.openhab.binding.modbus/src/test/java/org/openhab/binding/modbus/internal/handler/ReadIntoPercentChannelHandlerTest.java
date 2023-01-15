@@ -81,7 +81,7 @@ public class ReadIntoPercentChannelHandlerTest {
         ReadIntoPercentChannelHandler handler = new ReadIntoPercentChannelHandler(0 /* not used in test */, config,
                 stateUpdater);
 
-        assertEquals(expectedState, handler.postProcessNumberState(decodedNumberState));
+        assertEquals(expectedState, handler.postProcessDecodedNumberState(decodedNumberState));
     }
 
 }

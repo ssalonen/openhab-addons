@@ -49,7 +49,7 @@ public class ReadIntoPercentChannelHandler extends ReadIntoNumberChannelHandler 
     }
 
     @Override
-    protected State postProcessNumberState(State state) {
+    protected State postProcessDecodedNumberState(State state) {
         if (state instanceof UnDefType) {
             // UNDEF means we have either infinite or NaN floating point number
             return state;
