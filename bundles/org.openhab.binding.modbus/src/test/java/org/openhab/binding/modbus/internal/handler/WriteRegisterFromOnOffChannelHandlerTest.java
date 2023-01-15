@@ -40,16 +40,16 @@ public class WriteRegisterFromOnOffChannelHandlerTest {
     public static Collection<Object[]> provideArgsForPreProcessTest() {
         return Collections.unmodifiableList(Stream.of(
 //        @formatter:off
-                                new Object[] { BigDecimal.ZERO,          OnOffType.OFF, BigDecimal.valueOf(0),   BigDecimal.valueOf(1)},
-                                new Object[] { BigDecimal.valueOf(1),    OnOffType.ON,  BigDecimal.valueOf(0),   BigDecimal.valueOf(1)},
-                                new Object[] { new BigDecimal("3.14"),   OnOffType.ON,  new BigDecimal("-3.14"),   new BigDecimal("3.14")},
-                                new Object[] { new BigDecimal("-3.14"),  OnOffType.OFF, new BigDecimal("-3.14"),   new BigDecimal("3.14")},
+                                new Object[] { BigDecimal.ZERO,          OnOffType.OFF, BigDecimal.valueOf(0),   BigDecimal.valueOf(1) },
+                                new Object[] { BigDecimal.valueOf(1),    OnOffType.ON,  BigDecimal.valueOf(0),   BigDecimal.valueOf(1) },
+                                new Object[] { new BigDecimal("3.14"),   OnOffType.ON,  new BigDecimal("-3.14"),   new BigDecimal("3.14") },
+                                new Object[] { new BigDecimal("-3.14"),  OnOffType.OFF, new BigDecimal("-3.14"),   new BigDecimal("3.14") },
 
-                                new Object[] { BigDecimal.valueOf(1337), OnOffType.OFF, new BigDecimal("1337"),   new BigDecimal("1337")},
-                                new Object[] { BigDecimal.valueOf(1337), OnOffType.OFF, new BigDecimal("1337"),   new BigDecimal("1337")},
+                                new Object[] { BigDecimal.valueOf(1337), OnOffType.OFF, new BigDecimal("1337"),   new BigDecimal("1337") },
+                                new Object[] { BigDecimal.valueOf(1337), OnOffType.OFF, new BigDecimal("1337"),   new BigDecimal("1337") },
 
                                 // DecimalType command is not processed, only OnOff comamnds
-                                new Object[] { null,  DecimalType.ZERO, BigDecimal.valueOf(0),   BigDecimal.valueOf(1)}
+                                new Object[] { null,  DecimalType.ZERO, BigDecimal.valueOf(0),   BigDecimal.valueOf(1) }
 
                         //@formatter:on
         ).collect(Collectors.toList()));
@@ -63,8 +63,8 @@ public class WriteRegisterFromOnOffChannelHandlerTest {
      */
     @ParameterizedTest
     @MethodSource("provideArgsForPreProcessTest")
-    public void testWriteWholeRegisterFromOnOffPostProcess(@Nullable BigDecimal expectedEncodedNumber, Command command,
-            BigDecimal offValue, BigDecimal onValue) {
+    public void testWriteWholeRegisterFromOnOffPreProcess(@Nullable BigDecimal expectedPreprocessedNumber,
+            Command command, BigDecimal offValue, BigDecimal onValue) {
         WriteChannelConfiguration config = new WriteChannelConfiguration();
         config.address = "0"; // not used in test
         // value type relevant in this test, we test the number that will be encoded
@@ -73,7 +73,7 @@ public class WriteRegisterFromOnOffChannelHandlerTest {
         config.onValue = onValue;
         WriteRegisterFromOnOff handler = new WriteRegisterFromOnOff(config, null);
 
-        assertEquals(Optional.ofNullable(expectedEncodedNumber), handler.preProcessCommand(command));
+        assertEquals(Optional.ofNullable(expectedPreprocessedNumber), handler.preProcessCommand(command));
     }
 
 }
