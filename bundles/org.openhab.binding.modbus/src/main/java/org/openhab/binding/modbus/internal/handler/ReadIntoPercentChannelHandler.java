@@ -34,11 +34,18 @@ public class ReadIntoPercentChannelHandler extends ReadIntoNumberChannelHandler 
 
     private static BigDecimal HUNDRED = BigDecimal.valueOf(100);
     private BigDecimal range;
+    private BigDecimal min;
+    private BigDecimal max;
 
     public ReadIntoPercentChannelHandler(int pollStart, ReadChannelConfiguration config,
             Consumer<@NonNull State> stateUpdater) {
         super(pollStart, config, stateUpdater);
         range = config.maxValue.subtract(config.minValue);
+        // It is perfectly valid to have min can be greater than max:
+        // In this case, the larger decoded number we have, the smaller
+        // resulting PercentType will be
+        min = config.minValue.min(config.maxValue);
+        max = config.maxValue.max(config.minValue);
     }
 
     @Override
@@ -49,7 +56,7 @@ public class ReadIntoPercentChannelHandler extends ReadIntoNumberChannelHandler 
         } else {
             DecimalType decimalState = (DecimalType) state; // cast always succeeds
             BigDecimal value = decimalState.toBigDecimal();
-            value = value.max(config.minValue).min(config.maxValue);
+            value = value.max(min).min(max);
             return new PercentType(value.subtract(config.minValue).divide(range).multiply(HUNDRED));
         }
     }
