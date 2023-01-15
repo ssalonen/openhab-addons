@@ -26,11 +26,12 @@ import org.eclipse.jdt.annotation.Nullable;
 @NonNullByDefault
 public class ReadChannelConfiguration {
 
-    public @Nullable String address;
+    // Address is always specified with valid value (core checks against xml definition)
+    public String address = "";
     public long updateUnchangedValuesEveryMillis = 1000L;
 
     public @Nullable String valueType; // Number, Percent, OPEN/CLOSED, ON/OFF
-    public BigDecimal closedValue = BigDecimal.ZERO; // OPEN/CLOSED, ON/OFF
+    public BigDecimal closedValue = BigDecimal.ZERO; // OPEN/CLOSED
     public BigDecimal offValue = BigDecimal.ZERO; // ON/OFF
     public BigDecimal minValue = BigDecimal.ZERO; // Percent
     public BigDecimal maxValue = BigDecimal.valueOf(100L); // Percent

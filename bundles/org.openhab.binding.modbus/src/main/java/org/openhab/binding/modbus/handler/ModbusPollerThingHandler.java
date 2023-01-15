@@ -369,21 +369,14 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
             case CHANNEL_READ_INTO_NUMBER:
             case CHANNEL_READ_INTO_ON_OFF:
             case CHANNEL_READ_INTO_OPEN_CLOSED:
-                String address = channelConfig.address;
-                // required in xml config description,
-                // cannot be null
-                Objects.requireNonNull(address, "address missing " + channelUID);
-
                 String valueTypeString = channelConfig.valueType;
-                // required in xml config description, cannot be null
-                Objects.requireNonNull(valueTypeString, "valueType missing for " + channelUID);
                 ValueType valueType = ValueType.fromConfigValue(valueTypeString);
                 ModbusReadFunctionCode localFunctionCode = functionCode;
 
                 // required in xml config description, cannot be null
                 Objects.requireNonNull(localFunctionCode, "poller function code unknown");
                 validationErrors = ReadIntoChannelHandler.validateReadParameters(localFunctionCode, config.getStart(),
-                        config.getLength(), address, valueType);
+                        config.getLength(), channelConfig.address, valueType);
                 if (validationErrors.isEmpty()) {
                     if (CHANNEL_READ_INTO_NUMBER.equals(channelTypeId)) {
                         readChannelHandlers.put(channelUID, new ReadIntoNumberChannelHandler(config.getStart(),
