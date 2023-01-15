@@ -44,6 +44,8 @@ public class ReadIntoPercentChannelHandlerTest {
                                 new Object[] { new PercentType(50), DecimalType.valueOf("0"), BigDecimal.valueOf(-100), BigDecimal.valueOf(100)},
                                 new Object[] { new PercentType(75), DecimalType.valueOf("50"), BigDecimal.valueOf(-100), BigDecimal.valueOf(100)},
                                 new Object[] { new PercentType("5.05"), DecimalType.valueOf("50.5"), BigDecimal.valueOf(0), BigDecimal.valueOf(1000)},
+                                // min/max flipped (the larger the decoded number, the smaller PercentType)
+                                new Object[] { new PercentType("94.95"), DecimalType.valueOf("50.5"), BigDecimal.valueOf(1000), BigDecimal.valueOf(0)},
                                 // at upper limit
                                 new Object[] { new PercentType(100), DecimalType.valueOf("100"), BigDecimal.valueOf(-100), BigDecimal.valueOf(100)},
                                 // out-of-bounds, clipped to max
