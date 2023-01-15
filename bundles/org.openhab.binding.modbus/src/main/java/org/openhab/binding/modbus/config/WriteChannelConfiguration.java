@@ -30,6 +30,8 @@ public class WriteChannelConfiguration {
     // setting to empty string here to avoid @Nullable
     public String address = "";
     public String valueType = "";
+    public boolean writeMultiple = false;
+    public int writeMaxTries; // core fills default from XML
 
     public BigDecimal closedValue = BigDecimal.ZERO; // OPEN/CLOSED
     public BigDecimal openValue = BigDecimal.ONE; // OPEN/CLOSED

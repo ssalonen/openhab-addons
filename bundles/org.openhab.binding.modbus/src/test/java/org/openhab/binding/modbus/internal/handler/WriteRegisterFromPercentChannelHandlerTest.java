@@ -37,6 +37,8 @@ import org.openhab.core.types.Command;;
 @NonNullByDefault
 public class WriteRegisterFromPercentChannelHandlerTest {
 
+    private static int SLAVE_ID = 6;
+
     public static Collection<Object[]> provideArgsForPostProcessTest() {
         return Collections.unmodifiableList(Stream.of(
         //@formatter:off
@@ -74,7 +76,8 @@ public class WriteRegisterFromPercentChannelHandlerTest {
         config.valueType = ValueType.INT16.getConfigValue();
         config.minValue = minValue;
         config.maxValue = maxValue;
-        WriteRegisterFromPercent handler = new WriteRegisterFromPercent(config, null);
+        WriteRegisterFromPercent handler = new WriteRegisterFromPercent(SLAVE_ID, config, null, r -> {
+        });
 
         assertEquals(Optional.ofNullable(expectedPreprocessedNumber), handler.preProcessCommand(command));
     }
