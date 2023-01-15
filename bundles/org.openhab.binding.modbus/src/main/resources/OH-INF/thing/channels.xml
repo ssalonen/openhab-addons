@@ -4,32 +4,32 @@
 	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
 	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
 
-    <channel-type id="readIntoOpenClosed">
-        <item-type>Number</item-type>
-        <label>Interpret read data as Contact (OPEN/CLOSED)</label>
-        <config-description-ref uri="thing-type:modbus:read_into_open_closed_channel"></config-description-ref>
-    </channel-type>
-    <channel-type id="readIntoHexString">
-        <item-type>String</item-type>
-        <label>Interpret read data as hexadecimal string</label>
-        <description><![CDATA[Raw read data is presented in hexadecimal string format. For example e.g. 03FAFFFF can represent two 16bit words, 0x03FA and 0xFFFF.
+	<channel-type id="readIntoHexString">
+		<item-type>String</item-type>
+		<label>Interpret read data as hexadecimal string</label>
+		<description><![CDATA[Raw read data is presented in hexadecimal string format. For example e.g. 03FAFFFF can represent two 16bit words, 0x03FA and 0xFFFF.
         This allows you get coherent access to raw data received from Modbus.]]></description>
-        <config-description-ref uri="thing-type:modbus:read_into_hexstring_channel"></config-description-ref>
-    </channel-type>
+		<config-description-ref uri="thing-type:modbus:read_into_hexstring_channel"></config-description-ref>
+	</channel-type>
 	<channel-type id="readIntoNumber">
 		<item-type>Number</item-type>
 		<label>Interpret read data as number</label>
 		<config-description-ref uri="thing-type:modbus:read_into_number_channel"></config-description-ref>
 	</channel-type>
-    <channel-type id="readIntoPercent">
-        <item-type>Number</item-type>
-        <label>Interpret read data as percent (0-100%)</label>
-        <config-description-ref uri="thing-type:modbus:read_into_number_channel"></config-description-ref>
-    </channel-type>
 	<channel-type id="readIntoOnOff">
-        <item-type>Switch</item-type>
-        <label>Interpret read data as Switch (ON/OFF)</label>
-        <config-description-ref uri="thing-type:modbus:read_into_on_off_channel"></config-description-ref>
-    </channel-type>
-	
+		<item-type>Switch</item-type>
+		<label>Interpret read data as ON/OFF</label>
+		<config-description-ref uri="thing-type:modbus:read_into_on_off_channel"></config-description-ref>
+	</channel-type>
+	<channel-type id="readIntoOpenClosed">
+		<item-type>Number</item-type>
+		<label>Interpret read data as OPEN/CLOSED</label>
+		<config-description-ref uri="thing-type:modbus:read_into_open_closed_channel"></config-description-ref>
+	</channel-type>
+	<channel-type id="readIntoPercent">
+		<item-type>Number</item-type>
+		<label>Interpret read data as percent (0-100%)</label>
+		<config-description-ref uri="thing-type:modbus:read_into_number_channel"></config-description-ref>
+	</channel-type>
+
 </thing:thing-descriptions>
