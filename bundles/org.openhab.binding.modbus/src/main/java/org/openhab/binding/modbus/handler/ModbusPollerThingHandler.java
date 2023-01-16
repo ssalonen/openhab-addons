@@ -403,6 +403,11 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                 throw new IllegalStateException("not implemented:" + channelTypeId);
             // break;
             // TODO:other channels
+            case CHANNEL_WRITE_REGISTER_FROM_NUMBER:
+            case CHANNEL_WRITE_REGISTER_FROM_PERCENT:
+            case CHANNEL_WRITE_REGISTER_FROM_ON_OFF:
+            case CHANNEL_WRITE_REGISTER_FROM_OPEN_CLOSED:
+                throw new IllegalStateException("not implemented:" + channelTypeId);
             default:
                 throw new IllegalStateException("Unexpected channel: " + channelTypeId);
 
