@@ -13,6 +13,7 @@
 package org.openhab.binding.modbus.internal.handler;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.util.function.Consumer;
 
 import org.eclipse.jdt.annotation.NonNull;
@@ -57,7 +58,8 @@ public class ReadIntoPercentChannelHandler extends ReadIntoNumberChannelHandler 
             DecimalType decimalState = (DecimalType) state; // cast always succeeds
             BigDecimal value = decimalState.toBigDecimal();
             value = value.max(min).min(max);
-            return new PercentType(value.subtract(config.minValue).divide(range).multiply(HUNDRED));
+            return new PercentType(
+                    value.subtract(config.minValue).divide(range, MathContext.DECIMAL128).multiply(HUNDRED));
         }
     }
 }

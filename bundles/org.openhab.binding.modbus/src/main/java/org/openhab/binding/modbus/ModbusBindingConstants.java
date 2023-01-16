@@ -31,4 +31,6 @@ public class ModbusBindingConstants {
     public static final String CHANNEL_READ_INTO_ON_OFF = "readIntoOnOff";
     public static final String CHANNEL_READ_INTO_OPEN_CLOSED = "readIntoOpenClosed";
     public static final String CHANNEL_READ_INTO_HEX_STRNG = "readIntoHexString";
+
+    public static final String CHANNEL_WRITE_REGISTER_FROM_NUMBER = "writeRegisterFromNumber";
 }

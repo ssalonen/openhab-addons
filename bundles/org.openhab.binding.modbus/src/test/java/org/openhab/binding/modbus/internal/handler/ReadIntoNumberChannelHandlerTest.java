@@ -51,7 +51,7 @@ public class ReadIntoNumberChannelHandlerTest {
      *
      * For reusing tests from org.openhab.core.io.transport.modbus.test.BitUtilitiesExtractStateFromRegistersTest
      */
-    private static String calculateRelativeAdress(int extractIndex, ValueType valueType) {
+    public static String calculateRelativeAdress(int extractIndex, ValueType valueType) {
         if (valueType.getBits() < 16) {
             int itemsPerRegister = 16 / valueType.getBits();
             int registerRelative = extractIndex / itemsPerRegister;
@@ -62,7 +62,7 @@ public class ReadIntoNumberChannelHandlerTest {
         }
     }
 
-    private static ModbusRegisterArray shortArrayToRegisterArray(int... arr) {
+    public static ModbusRegisterArray shortArrayToRegisterArray(int... arr) {
         return new ModbusRegisterArray(arr);
     }
 

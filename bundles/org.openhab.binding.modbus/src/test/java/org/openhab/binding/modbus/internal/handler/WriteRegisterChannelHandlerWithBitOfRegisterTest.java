@@ -42,6 +42,7 @@ import org.openhab.core.types.Command;
  */
 public class WriteRegisterChannelHandlerWithBitOfRegisterTest {
     private static int SLAVE_ID = 6;
+    private static int REGISTER_INDEX = 9;
 
     private static Stream<Arguments> provideArgsForUpdateThenCommandFromItem() {
         return Stream.of(//
@@ -73,7 +74,7 @@ public class WriteRegisterChannelHandlerWithBitOfRegisterTest {
             short stateUpdateFromHandler, String bitIndex, short expectedWriteDataToSlave, Command commandFromItem) {
 
         WriteChannelConfiguration config = new WriteChannelConfiguration();
-        config.address = "0." + bitIndex;
+        config.address = REGISTER_INDEX + "." + bitIndex;
         config.writeMaxTries = 3;
         config.valueType = ValueType.BIT.getConfigValue();
         ModbusRegisterArray cachedRegister = new ModbusRegisterArray(stateUpdateFromHandler);
@@ -85,7 +86,7 @@ public class WriteRegisterChannelHandlerWithBitOfRegisterTest {
                     .getConstructor(Integer.TYPE, WriteChannelConfiguration.class, RegisterCache.class, Consumer.class);
 
             RegisterCache registerCache = (start, length) -> {
-                assertEquals(0, start);
+                assertEquals(REGISTER_INDEX, start);
                 assertEquals(1, length);
                 return Optional.of(cachedRegister);
             };
