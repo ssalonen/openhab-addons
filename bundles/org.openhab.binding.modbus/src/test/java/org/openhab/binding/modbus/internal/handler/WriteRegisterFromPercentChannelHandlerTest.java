@@ -44,7 +44,7 @@ public class WriteRegisterFromPercentChannelHandlerTest {
         //@formatter:off
                                 new Object[] { new BigDecimal("500"),  new PercentType(50),      BigDecimal.valueOf(0),    BigDecimal.valueOf(1000) },
                                 new Object[] { new BigDecimal("0"),    new PercentType(50),      BigDecimal.valueOf(-100), BigDecimal.valueOf(100) },
-                                new Object[] { new BigDecimal("50"),   new PercentType(75),      BigDecimal.valueOf(-100), BigDecimal.valueOf(100) },
+                                new Object[] { new BigDecimal("50"),    new PercentType(75),      BigDecimal.valueOf(-100), BigDecimal.valueOf(100) },
                                 new Object[] { new BigDecimal("50.50"), new PercentType("5.05"),  BigDecimal.valueOf(0),    BigDecimal.valueOf(1000) },
                                 // min/max flipped (the larger the decoded number, the smaller PercentType)
                                 new Object[] { new BigDecimal("50.50"), new PercentType("94.95"), BigDecimal.valueOf(1000), BigDecimal.valueOf(0) },

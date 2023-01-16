@@ -31,5 +31,26 @@
 		<label>Interpret read data as percent (0-100%)</label>
 		<config-description-ref uri="thing-type:modbus:read_into_number_channel"></config-description-ref>
 	</channel-type>
+	
+    <channel-type id="writeRegisterFromNumber">
+        <item-type>Number</item-type>
+        <label>Write register from DecimalType number commands</label>
+        <config-description-ref uri="thing-type:modbus:write_register_from_number_channel"></config-description-ref>
+    </channel-type>
+    <channel-type id="writeRegisterFromOnOff">
+        <item-type>Switch</item-type>
+        <label>Write register from ON/OFF commands</label>
+        <config-description-ref uri="thing-type:modbus:write_register_from_on_off_channel"></config-description-ref>
+    </channel-type>
+    <channel-type id="writeRegisterFromOpenClosed">
+        <item-type>Contact</item-type>
+        <label>Write register from OPEN/CLOSED commands</label>
+        <config-description-ref uri="thing-type:modbus:write_register_from_open_closed_channel"></config-description-ref>
+    </channel-type>
+    <channel-type id="writeRegisterFromPercent">
+        <item-type>Contact</item-type>
+        <label>Write register from percent (0-100%) commands</label>
+        <config-description-ref uri="thing-type:modbus:write_register_from_percent_channel"></config-description-ref>
+    </channel-type>
 
 </thing:thing-descriptions>

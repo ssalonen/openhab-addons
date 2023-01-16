@@ -22,6 +22,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.modbus.config.WriteChannelConfiguration;
 import org.openhab.core.io.transport.modbus.ModbusBitUtilities;
+import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
 import org.openhab.core.io.transport.modbus.ModbusWriteRegisterRequestBlueprint;
 import org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprint;
@@ -81,8 +82,10 @@ public class WriteRegisterFromNumber extends WriteRegisterChannelHandler {
 
     @Override
     public void processCommand(Command command) {
-        if (valueType.getBits() < 16) {
+        if (valueType == ValueType.BIT) {
             processWriteToBitOfRegister(command);
+        } else if (valueType.getBits() < 16) {
+            throw new IllegalStateException("Bug. int8/uint8 not expected as this is validated when parsing config");
         } else {
             processWriteFullRegisters(command);
         }
@@ -95,7 +98,8 @@ public class WriteRegisterFromNumber extends WriteRegisterChannelHandler {
         }
 
         boolean setBitOn = !BigDecimal.ZERO.equals(decimal.get());
-        // Never fails, as otherwise config is invalid
+        // getAsInt() never fails, as otherwise config is invalid:
+        // - sub index needs to be specified BIT value type
         int bitIndex = address.channelStartElementSub.getAsInt();
         RegisterCache localCache = cache;
         Objects.requireNonNull(localCache); // Invariant, as this is asserted in parent class constructor
@@ -119,7 +123,7 @@ public class WriteRegisterFromNumber extends WriteRegisterChannelHandler {
     private void processWriteFullRegisters(Command command) {
         ModbusRegisterArray registers = ModbusBitUtilities.commandToRegisters(command, valueType);
         writer.accept(new ModbusWriteRegisterRequestBlueprint(slaveId, address.channelStartElement, registers,
-                config.writeMultiple, config.writeMaxTries));
+                (registers.size() > 1) || config.writeMultiple, config.writeMaxTries));
     }
 
 }

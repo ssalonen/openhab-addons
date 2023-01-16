@@ -4,7 +4,7 @@
 	xmlns:config-description="https://openhab.org/schemas/config-description/v1.0.0"
 	xsi:schemaLocation="https://openhab.org/schemas/config-description/v1.0.0 https://openhab.org/schemas/config-description-1.0.0.xsd">
 
-	<config-description uri="thing-type:modbus:write_register_from_number_channel">
+	<config-description uri="thing-type:modbus:write_register_from_open_closed_channel">
 		<parameter-group name="advanced">
 			<label>Advanced</label>
 			<description>These configuration parameters allow you to alter advanced behaviour with writes.</description>

@@ -367,6 +367,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
         String channelTypeId = channelTypeUID.getId();
         switch (channelTypeId) {
             case CHANNEL_READ_INTO_NUMBER:
+            case CHANNEL_READ_INTO_PERCENT:
             case CHANNEL_READ_INTO_ON_OFF:
             case CHANNEL_READ_INTO_OPEN_CLOSED:
                 String valueTypeString = channelConfig.valueType;
@@ -377,6 +378,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                 Objects.requireNonNull(localFunctionCode, "poller function code unknown");
                 validationErrors = ReadIntoChannelHandler.validateReadParameters(localFunctionCode, config.getStart(),
                         config.getLength(), channelConfig.address, valueType);
+
                 if (validationErrors.isEmpty()) {
                     if (CHANNEL_READ_INTO_NUMBER.equals(channelTypeId)) {
                         readChannelHandlers.put(channelUID, new ReadIntoNumberChannelHandler(config.getStart(),
@@ -390,9 +392,16 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                     } else if (CHANNEL_READ_INTO_OPEN_CLOSED.equals(channelTypeId)) {
                         readChannelHandlers.put(channelUID, new ReadIntoOpenClosedChannelHandler(config.getStart(),
                                 channelConfig, state -> this.tryUpdateState(channelUID, state)));
+                    } else {
+                        throw new IllegalStateException("Bug: missing switch statement for " + channelTypeId);
                     }
                 }
                 break;
+            case CHANNEL_READ_INTO_HEX_STRNG:
+                // TODO: validate read is within polled data
+                // TODO: create handler
+                throw new IllegalStateException("not implemented:" + channelTypeId);
+            // break;
             // TODO:other channels
             default:
                 throw new IllegalStateException("Unexpected channel: " + channelTypeId);
