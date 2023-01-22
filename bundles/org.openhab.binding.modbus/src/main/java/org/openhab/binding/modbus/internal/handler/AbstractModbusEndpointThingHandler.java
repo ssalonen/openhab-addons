@@ -196,6 +196,7 @@ public abstract class AbstractModbusEndpointThingHandler<E extends ModbusSlaveEn
     }
 
     private <R> void handleCommunicationError(AsyncModbusFailure<R> result) {
+        // TODO: is this a good idea? When bridge gets offline, so will everything else? poller stops for example
         ThingStatusInfo statusInfo = thing.getStatusInfo();
         if (!ThingStatus.OFFLINE.equals(statusInfo.getStatus())) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, result.toString());
