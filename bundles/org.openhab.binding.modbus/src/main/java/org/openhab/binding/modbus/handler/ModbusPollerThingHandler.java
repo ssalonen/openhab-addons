@@ -21,11 +21,13 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.modbus.config.ReadChannelConfiguration;
+import org.openhab.binding.modbus.config.WriteChannelConfiguration;
 import org.openhab.binding.modbus.internal.AtomicStampedValue;
 import org.openhab.binding.modbus.internal.ChannelConfigValidationMessage;
 import org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal;
@@ -36,9 +38,16 @@ import org.openhab.binding.modbus.internal.handler.ReadIntoNumberChannelHandler;
 import org.openhab.binding.modbus.internal.handler.ReadIntoOnOffChannelHandler;
 import org.openhab.binding.modbus.internal.handler.ReadIntoOpenClosedChannelHandler;
 import org.openhab.binding.modbus.internal.handler.ReadIntoPercentChannelHandler;
+import org.openhab.binding.modbus.internal.handler.RegisterCache;
+import org.openhab.binding.modbus.internal.handler.WriteChannelHandler;
+import org.openhab.binding.modbus.internal.handler.WriteRegisterFromNumber;
+import org.openhab.binding.modbus.internal.handler.WriteRegisterFromOnOff;
+import org.openhab.binding.modbus.internal.handler.WriteRegisterFromOpenClosed;
+import org.openhab.binding.modbus.internal.handler.WriteRegisterFromPercent;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
 import org.openhab.core.io.transport.modbus.AsyncModbusReadResult;
+import org.openhab.core.io.transport.modbus.AsyncModbusWriteResult;
 import org.openhab.core.io.transport.modbus.ModbusCommunicationInterface;
 import org.openhab.core.io.transport.modbus.ModbusConstants;
 import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
@@ -47,7 +56,16 @@ import org.openhab.core.io.transport.modbus.ModbusReadCallback;
 import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
 import org.openhab.core.io.transport.modbus.ModbusReadRequestBlueprint;
 import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
+import org.openhab.core.io.transport.modbus.ModbusWriteCallback;
+import org.openhab.core.io.transport.modbus.ModbusWriteCoilRequestBlueprint;
+import org.openhab.core.io.transport.modbus.ModbusWriteRegisterRequestBlueprint;
+import org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprint;
+import org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprintVisitor;
 import org.openhab.core.io.transport.modbus.PollTask;
+import org.openhab.core.io.transport.modbus.exception.ModbusTransportException;
+import org.openhab.core.io.transport.modbus.exception.ModbusUnexpectedResponseFunctionCodeException;
+import org.openhab.core.io.transport.modbus.exception.ModbusUnexpectedResponseSizeException;
+import org.openhab.core.io.transport.modbus.exception.ModbusUnexpectedTransactionIdException;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
@@ -70,7 +88,8 @@ import org.slf4j.LoggerFactory;
  * @author Sami Salonen - Initial contribution
  */
 @NonNullByDefault
-public class ModbusPollerThingHandler extends BaseBridgeHandler {
+public class ModbusPollerThingHandler extends BaseBridgeHandler implements RegisterCache,
+        Consumer<ModbusWriteRequestBlueprint>, ModbusWriteCallback, ModbusFailureCallback<ModbusWriteRequestBlueprint> {
 
     /**
      * {@link ModbusReadCallback} that delegates all tasks forward.
@@ -125,15 +144,6 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
         @Override
         public synchronized void handle(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
             handleResult(new PollResult(failure));
-        }
-
-        private void resetCommunicationError() {
-            ThingStatusInfo statusInfo = thing.getStatusInfo();
-            if (ThingStatus.UNKNOWN.equals(statusInfo.getStatus())
-                    || (ThingStatus.OFFLINE.equals(statusInfo.getStatus())
-                            && ThingStatusDetail.COMMUNICATION_ERROR.equals(statusInfo.getStatusDetail()))) {
-                updateStatus(ThingStatus.ONLINE);
-            }
         }
 
         /**
@@ -219,7 +229,9 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
     private volatile List<ModbusDataThingHandler> childCallbacks = new CopyOnWriteArrayList<>();
     private volatile AtomicReference<@Nullable ModbusRegisterArray> lastPolledDataCache = new AtomicReference<>();
     private volatile Map<ChannelUID, ReadIntoChannelHandler> readChannelHandlers = new ConcurrentHashMap<>();
+    private volatile Map<ChannelUID, WriteChannelHandler> writeChannelHandlers = new ConcurrentHashMap<>();
     private @NonNullByDefault({}) ModbusCommunicationInterface comms;
+    private volatile int slaveId;
 
     private ReadCallbackDelegator callbackDelegator = new ReadCallbackDelegator();
 
@@ -304,6 +316,11 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                     break;
             }
             cacheMillis = this.config.getCacheMillis();
+            boolean initOk = initCommsAndValidateEndpointBridge();
+            if (!initOk) {
+                // Thing status already updated
+                return;
+            }
             if (initializeChannelHandlers()) {
                 registerPollTask();
             }
@@ -360,7 +377,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
 
     private boolean initChannelHandler(Channel channel, Configuration configuration) {
         final List<ChannelConfigValidationMessage> validationErrors;
-        final ReadChannelConfiguration channelConfig = configuration.as(ReadChannelConfiguration.class);
+
         ChannelUID channelUID = channel.getUID();
         ChannelTypeUID channelTypeUID = channel.getChannelTypeUID();
         Objects.requireNonNull(channelTypeUID, "channel type not defined for " + channelUID);
@@ -369,9 +386,9 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
             case CHANNEL_READ_INTO_NUMBER:
             case CHANNEL_READ_INTO_PERCENT:
             case CHANNEL_READ_INTO_ON_OFF:
-            case CHANNEL_READ_INTO_OPEN_CLOSED:
-                String valueTypeString = channelConfig.valueType;
-                ValueType valueType = ValueType.fromConfigValue(valueTypeString);
+            case CHANNEL_READ_INTO_OPEN_CLOSED: {
+                final ReadChannelConfiguration channelConfig = configuration.as(ReadChannelConfiguration.class);
+                ValueType valueType = ValueType.fromConfigValue(channelConfig.valueType);
                 ModbusReadFunctionCode localFunctionCode = functionCode;
 
                 // required in xml config description, cannot be null
@@ -396,6 +413,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                         throw new IllegalStateException("Bug: missing switch statement for " + channelTypeId);
                     }
                 }
+            }
                 break;
             case CHANNEL_READ_INTO_HEX_STRNG:
                 // TODO: validate read is within polled data
@@ -406,14 +424,45 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
             case CHANNEL_WRITE_REGISTER_FROM_NUMBER:
             case CHANNEL_WRITE_REGISTER_FROM_PERCENT:
             case CHANNEL_WRITE_REGISTER_FROM_ON_OFF:
-            case CHANNEL_WRITE_REGISTER_FROM_OPEN_CLOSED:
-                throw new IllegalStateException("not implemented:" + channelTypeId);
+            case CHANNEL_WRITE_REGISTER_FROM_OPEN_CLOSED: {
+                final WriteChannelConfiguration channelConfig = configuration.as(WriteChannelConfiguration.class);
+                ModbusReadFunctionCode localFunctionCode = functionCode;
+
+                // required in xml config description, cannot be null
+                Objects.requireNonNull(localFunctionCode, "poller function code unknown");
+                ValueType valueType = ValueType.fromConfigValue(channelConfig.valueType);
+
+                validationErrors = WriteChannelHandler.validateWriteParameters(localFunctionCode, config.getStart(),
+                        config.getLength(), ModbusBindingConstantsInternal.WRITE_TYPE_HOLDING, channelConfig.address,
+                        valueType);
+
+                if (validationErrors.isEmpty()) {
+                    RegisterCache cache = this;
+                    Consumer<ModbusWriteRequestBlueprint> modbusWriter = this;
+                    if (CHANNEL_WRITE_REGISTER_FROM_NUMBER.equals(channelTypeId)) {
+                        writeChannelHandlers.put(channelUID,
+                                new WriteRegisterFromNumber(slaveId, channelConfig, cache, modbusWriter));
+                    } else if (CHANNEL_WRITE_REGISTER_FROM_PERCENT.equals(channelTypeId)) {
+                        writeChannelHandlers.put(channelUID,
+                                new WriteRegisterFromPercent(slaveId, channelConfig, cache, modbusWriter));
+                    } else if (CHANNEL_WRITE_REGISTER_FROM_ON_OFF.equals(channelTypeId)) {
+                        writeChannelHandlers.put(channelUID,
+                                new WriteRegisterFromOnOff(slaveId, channelConfig, cache, modbusWriter));
+                    } else if (CHANNEL_WRITE_REGISTER_FROM_OPEN_CLOSED.equals(channelTypeId)) {
+                        writeChannelHandlers.put(channelUID,
+                                new WriteRegisterFromOpenClosed(slaveId, channelConfig, cache, modbusWriter));
+                    } else {
+                        throw new IllegalStateException("Bug: missing switch statement for " + channelTypeId);
+                    }
+                }
+            }
+                break;
             default:
                 throw new IllegalStateException("Unexpected channel: " + channelTypeId);
 
         }
         if (!validationErrors.isEmpty()) {
-            // TODO: format errors in a nice summary channel x errors: .., channel y errors: ...
+            // TODO: format errors in a nice summary channel x erroFcrs: .., channel y errors: ...
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
             return false;
         } else {
@@ -429,34 +478,18 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
      */
     private synchronized void registerPollTask() throws EndpointNotInitializedException {
         logger.trace("registerPollTask()");
-        if (pollTask != null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
-            logger.debug("pollTask should be unregistered before registering a new one!");
-            return;
+        ModbusCommunicationInterface localComms = this.comms;
+        if (localComms == null) {
+            throw new EndpointNotInitializedException();
         }
 
-        ModbusEndpointThingHandler slaveEndpointThingHandler = getEndpointThingHandler();
-        if (slaveEndpointThingHandler == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, String.format("Bridge '%s' is offline",
-                    Optional.ofNullable(getBridge()).map(b -> b.getLabel()).orElse("<null>")));
-            logger.debug("No bridge handler available -- aborting init for {}", this);
-            return;
-        }
-        ModbusCommunicationInterface localComms = slaveEndpointThingHandler.getCommunicationInterface();
-        if (localComms == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, String.format(
-                    "Bridge '%s' not completely initialized", Optional.ofNullable(getBridge()).map(b -> b.getLabel())));
-            logger.debug("Bridge not initialized fully (no communication interface) -- aborting init for {}", this);
-            return;
-        }
-        this.comms = localComms;
         ModbusReadFunctionCode localFunctionCode = functionCode;
         if (localFunctionCode == null) {
             return;
         }
 
-        ModbusReadRequestBlueprint localRequest = new ModbusReadRequestBlueprint(slaveEndpointThingHandler.getSlaveId(),
-                localFunctionCode, config.getStart(), config.getLength(), config.getMaxTries());
+        ModbusReadRequestBlueprint localRequest = new ModbusReadRequestBlueprint(slaveId, localFunctionCode,
+                config.getStart(), config.getLength(), config.getMaxTries());
         this.request = localRequest;
 
         if (config.getRefresh() <= 0L) {
@@ -469,6 +502,32 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
             assert pollTask != null;
             updateStatus(ThingStatus.UNKNOWN);
         }
+    }
+
+    public boolean initCommsAndValidateEndpointBridge() throws EndpointNotInitializedException {
+        if (pollTask != null) {
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
+            logger.debug("pollTask should be unregistered before registering a new one!");
+            return false;
+        }
+
+        ModbusEndpointThingHandler slaveEndpointThingHandler = getEndpointThingHandler();
+        if (slaveEndpointThingHandler == null) {
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, String.format("Bridge '%s' is offline",
+                    Optional.ofNullable(getBridge()).map(b -> b.getLabel()).orElse("<null>")));
+            logger.debug("No bridge handler available -- aborting init for {}", this);
+            return false;
+        }
+        ModbusCommunicationInterface localComms = slaveEndpointThingHandler.getCommunicationInterface();
+        if (localComms == null) {
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, String.format(
+                    "Bridge '%s' not completely initialized", Optional.ofNullable(getBridge()).map(b -> b.getLabel())));
+            logger.debug("Bridge not initialized fully (no communication interface) -- aborting init for {}", this);
+            return false;
+        }
+        this.comms = localComms;
+        this.slaveId = slaveEndpointThingHandler.getSlaveId();
+        return true;
     }
 
     private boolean hasConfigurationError() {
@@ -578,6 +637,85 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
             logger.warn("Error updating state '{}' (type {}) to channel {}: {} {}", state,
                     Optional.ofNullable(state).map(s -> s.getClass().getName()).orElse("null"), uid,
                     e.getClass().getName(), e.getMessage());
+        }
+    }
+
+    @Override
+    public Optional<ModbusRegisterArray> getCache(int start, int length) {
+        return Optional.ofNullable(lastPolledDataCache.get())
+                .map(registers -> registers.copyOfRange(start, start + length));
+    }
+
+    /**
+     * Handler for write requests originating from channels (openHAB commands)
+     */
+    @Override
+    public void accept(ModbusWriteRequestBlueprint writeRequest) {
+        writeRequest.accept(new ModbusWriteRequestBlueprintVisitor() {
+            @Override
+            public void visit(ModbusWriteRegisterRequestBlueprint blueprint) {
+                ModbusRegisterArray dataToBeWritten = blueprint.getRegisters();
+                int registerIndexRelative = blueprint.getReference() - config.getStart();
+                lastPolledDataCache.accumulateAndGet(dataToBeWritten,
+                        (ModbusRegisterArray cache, ModbusRegisterArray writeData) -> {
+                            if (cache == null) {
+                                // No polled data yet, cannot update the cache
+                                return null;
+                            }
+                            // writeData should always be non-null as dataToBeWritten is non-null
+                            Objects.requireNonNull(writeData);
+                            return cache.mutate(registerIndexRelative, writeData.getRegisters());
+                        });
+            }
+
+            @Override
+            public void visit(ModbusWriteCoilRequestBlueprint blueprint) {
+                // TODO: update cache?
+            }
+
+        });
+        comms.submitOneTimeWrite(writeRequest, this, this);
+    }
+
+    @Override
+    public void handle(AsyncModbusFailure<ModbusWriteRequestBlueprint> failure) {
+        Exception error = failure.getCause();
+        final String errorMessage;
+        if (error instanceof ModbusUnexpectedResponseFunctionCodeException
+                || error instanceof ModbusUnexpectedResponseSizeException
+                || error instanceof ModbusUnexpectedTransactionIdException) {
+            errorMessage = String.format(
+                    "Error writing to Modbus - response received but it did not match the request: %s (%s)",
+                    error.getMessage(), error.getClass().getSimpleName());
+        } else if (error instanceof ModbusTransportException) {
+            // ModbusTransportException implementations should have concise error message with
+            // getMessage()
+            errorMessage = String.format("Error writing to Modbus - %s (%s)", error.getMessage(),
+                    error.getClass().getSimpleName());
+        } else {
+            errorMessage = String.format("Error writing to Modbus (unexpected) - %s (%s)", error.getMessage(),
+                    error.getClass().getSimpleName());
+            logger.error(
+                    "Thing {} '{}' had {} error on write: {} (message: {}). Stack trace follows since this is unexpected error.",
+                    getThing().getUID(), getThing().getLabel(), error.getClass().getName(), error.toString(),
+                    error.getMessage(), error);
+        }
+        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, errorMessage);
+        // TODO: update last erroring write timestamp
+    }
+
+    @Override
+    public void handle(AsyncModbusWriteResult result) {
+        logger.debug("Thing {} received response {}", thing.getUID(), result);
+        resetCommunicationError();
+        // TODO: update last OK write timestamp
+    }
+
+    private void resetCommunicationError() {
+        ThingStatusInfo statusInfo = thing.getStatusInfo();
+        if (ThingStatus.UNKNOWN.equals(statusInfo.getStatus()) || (ThingStatus.OFFLINE.equals(statusInfo.getStatus())
+                && ThingStatusDetail.COMMUNICATION_ERROR.equals(statusInfo.getStatusDetail()))) {
+            updateStatus(ThingStatus.ONLINE);
         }
     }
 }
