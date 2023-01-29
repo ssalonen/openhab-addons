@@ -11,8 +11,8 @@
 			<advanced>true</advanced>
 		</parameter-group>
 		<parameter name="address" type="text" pattern="^(0|[0-9][0-9]*(\.[0-9]{1,2})?)?$"><!-- format X or X.Y -->
-			<label>Read Address</label>
-                <description><![CDATA[Start address of the first holding register or coil in the write. Use empty for read-only things.
+			<label>Write Address</label>
+                <description><![CDATA[Start address of the first holding register or coil in the write.
                 <br />Use zero based address, e.g. in place of 400001 (first holding register), use the address 0. This address is passed to data frame as is.
                 <br />One can write individual bits of a register using X.Y format where X is the register and Y is the bit (0 refers to least significant bit).
                 ]]></description>
