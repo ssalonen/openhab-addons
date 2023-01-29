@@ -51,6 +51,8 @@ public class ReadIntoOpenClosedChannelHandlerTest {
 
                                 new Object[] { OpenClosedType.CLOSED, DecimalType.valueOf("255"), BigDecimal.valueOf(255), false},
                                 new Object[] { OpenClosedType.OPEN, DecimalType.valueOf("255"), BigDecimal.valueOf(255), true},
+                                new Object[] { OpenClosedType.CLOSED, DecimalType.valueOf("255"), new BigDecimal("255.0"), false},
+                                new Object[] { OpenClosedType.OPEN, DecimalType.valueOf("255"), new BigDecimal("255.0"), true},
                                 new Object[] { OpenClosedType.OPEN, DecimalType.valueOf("0"), BigDecimal.valueOf(255), false},
                                 new Object[] { OpenClosedType.CLOSED, DecimalType.valueOf("0"), BigDecimal.valueOf(255), true},
 

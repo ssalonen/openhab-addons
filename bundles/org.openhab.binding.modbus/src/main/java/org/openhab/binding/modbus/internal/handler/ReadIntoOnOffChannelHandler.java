@@ -44,7 +44,7 @@ public class ReadIntoOnOffChannelHandler extends ReadIntoNumberChannelHandler {
             isOff = false;
         } else {
             DecimalType decimalState = (DecimalType) state; // cast always succeeds
-            isOff = config.offValue.equals(decimalState.toBigDecimal());
+            isOff = config.offValue.compareTo(decimalState.toBigDecimal()) == 0;
         }
         return (config.inverted ^ isOff) ? OnOffType.OFF : OnOffType.ON;
     }
