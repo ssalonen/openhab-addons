@@ -44,7 +44,7 @@ public class ReadIntoOpenClosedChannelHandler extends ReadIntoNumberChannelHandl
             isClosed = false;
         } else {
             DecimalType decimalState = (DecimalType) state; // cast always succeeds
-            isClosed = config.closedValue.equals(decimalState.toBigDecimal());
+            isClosed = config.closedValue.compareTo(decimalState.toBigDecimal()) == 0;
         }
         return (config.inverted ^ isClosed) ? OpenClosedType.CLOSED : OpenClosedType.OPEN;
     }

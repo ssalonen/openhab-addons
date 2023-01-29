@@ -51,6 +51,8 @@ public class ReadIntoOnOffChannelHandlerTest {
 
                                 new Object[] { OnOffType.OFF, DecimalType.valueOf("255"), BigDecimal.valueOf(255), false},
                                 new Object[] { OnOffType.ON, DecimalType.valueOf("255"), BigDecimal.valueOf(255), true},
+                                new Object[] { OnOffType.OFF, DecimalType.valueOf("255"), new BigDecimal("255.0"), false},
+                                new Object[] { OnOffType.ON, DecimalType.valueOf("255"), new BigDecimal("255.0"), true},
                                 new Object[] { OnOffType.ON, DecimalType.valueOf("0"), BigDecimal.valueOf(255), false},
                                 new Object[] { OnOffType.OFF, DecimalType.valueOf("0"), BigDecimal.valueOf(255), true},
 
