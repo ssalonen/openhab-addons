@@ -77,6 +77,7 @@ import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.thing.type.ChannelTypeUID;
 import org.openhab.core.types.Command;
+import org.openhab.core.types.RefreshType;
 import org.openhab.core.types.State;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -243,7 +244,15 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-        // No channels, no commands
+        if (RefreshType.REFRESH == command) {
+            refresh();
+        } else {
+            WriteChannelHandler handler = writeChannelHandlers.get(channelUID);
+            if (handler == null) {
+                return;
+            }
+            handler.processCommand(command);
+        }
     }
 
     private @Nullable ModbusEndpointThingHandler getEndpointThingHandler() {
@@ -412,8 +421,8 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
                         throw new IllegalStateException("Bug: missing switch statement for " + channelTypeId);
                     }
                 }
-            }
                 break;
+            }
             case CHANNEL_READ_INTO_HEX_STRNG:
                 // TODO: validate read is within polled data
                 // TODO: create handler
@@ -454,8 +463,8 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
                         throw new IllegalStateException("Bug: missing switch statement for " + channelTypeId);
                     }
                 }
-            }
                 break;
+            }
             default:
                 throw new IllegalStateException("Unexpected channel: " + channelTypeId);
 
