@@ -121,7 +121,12 @@ public class WriteRegisterFromNumber extends WriteRegisterChannelHandler {
     }
 
     private void processWriteFullRegisters(Command command) {
-        ModbusRegisterArray registers = ModbusBitUtilities.commandToRegisters(command, valueType);
+        Optional<BigDecimal> decimalValue = preProcessCommand(command);
+        if (decimalValue.isEmpty()) {
+            return;
+        }
+        Command preprocessedCommand = new DecimalType(decimalValue.get());
+        ModbusRegisterArray registers = ModbusBitUtilities.commandToRegisters(preprocessedCommand, valueType);
         writer.accept(new ModbusWriteRegisterRequestBlueprint(slaveId, address.channelStartElement, registers,
                 (registers.size() > 1) || config.writeMultiple, config.writeMaxTries));
     }
