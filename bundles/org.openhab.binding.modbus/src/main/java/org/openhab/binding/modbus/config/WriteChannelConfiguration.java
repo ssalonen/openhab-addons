@@ -31,7 +31,7 @@ public class WriteChannelConfiguration {
     public String address = "";
     public String valueType = "";
     public boolean writeMultiple = false;
-    public int writeMaxTries; // core fills default from XML
+    public int writeMaxTries = 3;
 
     public BigDecimal closedValue = BigDecimal.ZERO; // OPEN/CLOSED
     public BigDecimal openValue = BigDecimal.ONE; // OPEN/CLOSED
