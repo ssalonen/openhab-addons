@@ -245,7 +245,8 @@ public abstract class AbstractSunSpecHandler extends BaseThingHandler {
             logger.debug("Bridge is null");
             return null;
         }
-        if (bridge.getStatus() != ThingStatus.ONLINE && bridge.getStatus() != ThingStatus.UNKNOWN) {
+        if (bridge.getStatus() != ThingStatus.ONLINE && bridge.getStatus() != ThingStatus.UNKNOWN
+                && bridge.getStatusInfo().getStatusDetail() != ThingStatusDetail.COMMUNICATION_ERROR) {
             logger.debug("Bridge is not online");
             return null;
         }
@@ -352,7 +353,10 @@ public abstract class AbstractSunSpecHandler extends BaseThingHandler {
         if (getThing().getStatus() == ThingStatus.ONLINE) {
             startUp();
         } else if (getThing().getStatus() == ThingStatus.OFFLINE) {
-            tearDown();
+            // Do not stop polling on transient communication errors
+            if (bridgeStatusInfo.getStatusDetail() != ThingStatusDetail.COMMUNICATION_ERROR) {
+                tearDown();
+            }
         }
     }
 
