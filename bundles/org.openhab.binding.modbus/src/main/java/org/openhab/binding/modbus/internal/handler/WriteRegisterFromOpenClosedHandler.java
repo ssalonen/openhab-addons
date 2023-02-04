@@ -20,7 +20,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.modbus.config.WriteChannelConfiguration;
 import org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprint;
-import org.openhab.core.library.types.PercentType;
+import org.openhab.core.library.types.OpenClosedType;
 import org.openhab.core.types.Command;
 
 /**
@@ -30,27 +30,22 @@ import org.openhab.core.types.Command;
  *
  */
 @NonNullByDefault
-public class WriteRegisterFromPercent extends WriteRegisterFromNumber {
+public class WriteRegisterFromOpenClosedHandler extends WriteRegisterFromNumberHandler {
 
-    private static BigDecimal HUNDRED = BigDecimal.valueOf(100);
-    private BigDecimal range;
-
-    public WriteRegisterFromPercent(int slaveId, WriteChannelConfiguration config, @Nullable RegisterCache cache,
+    public WriteRegisterFromOpenClosedHandler(int slaveId, WriteChannelConfiguration config, @Nullable RegisterCache cache,
             Consumer<ModbusWriteRequestBlueprint> writer) {
         super(slaveId, config, cache, writer);
-        range = config.maxValue.subtract(config.minValue);
     }
 
     /**
-     * Pre-process PercentType command into number that will be encoded over Modbus.
+     * Pre-process OPEN/CLOSED command into number that will be encoded over Modbus.
      *
      * @param command received by channel
      */
     @Override
     protected Optional<BigDecimal> preProcessCommand(Command command) {
-        return preProcessOnlyIf(PercentType.class, command, percent -> {
-            // Divide by 100 should be always representable exactly -- no need to specify math context
-            return percent.toBigDecimal().multiply(range).divide(HUNDRED).add(config.minValue);
+        return preProcessOnlyIf(OpenClosedType.class, command, openClosedCommand -> {
+            return openClosedCommand == OpenClosedType.CLOSED ? config.closedValue : config.openValue;
         });
     }
 }

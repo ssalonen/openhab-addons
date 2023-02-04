@@ -40,10 +40,10 @@ import org.openhab.binding.modbus.internal.handler.ReadIntoOpenClosedChannelHand
 import org.openhab.binding.modbus.internal.handler.ReadIntoPercentChannelHandler;
 import org.openhab.binding.modbus.internal.handler.RegisterCache;
 import org.openhab.binding.modbus.internal.handler.WriteChannelHandler;
-import org.openhab.binding.modbus.internal.handler.WriteRegisterFromNumber;
-import org.openhab.binding.modbus.internal.handler.WriteRegisterFromOnOff;
-import org.openhab.binding.modbus.internal.handler.WriteRegisterFromOpenClosed;
-import org.openhab.binding.modbus.internal.handler.WriteRegisterFromPercent;
+import org.openhab.binding.modbus.internal.handler.WriteRegisterFromNumberHandler;
+import org.openhab.binding.modbus.internal.handler.WriteRegisterFromOnOffHandler;
+import org.openhab.binding.modbus.internal.handler.WriteRegisterFromOpenClosedHandler;
+import org.openhab.binding.modbus.internal.handler.WriteRegisterFromPercentHandler;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
 import org.openhab.core.io.transport.modbus.AsyncModbusReadResult;
@@ -449,16 +449,16 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
                     Consumer<ModbusWriteRequestBlueprint> modbusWriter = this;
                     if (CHANNEL_WRITE_REGISTER_FROM_NUMBER.equals(channelTypeId)) {
                         writeChannelHandlers.put(channelUID,
-                                new WriteRegisterFromNumber(slaveId, channelConfig, cache, modbusWriter));
+                                new WriteRegisterFromNumberHandler(slaveId, channelConfig, cache, modbusWriter));
                     } else if (CHANNEL_WRITE_REGISTER_FROM_PERCENT.equals(channelTypeId)) {
                         writeChannelHandlers.put(channelUID,
-                                new WriteRegisterFromPercent(slaveId, channelConfig, cache, modbusWriter));
+                                new WriteRegisterFromPercentHandler(slaveId, channelConfig, cache, modbusWriter));
                     } else if (CHANNEL_WRITE_REGISTER_FROM_ON_OFF.equals(channelTypeId)) {
                         writeChannelHandlers.put(channelUID,
-                                new WriteRegisterFromOnOff(slaveId, channelConfig, cache, modbusWriter));
+                                new WriteRegisterFromOnOffHandler(slaveId, channelConfig, cache, modbusWriter));
                     } else if (CHANNEL_WRITE_REGISTER_FROM_OPEN_CLOSED.equals(channelTypeId)) {
                         writeChannelHandlers.put(channelUID,
-                                new WriteRegisterFromOpenClosed(slaveId, channelConfig, cache, modbusWriter));
+                                new WriteRegisterFromOpenClosedHandler(slaveId, channelConfig, cache, modbusWriter));
                     } else {
                         throw new IllegalStateException("Bug: missing switch statement for " + channelTypeId);
                     }

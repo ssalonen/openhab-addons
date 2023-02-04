@@ -48,22 +48,22 @@ public class WriteRegisterChannelHandlerWithBitOfRegisterTest {
         return Stream.of(//
 //              @formatter:off
                 // ON/OFF commands
-                Arguments.of(WriteRegisterFromOnOff.class, (short) 0b1011_0100_0000_1111, "1", (short) 0b1011_0100_0000_1101, OnOffType.OFF),
-                Arguments.of(WriteRegisterFromOnOff.class, (short) 0b1011_0100_0000_1111, "1", (short) 0b1011_0100_0000_1111, OnOffType.ON), // no-change
-                Arguments.of(WriteRegisterFromOnOff.class, (short) 0b1011_0100_0000_1111, "4", (short) 0b1011_0100_0001_1111, OnOffType.ON),
-                Arguments.of(WriteRegisterFromOnOff.class, (short) 0b1011_0100_0000_1111, "4", (short) 0b1011_0100_0000_1111, OnOffType.OFF), // no-change
+                Arguments.of(WriteRegisterFromOnOffHandler.class, (short) 0b1011_0100_0000_1111, "1", (short) 0b1011_0100_0000_1101, OnOffType.OFF),
+                Arguments.of(WriteRegisterFromOnOffHandler.class, (short) 0b1011_0100_0000_1111, "1", (short) 0b1011_0100_0000_1111, OnOffType.ON), // no-change
+                Arguments.of(WriteRegisterFromOnOffHandler.class, (short) 0b1011_0100_0000_1111, "4", (short) 0b1011_0100_0001_1111, OnOffType.ON),
+                Arguments.of(WriteRegisterFromOnOffHandler.class, (short) 0b1011_0100_0000_1111, "4", (short) 0b1011_0100_0000_1111, OnOffType.OFF), // no-change
                 // OPEN/CLOSED commands
-                Arguments.of(WriteRegisterFromOpenClosed.class, (short) 0b1011_0100_0000_1111, "1", (short) 0b1011_0100_0000_1101, OpenClosedType.CLOSED),
-                Arguments.of(WriteRegisterFromOpenClosed.class, (short) 0b1011_0100_0000_1111, "1", (short) 0b1011_0100_0000_1111, OpenClosedType.OPEN), // no change
-                Arguments.of(WriteRegisterFromOpenClosed.class, (short) 0b1011_0100_0000_1111, "4", (short) 0b1011_0100_0001_1111, OpenClosedType.OPEN),
-                Arguments.of(WriteRegisterFromOpenClosed.class, (short) 0b1011_0100_0000_1111, "4", (short) 0b1011_0100_0000_1111, OpenClosedType.CLOSED), // no change
+                Arguments.of(WriteRegisterFromOpenClosedHandler.class, (short) 0b1011_0100_0000_1111, "1", (short) 0b1011_0100_0000_1101, OpenClosedType.CLOSED),
+                Arguments.of(WriteRegisterFromOpenClosedHandler.class, (short) 0b1011_0100_0000_1111, "1", (short) 0b1011_0100_0000_1111, OpenClosedType.OPEN), // no change
+                Arguments.of(WriteRegisterFromOpenClosedHandler.class, (short) 0b1011_0100_0000_1111, "4", (short) 0b1011_0100_0001_1111, OpenClosedType.OPEN),
+                Arguments.of(WriteRegisterFromOpenClosedHandler.class, (short) 0b1011_0100_0000_1111, "4", (short) 0b1011_0100_0000_1111, OpenClosedType.CLOSED), // no change
                 // DecimalType commands
-                Arguments.of(WriteRegisterFromNumber.class, (short) 0b1011_0100_0000_1111, "1", (short) 0b1011_0100_0000_1101, new DecimalType(0)),
-                Arguments.of(WriteRegisterFromNumber.class, (short) 0b1011_0100_0000_1111, "1", (short) 0b1011_0100_0000_1111, new DecimalType(5)), // no change
-                Arguments.of(WriteRegisterFromNumber.class, (short) 0b1011_0100_0010_1111, "5", (short) 0b1011_0100_0000_1111, new DecimalType(0)),
-                Arguments.of(WriteRegisterFromNumber.class, (short) 0b1011_0100_0010_1111, "5", (short) 0b1011_0100_0010_1111, new DecimalType(5)), // no change
-                Arguments.of(WriteRegisterFromNumber.class, (short) 0b1011_0100_0000_1111, "4", (short) 0b1011_0100_0001_1111, new DecimalType(5)),
-                Arguments.of(WriteRegisterFromNumber.class, (short) 0b1011_0100_0000_1111, "15", (short) 0b0011_0100_0000_1111, new DecimalType(0))
+                Arguments.of(WriteRegisterFromNumberHandler.class, (short) 0b1011_0100_0000_1111, "1", (short) 0b1011_0100_0000_1101, new DecimalType(0)),
+                Arguments.of(WriteRegisterFromNumberHandler.class, (short) 0b1011_0100_0000_1111, "1", (short) 0b1011_0100_0000_1111, new DecimalType(5)), // no change
+                Arguments.of(WriteRegisterFromNumberHandler.class, (short) 0b1011_0100_0010_1111, "5", (short) 0b1011_0100_0000_1111, new DecimalType(0)),
+                Arguments.of(WriteRegisterFromNumberHandler.class, (short) 0b1011_0100_0010_1111, "5", (short) 0b1011_0100_0010_1111, new DecimalType(5)), // no change
+                Arguments.of(WriteRegisterFromNumberHandler.class, (short) 0b1011_0100_0000_1111, "4", (short) 0b1011_0100_0001_1111, new DecimalType(5)),
+                Arguments.of(WriteRegisterFromNumberHandler.class, (short) 0b1011_0100_0000_1111, "15", (short) 0b0011_0100_0000_1111, new DecimalType(0))
 //              @formatter:on
         );
     }

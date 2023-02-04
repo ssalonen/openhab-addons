@@ -20,7 +20,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.modbus.config.WriteChannelConfiguration;
 import org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprint;
-import org.openhab.core.library.types.OpenClosedType;
+import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.types.Command;
 
 /**
@@ -30,22 +30,22 @@ import org.openhab.core.types.Command;
  *
  */
 @NonNullByDefault
-public class WriteRegisterFromOpenClosed extends WriteRegisterFromNumber {
+public class WriteRegisterFromOnOffHandler extends WriteRegisterFromNumberHandler {
 
-    public WriteRegisterFromOpenClosed(int slaveId, WriteChannelConfiguration config, @Nullable RegisterCache cache,
+    public WriteRegisterFromOnOffHandler(int slaveId, WriteChannelConfiguration config, @Nullable RegisterCache cache,
             Consumer<ModbusWriteRequestBlueprint> writer) {
         super(slaveId, config, cache, writer);
     }
 
     /**
-     * Pre-process OPEN/CLOSED command into number that will be encoded over Modbus.
+     * Pre-process ON/OFF command into number that will be encoded over Modbus.
      *
      * @param command received by channel
      */
     @Override
     protected Optional<BigDecimal> preProcessCommand(Command command) {
-        return preProcessOnlyIf(OpenClosedType.class, command, openClosedCommand -> {
-            return openClosedCommand == OpenClosedType.CLOSED ? config.closedValue : config.openValue;
+        return preProcessOnlyIf(OnOffType.class, command, onOffCommand -> {
+            return onOffCommand == OnOffType.OFF ? config.offValue : config.onValue;
         });
     }
 }

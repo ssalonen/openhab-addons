@@ -73,7 +73,7 @@ public class WriteRegisterFromOnOffChannelHandlerTest {
         config.valueType = ValueType.INT16.getConfigValue();
         config.offValue = offValue;
         config.onValue = onValue;
-        WriteRegisterFromOnOff handler = new WriteRegisterFromOnOff(SLAVE_ID, config, null, r -> {
+        WriteRegisterFromOnOffHandler handler = new WriteRegisterFromOnOffHandler(SLAVE_ID, config, null, r -> {
         });
 
         assertEquals(Optional.ofNullable(expectedPreprocessedNumber), handler.preProcessCommand(command));

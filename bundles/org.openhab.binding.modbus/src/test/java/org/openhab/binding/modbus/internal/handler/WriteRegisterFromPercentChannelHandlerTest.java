@@ -76,7 +76,7 @@ public class WriteRegisterFromPercentChannelHandlerTest {
         config.valueType = ValueType.INT16.getConfigValue();
         config.minValue = minValue;
         config.maxValue = maxValue;
-        WriteRegisterFromPercent handler = new WriteRegisterFromPercent(SLAVE_ID, config, null, r -> {
+        WriteRegisterFromPercentHandler handler = new WriteRegisterFromPercentHandler(SLAVE_ID, config, null, r -> {
         });
 
         assertEquals(Optional.ofNullable(expectedPreprocessedNumber), handler.preProcessCommand(command));

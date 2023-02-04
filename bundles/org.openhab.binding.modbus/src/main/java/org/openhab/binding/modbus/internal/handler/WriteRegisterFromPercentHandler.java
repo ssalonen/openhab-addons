@@ -20,7 +20,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.modbus.config.WriteChannelConfiguration;
 import org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprint;
-import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.library.types.PercentType;
 import org.openhab.core.types.Command;
 
 /**
@@ -30,22 +30,27 @@ import org.openhab.core.types.Command;
  *
  */
 @NonNullByDefault
-public class WriteRegisterFromOnOff extends WriteRegisterFromNumber {
+public class WriteRegisterFromPercentHandler extends WriteRegisterFromNumberHandler {
 
-    public WriteRegisterFromOnOff(int slaveId, WriteChannelConfiguration config, @Nullable RegisterCache cache,
+    private static BigDecimal HUNDRED = BigDecimal.valueOf(100);
+    private BigDecimal range;
+
+    public WriteRegisterFromPercentHandler(int slaveId, WriteChannelConfiguration config, @Nullable RegisterCache cache,
             Consumer<ModbusWriteRequestBlueprint> writer) {
         super(slaveId, config, cache, writer);
+        range = config.maxValue.subtract(config.minValue);
     }
 
     /**
-     * Pre-process ON/OFF command into number that will be encoded over Modbus.
+     * Pre-process PercentType command into number that will be encoded over Modbus.
      *
      * @param command received by channel
      */
     @Override
     protected Optional<BigDecimal> preProcessCommand(Command command) {
-        return preProcessOnlyIf(OnOffType.class, command, onOffCommand -> {
-            return onOffCommand == OnOffType.OFF ? config.offValue : config.onValue;
+        return preProcessOnlyIf(PercentType.class, command, percent -> {
+            // Divide by 100 should be always representable exactly -- no need to specify math context
+            return percent.toBigDecimal().multiply(range).divide(HUNDRED).add(config.minValue);
         });
     }
 }

@@ -107,7 +107,7 @@ public class WriteRegisterChannelFromNumberHandlerWithFullRegisterTest {
             });
         };
 
-        handler = new WriteRegisterFromNumber(SLAVE_ID, config,
+        handler = new WriteRegisterFromNumberHandler(SLAVE_ID, config,
                 null /* No need to provide register cache with full register writes */, writer);
         handler.processCommand(commandFromItem);
         assertNotNull(actualRequest[0]);

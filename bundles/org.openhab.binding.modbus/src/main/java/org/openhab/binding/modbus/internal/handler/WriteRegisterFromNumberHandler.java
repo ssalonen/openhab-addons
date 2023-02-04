@@ -38,11 +38,11 @@ import org.slf4j.LoggerFactory;
  *
  */
 @NonNullByDefault
-public class WriteRegisterFromNumber extends WriteRegisterChannelHandler {
-    private final Logger logger = LoggerFactory.getLogger(WriteRegisterFromNumber.class);
+public class WriteRegisterFromNumberHandler extends WriteRegisterChannelHandler {
+    private final Logger logger = LoggerFactory.getLogger(WriteRegisterFromNumberHandler.class);
     protected int slaveId;
 
-    public WriteRegisterFromNumber(int slaveId, WriteChannelConfiguration config, @Nullable RegisterCache cache,
+    public WriteRegisterFromNumberHandler(int slaveId, WriteChannelConfiguration config, @Nullable RegisterCache cache,
             Consumer<ModbusWriteRequestBlueprint> writer) {
         super(config, cache, writer);
         this.slaveId = slaveId;
