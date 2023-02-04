@@ -347,6 +347,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
         // Mark handler as disposed as soon as possible to halt processing of callbacks
         disposed = true;
         readChannelHandlers.clear();
+        writeChannelHandlers.clear();
         unregisterPollTask();
         this.callbackDelegator.resetCache();
         comms = null;
@@ -554,7 +555,6 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
         }
     }
 
-    // TODO: make similar stuff with channels (in initialize, with configured channels)
     @Override
     public void childHandlerInitialized(ThingHandler childHandler, Thing childThing) {
         if (childHandler instanceof ModbusDataThingHandler modbusDataThingHandler) {
@@ -562,8 +562,6 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
         }
     }
 
-    // TODO: make similar stuff with channels (in initialize, with configured channels)
-    // @SuppressWarnings("unlikely-arg-type")
     @Override
     public void childHandlerDisposed(ThingHandler childHandler, Thing childThing) {
         if (childHandler instanceof ModbusDataThingHandler) {
