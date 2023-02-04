@@ -31,6 +31,10 @@ import org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprint;
 import org.openhab.core.io.transport.modbus.PollTask;
 import org.openhab.core.io.transport.modbus.endpoint.EndpointPoolConfiguration;
 import org.openhab.core.io.transport.modbus.endpoint.ModbusSlaveEndpoint;
+import org.openhab.core.io.transport.modbus.exception.ModbusTransportException;
+import org.openhab.core.io.transport.modbus.exception.ModbusUnexpectedResponseFunctionCodeException;
+import org.openhab.core.io.transport.modbus.exception.ModbusUnexpectedResponseSizeException;
+import org.openhab.core.io.transport.modbus.exception.ModbusUnexpectedTransactionIdException;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.ThingStatus;
@@ -70,26 +74,27 @@ public abstract class AbstractModbusEndpointThingHandler<E extends ModbusSlaveEn
                 long initialDelayMillis, ModbusReadCallback resultCallback,
                 ModbusFailureCallback<ModbusReadRequestBlueprint> failureCallback) {
             return super.registerRegularPoll(request, pollPeriodMillis, initialDelayMillis,
-                    wrapReadSuccessCallback(resultCallback), wrapReadFailureCallback(failureCallback));
+                    wrapReadSuccessCallback(resultCallback), wrapFailureCallback(true, failureCallback));
         }
 
         @Override
         public Future<?> submitOneTimePoll(ModbusReadRequestBlueprint request, ModbusReadCallback resultCallback,
                 ModbusFailureCallback<ModbusReadRequestBlueprint> failureCallback) {
             return super.submitOneTimePoll(request, wrapReadSuccessCallback(resultCallback),
-                    wrapReadFailureCallback(failureCallback));
+                    wrapFailureCallback(true, failureCallback));
         }
 
         @Override
         public Future<?> submitOneTimeWrite(ModbusWriteRequestBlueprint request, ModbusWriteCallback resultCallback,
                 ModbusFailureCallback<ModbusWriteRequestBlueprint> failureCallback) {
             return super.submitOneTimeWrite(request, wrapWriteSuccessCallback(resultCallback),
-                    wrapReadFailureCallback(failureCallback));
+                    wrapFailureCallback(false, failureCallback));
         }
 
-        private <R> ModbusFailureCallback<R> wrapReadFailureCallback(ModbusFailureCallback<R> failureCallback) {
+        private <R> ModbusFailureCallback<R> wrapFailureCallback(boolean read,
+                ModbusFailureCallback<R> failureCallback) {
             ModbusFailureCallback<R> wrappedFailureCallback = result -> {
-                AbstractModbusEndpointThingHandler.this.handleCommunicationError(result);
+                AbstractModbusEndpointThingHandler.this.handleCommunicationError(read, result);
                 failureCallback.handle(result);
             };
             return wrappedFailureCallback;
@@ -195,11 +200,40 @@ public abstract class AbstractModbusEndpointThingHandler<E extends ModbusSlaveEn
         }
     }
 
-    private <R> void handleCommunicationError(AsyncModbusFailure<R> result) {
-        // TODO: is this a good idea? When bridge gets offline, so will everything else? poller stops for example
+    private <R> void handleCommunicationError(boolean read, AsyncModbusFailure<R> result) {
         ThingStatusInfo statusInfo = thing.getStatusInfo();
-        if (!ThingStatus.OFFLINE.equals(statusInfo.getStatus())) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, result.toString());
+        Exception error = result.getCause();
+        final String message;
+        if (read) {
+            message = String.format("Error with %s: %s (%s)", read ? "read" : "write", error.getMessage(),
+                    error.getClass().getSimpleName());
+        } else {
+            if (error instanceof ModbusUnexpectedResponseFunctionCodeException
+                    || error instanceof ModbusUnexpectedResponseSizeException
+                    || error instanceof ModbusUnexpectedTransactionIdException) {
+                message = String.format(
+                        "Error writing to Modbus - response received but it did not match the request: %s (%s)",
+                        error.getMessage(), error.getClass().getSimpleName());
+            } else if (error instanceof ModbusTransportException) {
+                // ModbusTransportException implementations should have concise error message with
+                // getMessage()
+                message = String.format("Error writing to Modbus - %s (%s)", error.getMessage(),
+                        error.getClass().getSimpleName());
+            } else {
+                message = String.format("Error writing to Modbus (unexpected) - %s (%s)", error.getMessage(),
+                        error.getClass().getSimpleName());
+                logger.error(
+                        "Thing {} '{}' had {} error on write: {} (message: {}). Stack trace follows since this is unexpected error.",
+                        getThing().getUID(), getThing().getLabel(), error.getClass().getName(), error.toString(),
+                        error.getMessage(), error);
+            }
+        }
+
+        // Avoid status spamming when there is no change
+        if (!ThingStatus.OFFLINE.equals(statusInfo.getStatus())
+                || !ThingStatusDetail.COMMUNICATION_ERROR.equals(statusInfo.getStatusDetail())
+                || !message.equals(statusInfo.getDescription())) {
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, message);
         }
     }
 

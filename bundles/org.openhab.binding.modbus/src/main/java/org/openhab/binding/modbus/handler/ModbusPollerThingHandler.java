@@ -124,12 +124,23 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
             logger.debug("Thing {} received response {}", thing.getUID(), result);
             notifyChildren(result);
             if (result.failure != null) {
-                Exception error = result.failure.getCause();
-                assert error != null;
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                        String.format("Error with read: %s: %s", error.getClass().getName(), error.getMessage()));
+                handleCommunicationError(true, result.failure);
             } else {
                 resetCommunicationError();
+            }
+        }
+
+        private <R> void handleCommunicationError(boolean read, AsyncModbusFailure<R> result) {
+            ThingStatusInfo statusInfo = thing.getStatusInfo();
+            Exception error = result.getCause();
+            String message = String.format("Error with %s: %s (%s)", read ? "read" : "write", error.getMessage(),
+                    error.getClass().getSimpleName());
+
+            // Avoid status spamming when there is no change
+            if (!ThingStatus.OFFLINE.equals(statusInfo.getStatus())
+                    || !ThingStatusDetail.COMMUNICATION_ERROR.equals(statusInfo.getStatusDetail())
+                    || !message.equals(statusInfo.getDescription())) {
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, message);
             }
         }
 
@@ -153,7 +164,6 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
          * @param oldestStamp oldest data that is still passed to children
          * @return whether data was updated. Data is not updated when it's too old or there's no data at all.
          */
-        @SuppressWarnings("null")
         public boolean updateChildrenWithOldData(long oldestStamp) {
             return Optional.ofNullable(this.lastResult).map(result -> result.copyIfStampAfter(oldestStamp))
                     .map(result -> {
@@ -518,6 +528,10 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
         if (pollTask != null) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
             logger.debug("pollTask should be unregistered before registering a new one!");
+            return false;
+        }
+        if (getBridge() == null) {
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, "Bridge is missing");
             return false;
         }
 
