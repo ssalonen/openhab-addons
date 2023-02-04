@@ -59,7 +59,7 @@ public class WriteRegisterFromNumberHandler extends WriteRegisterChannelHandler 
      */
     protected <T extends Command> Optional<BigDecimal> preProcessOnlyIf(Class<? extends T> clz, Command command,
             Function<T, BigDecimal> postProcessor) {
-        if (clz.isAssignableFrom(command.getClass())) {
+        if (clz.equals(command.getClass())) {
             @SuppressWarnings("unchecked")
             T typeSafeCommand = (T) command;
             return Optional.of(postProcessor.apply(typeSafeCommand));
