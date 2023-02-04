@@ -72,12 +72,12 @@ public class ReadIntoPercentChannelHandlerTest {
     @ParameterizedTest
     @MethodSource("provideArgsForPostProcessTest")
     public void testReadIntoPercentPostProcessWithDecodedNumber(State expectedState, State decodedNumberState,
-            BigDecimal minValue, BigDecimal maxValue) {
+            BigDecimal p0Value, BigDecimal p100Value) {
         ReadChannelConfiguration config = new ReadChannelConfiguration();
         config.address = "0"; // not used in test
         config.valueType = ValueType.BIT.getConfigValue(); // not used in test, we unit test with decoded numbers
-        config.minValue = minValue;
-        config.maxValue = maxValue;
+        config.p0Value = p0Value;
+        config.p100Value = p100Value;
         Consumer<State> stateUpdater = state -> {
         };
         ReadIntoPercentChannelHandler handler = new ReadIntoPercentChannelHandler(0 /* not used in test */, config,

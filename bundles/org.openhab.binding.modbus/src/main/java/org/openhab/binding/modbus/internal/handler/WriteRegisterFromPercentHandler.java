@@ -38,7 +38,7 @@ public class WriteRegisterFromPercentHandler extends WriteRegisterFromNumberHand
     public WriteRegisterFromPercentHandler(int slaveId, WriteChannelConfiguration config, @Nullable RegisterCache cache,
             Consumer<ModbusWriteRequestBlueprint> writer) {
         super(slaveId, config, cache, writer);
-        range = config.maxValue.subtract(config.minValue);
+        range = config.p100Value.subtract(config.p0Value);
     }
 
     /**
@@ -50,7 +50,7 @@ public class WriteRegisterFromPercentHandler extends WriteRegisterFromNumberHand
     protected Optional<BigDecimal> preProcessCommand(Command command) {
         return preProcessOnlyIf(PercentType.class, command, percent -> {
             // Divide by 100 should be always representable exactly -- no need to specify math context
-            return percent.toBigDecimal().multiply(range).divide(HUNDRED).add(config.minValue);
+            return percent.toBigDecimal().multiply(range).divide(HUNDRED).add(config.p0Value);
         });
     }
 }

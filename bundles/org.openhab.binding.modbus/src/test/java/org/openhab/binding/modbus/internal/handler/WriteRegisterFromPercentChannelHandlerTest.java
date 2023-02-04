@@ -69,13 +69,13 @@ public class WriteRegisterFromPercentChannelHandlerTest {
     @ParameterizedTest
     @MethodSource("provideArgsForPostProcessTest")
     public void testWriteWholeRegisterFromPercentPreProcess(BigDecimal expectedPreprocessedNumber, Command command,
-            BigDecimal minValue, BigDecimal maxValue) {
+            BigDecimal p0Value, BigDecimal p100Value) {
         WriteChannelConfiguration config = new WriteChannelConfiguration();
         config.address = "0"; // not used in test
         // value type relevant in this test, we test the number that will be encoded
         config.valueType = ValueType.INT16.getConfigValue();
-        config.minValue = minValue;
-        config.maxValue = maxValue;
+        config.p0Value = p0Value;
+        config.p100Value = p100Value;
         WriteRegisterFromPercentHandler handler = new WriteRegisterFromPercentHandler(SLAVE_ID, config, null, r -> {
         });
 

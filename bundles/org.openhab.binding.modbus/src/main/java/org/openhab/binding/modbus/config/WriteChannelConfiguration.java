@@ -39,6 +39,6 @@ public class WriteChannelConfiguration {
     public BigDecimal offValue = BigDecimal.ZERO; // ON/OFF
     public BigDecimal onValue = BigDecimal.ONE; // ON/OFF
 
-    public BigDecimal minValue = BigDecimal.ZERO; // Percent
-    public BigDecimal maxValue = BigDecimal.valueOf(100L); // Percent
+    public BigDecimal p0Value = BigDecimal.ZERO; // Percent
+    public BigDecimal p100Value = BigDecimal.valueOf(100L); // Percent
 }

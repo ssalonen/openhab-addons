@@ -33,8 +33,8 @@ public class ReadChannelConfiguration {
     public @Nullable String valueType; // Number, Percent, OPEN/CLOSED, ON/OFF
     public BigDecimal closedValue = BigDecimal.ZERO; // OPEN/CLOSED
     public BigDecimal offValue = BigDecimal.ZERO; // ON/OFF
-    public BigDecimal minValue = BigDecimal.ZERO; // Percent
-    public BigDecimal maxValue = BigDecimal.valueOf(100L); // Percent
+    public BigDecimal p0Value = BigDecimal.ZERO; // Percent
+    public BigDecimal p100Value = BigDecimal.valueOf(100L); // Percent
     public boolean inverted; // OPEN/CLOSED, ON/OFF
     public int length; // HexString
 

@@ -37,15 +37,15 @@
 			</options>
 			<required>true</required>
 		</parameter>
-        <parameter name="minValue" type="decimal" >
-            <label>Min value</label>
-            <description>Consider 0% representing this number when writing</description>
+        <parameter name="p0Value" type="decimal" >
+            <label>0% value</label>
+            <description>0% command is converted to this number when writing</description>
             <required>false</required>
             <default>0</default>
         </parameter>
-        <parameter name="maxValue" type="decimal" >
-            <label>Max value</label>
-            <description>Consider 100% representing this number when writing</description>
+        <parameter name="p100Value" type="decimal" >
+            <label>100% value</label>
+            <description>100% command is converted to this number when writing</description>
             <required>false</required>
             <default>100</default>
         </parameter>
