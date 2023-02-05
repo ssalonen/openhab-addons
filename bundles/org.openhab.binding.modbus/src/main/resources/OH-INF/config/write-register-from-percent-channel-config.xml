@@ -10,7 +10,7 @@
 			<description>These configuration parameters allow you to alter advanced behaviour with writes.</description>
 			<advanced>true</advanced>
 		</parameter-group>
-		<parameter name="address" type="text" pattern="^(0|[0-9][0-9]*(\.[0-9]{1,2})?)?$"><!-- format X or X.Y -->
+		<parameter name="address" type="text" pattern="^[0-9][0-9]*(\.([0-9]|10|11|12|13|14|15))?$"><!-- format X or X.Y -->
 			<label>Write Address</label>
                 <description><![CDATA[Start address of the first holding register or coil in the write.
                 <br />Use zero based address, e.g. in place of 400001 (first holding register), use the address 0. This address is passed to data frame as is.
