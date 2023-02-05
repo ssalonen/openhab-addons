@@ -18,6 +18,7 @@ import java.util.function.Consumer;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.modbus.config.WriteChannelConfiguration;
+import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprint;
 
 /**
@@ -31,6 +32,7 @@ import org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprint;
 public abstract class WriteRegisterChannelHandler extends WriteChannelHandler {
 
     protected @Nullable RegisterCache cache;
+    protected ValueType valueType;
 
     /**
      * Create new write channel handler
@@ -44,6 +46,7 @@ public abstract class WriteRegisterChannelHandler extends WriteChannelHandler {
     public WriteRegisterChannelHandler(WriteChannelConfiguration config, @Nullable RegisterCache cache,
             Consumer<ModbusWriteRequestBlueprint> writer) {
         super(config, writer);
+        this.valueType = ValueType.fromConfigValue(config.valueType);
         if (valueType.getBits() < 16) {
             Objects.requireNonNull(cache, "Cache must be provided with channels having partial register writes, "
                     + "i.e. when writing values less than register size (less than 16bit)");

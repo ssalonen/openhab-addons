@@ -40,6 +40,8 @@ import org.openhab.binding.modbus.internal.handler.ReadIntoOpenClosedChannelHand
 import org.openhab.binding.modbus.internal.handler.ReadIntoPercentChannelHandler;
 import org.openhab.binding.modbus.internal.handler.RegisterCache;
 import org.openhab.binding.modbus.internal.handler.WriteChannelHandler;
+import org.openhab.binding.modbus.internal.handler.WriteCoilFromNumberHandler;
+import org.openhab.binding.modbus.internal.handler.WriteCoilFromOnOffHandler;
 import org.openhab.binding.modbus.internal.handler.WriteRegisterFromNumberHandler;
 import org.openhab.binding.modbus.internal.handler.WriteRegisterFromOnOffHandler;
 import org.openhab.binding.modbus.internal.handler.WriteRegisterFromOpenClosedHandler;
@@ -402,13 +404,15 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
         ChannelTypeUID channelTypeUID = channel.getChannelTypeUID();
         Objects.requireNonNull(channelTypeUID, "channel type not defined for " + channelUID);
         String channelTypeId = channelTypeUID.getId();
+        ValueType valueType = null;
+        boolean writingCoil = false;
         switch (channelTypeId) {
             case CHANNEL_READ_INTO_NUMBER:
             case CHANNEL_READ_INTO_PERCENT:
             case CHANNEL_READ_INTO_ON_OFF:
             case CHANNEL_READ_INTO_OPEN_CLOSED: {
                 final ReadChannelConfiguration channelConfig = configuration.as(ReadChannelConfiguration.class);
-                ValueType valueType = ValueType.fromConfigValue(channelConfig.valueType);
+                valueType = ValueType.fromConfigValue(channelConfig.valueType);
                 ModbusReadFunctionCode localFunctionCode = functionCode;
 
                 // required in xml config description, cannot be null
@@ -440,22 +444,30 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
                 // TODO: create handler
                 throw new IllegalStateException("not implemented:" + channelTypeId);
             // break;
-            // TODO:other channels
+            case CHANNEL_WRITE_COIL_FROM_NUMBER:
+            case CHANNEL_WRITE_COIL_FROM_ON_OFF:
+                valueType = ValueType.BIT;
+                writingCoil = true;
+                // intentional pass through (no break)
             case CHANNEL_WRITE_REGISTER_FROM_NUMBER:
             case CHANNEL_WRITE_REGISTER_FROM_PERCENT:
             case CHANNEL_WRITE_REGISTER_FROM_ON_OFF:
             case CHANNEL_WRITE_REGISTER_FROM_OPEN_CLOSED: {
                 final WriteChannelConfiguration channelConfig = configuration.as(WriteChannelConfiguration.class);
                 ModbusReadFunctionCode localFunctionCode = functionCode;
-
                 // required in xml config description, cannot be null
+
                 Objects.requireNonNull(localFunctionCode, "poller function code unknown");
-                ValueType valueType = ValueType.fromConfigValue(channelConfig.valueType);
-
-                validationErrors = WriteChannelHandler.validateWriteParameters(localFunctionCode, config.getStart(),
-                        config.getLength(), ModbusBindingConstantsInternal.WRITE_TYPE_HOLDING, channelConfig.address,
-                        valueType);
-
+                // valueType is initialized with coil writes
+                if (!writingCoil) {
+                    valueType = ValueType.fromConfigValue(channelConfig.valueType);
+                }
+                Objects.requireNonNull(valueType); // Invariant
+                validationErrors = WriteChannelHandler
+                        .validateWriteParameters(localFunctionCode, config.getStart(), config.getLength(),
+                                writingCoil ? ModbusBindingConstantsInternal.WRITE_TYPE_COIL
+                                        : ModbusBindingConstantsInternal.WRITE_TYPE_HOLDING,
+                                channelConfig.address, valueType);
                 if (validationErrors.isEmpty()) {
                     RegisterCache cache = this;
                     Consumer<ModbusWriteRequestBlueprint> modbusWriter = this;
@@ -471,6 +483,12 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
                     } else if (CHANNEL_WRITE_REGISTER_FROM_OPEN_CLOSED.equals(channelTypeId)) {
                         writeChannelHandlers.put(channelUID,
                                 new WriteRegisterFromOpenClosedHandler(slaveId, channelConfig, cache, modbusWriter));
+                    } else if (CHANNEL_WRITE_COIL_FROM_NUMBER.equals(channelTypeId)) {
+                        writeChannelHandlers.put(channelUID,
+                                new WriteCoilFromNumberHandler(slaveId, channelConfig, modbusWriter));
+                    } else if (CHANNEL_WRITE_COIL_FROM_ON_OFF.equals(channelTypeId)) {
+                        writeChannelHandlers.put(channelUID,
+                                new WriteCoilFromOnOffHandler(slaveId, channelConfig, modbusWriter));
                     } else {
                         throw new IllegalStateException("Bug: missing switch statement for " + channelTypeId);
                     }

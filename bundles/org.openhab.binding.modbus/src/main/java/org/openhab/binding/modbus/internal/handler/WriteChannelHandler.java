@@ -14,10 +14,13 @@ package org.openhab.binding.modbus.internal.handler;
 
 import static org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal.WRITE_TYPE_COIL;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -28,6 +31,8 @@ import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
 import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
 import org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprint;
 import org.openhab.core.types.Command;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Handler for write channels, transforming openHAB commands into raw binary data and modbus write requests
@@ -38,10 +43,11 @@ import org.openhab.core.types.Command;
 @NonNullByDefault
 public abstract class WriteChannelHandler {
 
+    private final Logger logger = LoggerFactory.getLogger(WriteChannelHandler.class);
+
     protected WriteChannelConfiguration config;
     protected @Nullable RegisterCache cache;
     protected Address address;
-    protected ValueType valueType;
     protected Consumer<ModbusWriteRequestBlueprint> writer;
 
     /**
@@ -54,7 +60,6 @@ public abstract class WriteChannelHandler {
         this.config = config;
         this.writer = writer;
         this.address = Address.parse(config.address);
-        this.valueType = ValueType.fromConfigValue(config.valueType);
     }
 
     public abstract void processCommand(Command command);
@@ -193,6 +198,28 @@ public abstract class WriteChannelHandler {
         }
 
         return validationIssues;
+    }
+
+    /**
+     * Pre-process only commands of expected type
+     *
+     * @param <T> class of expected command
+     * @param clz class of expected command
+     * @param command incoming command
+     * @param postProcessor post processor to process commands of type T
+     * @return posprocessed value, or empty when type is not as expected
+     */
+    protected <T extends Command> Optional<BigDecimal> preProcessOnlyIf(Class<? extends T> clz, Command command,
+            Function<T, BigDecimal> postProcessor) {
+        if (clz.equals(command.getClass())) {
+            @SuppressWarnings("unchecked")
+            T typeSafeCommand = (T) command;
+            return Optional.of(postProcessor.apply(typeSafeCommand));
+        } else {
+            logger.debug("Unexpected command {}={} received, only accepting DecimalType",
+                    command.getClass().getSimpleName(), command);
+            return Optional.empty();
+        }
     }
 
 }

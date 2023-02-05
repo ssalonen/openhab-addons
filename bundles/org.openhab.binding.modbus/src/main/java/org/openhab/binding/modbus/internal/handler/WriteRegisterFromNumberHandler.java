@@ -16,7 +16,6 @@ import java.math.BigDecimal;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -46,28 +45,6 @@ public class WriteRegisterFromNumberHandler extends WriteRegisterChannelHandler 
             Consumer<ModbusWriteRequestBlueprint> writer) {
         super(config, cache, writer);
         this.slaveId = slaveId;
-    }
-
-    /**
-     * Pre-process only commands of expected type
-     *
-     * @param <T> class of expected command
-     * @param clz class of expected command
-     * @param command incoming command
-     * @param postProcessor post processor to process commands of type T
-     * @return posprocessed value, or empty when type is not as expected
-     */
-    protected <T extends Command> Optional<BigDecimal> preProcessOnlyIf(Class<? extends T> clz, Command command,
-            Function<T, BigDecimal> postProcessor) {
-        if (clz.equals(command.getClass())) {
-            @SuppressWarnings("unchecked")
-            T typeSafeCommand = (T) command;
-            return Optional.of(postProcessor.apply(typeSafeCommand));
-        } else {
-            logger.debug("Unexpected command {}={} received, only accepting DecimalType",
-                    command.getClass().getSimpleName(), command);
-            return Optional.empty();
-        }
     }
 
     /**

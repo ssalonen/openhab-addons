@@ -52,5 +52,16 @@
         <label>Write register from percent (0-100%) commands</label>
         <config-description-ref uri="thing-type:modbus:write_register_from_percent_channel"></config-description-ref>
     </channel-type>
+    
+    <channel-type id="writeCoilFromNumber">
+        <item-type>Number</item-type>
+        <label>Write coil from number commands</label>
+        <config-description-ref uri="thing-type:modbus:write_coil_from_number_channel"></config-description-ref>
+    </channel-type>
+    <channel-type id="writeCoilFromOnOff">
+        <item-type>Switch</item-type>
+        <label>Write coil from ON/OFF commands</label>
+        <config-description-ref uri="thing-type:modbus:write_coil_from_on_off_channel"></config-description-ref>
+    </channel-type>
 
 </thing:thing-descriptions>

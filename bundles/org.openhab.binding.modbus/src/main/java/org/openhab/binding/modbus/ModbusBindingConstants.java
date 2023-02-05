@@ -36,4 +36,7 @@ public class ModbusBindingConstants {
     public static final String CHANNEL_WRITE_REGISTER_FROM_ON_OFF = "writeRegisterFromOnOff";
     public static final String CHANNEL_WRITE_REGISTER_FROM_OPEN_CLOSED = "writeRegisterFromOpenClosed";
     public static final String CHANNEL_WRITE_REGISTER_FROM_PERCENT = "writeRegisterFromPercent";
+
+    public static final String CHANNEL_WRITE_COIL_FROM_NUMBER = "writeCoilFromNumber";
+    public static final String CHANNEL_WRITE_COIL_FROM_ON_OFF = "writeCoilFromOnOff";
 }

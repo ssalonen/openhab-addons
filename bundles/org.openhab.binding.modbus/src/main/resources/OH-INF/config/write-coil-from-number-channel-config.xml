@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config-description:config-descriptions
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:config-description="https://openhab.org/schemas/config-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/config-description/v1.0.0 https://openhab.org/schemas/config-description-1.0.0.xsd">
+
+	<config-description uri="thing-type:modbus:write_coil_from_number_channel">
+		<parameter-group name="advanced">
+			<label>Advanced</label>
+			<description>These configuration parameters allow you to alter advanced behaviour with writes.</description>
+			<advanced>true</advanced>
+		</parameter-group>
+		<parameter name="address" type="text" pattern="^[0-9][0-9]*$"><!-- format X, not X.Y -->
+			<label>Write Address</label>
+                <description><![CDATA[Start address of the coil in the write.
+                <br />Use zero based address, e.g. in place of 00001 (first coil), use the address 0. This address is passed to data frame as is.
+                ]]></description>
+			<required>true</required>
+		</parameter>
+        <parameter name="writeMultiple" type="boolean" groupName="advanced">
+            <label>Write using FC15 always</label>
+            <description><![CDATA[Whether single register of data is written using FC15 ("Write Multiple Coils").
+                <br />
+                <br />If false, FC5 is used with single coil. Some devices only accept FC15.]]></description>
+            <required>false</required>
+            <default>false</default>
+        </parameter>
+		<parameter name="writeMaxTries" type="integer" min="1">
+			<label>Maximum Tries When Writing</label>
+			<description>Number of tries when writing data, if some of the writes fail. For single try, enter 1.</description>
+            <required>false</required>
+            <default>3</default>
+		</parameter>
+	</config-description>
+</config-description:config-descriptions>
