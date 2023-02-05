@@ -201,20 +201,20 @@ public abstract class WriteChannelHandler {
     }
 
     /**
-     * Pre-process only commands of expected type
+     * Apply function to commands of expected type
      *
      * @param <T> class of expected command
      * @param clz class of expected command
      * @param command incoming command
-     * @param postProcessor post processor to process commands of type T
-     * @return posprocessed value, or empty when type is not as expected
+     * @param func function to process commands of type T
+     * @return evaluated func(command), or empty when type is not as expected
      */
-    protected <T extends Command> Optional<BigDecimal> preProcessOnlyIf(Class<? extends T> clz, Command command,
-            Function<T, BigDecimal> postProcessor) {
+    protected <T extends Command> Optional<BigDecimal> applyOnlyIf(Class<? extends T> clz, Command command,
+            Function<T, BigDecimal> func) {
         if (clz.equals(command.getClass())) {
             @SuppressWarnings("unchecked")
             T typeSafeCommand = (T) command;
-            return Optional.of(postProcessor.apply(typeSafeCommand));
+            return Optional.of(func.apply(typeSafeCommand));
         } else {
             logger.debug("Unexpected command {}={} received, only accepting DecimalType",
                     command.getClass().getSimpleName(), command);

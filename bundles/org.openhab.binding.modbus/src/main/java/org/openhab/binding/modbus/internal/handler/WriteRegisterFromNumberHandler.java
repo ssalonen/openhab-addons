@@ -54,7 +54,7 @@ public class WriteRegisterFromNumberHandler extends WriteRegisterChannelHandler 
      * @return command to write over Modbus. Empty optional can be used to skip write.
      */
     protected Optional<BigDecimal> preProcessCommand(Command command) {
-        return preProcessOnlyIf(DecimalType.class, command, dec -> dec.toBigDecimal());
+        return applyOnlyIf(DecimalType.class, command, dec -> dec.toBigDecimal());
     }
 
     @Override

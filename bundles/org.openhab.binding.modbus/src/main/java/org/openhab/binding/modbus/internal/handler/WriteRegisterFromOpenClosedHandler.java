@@ -44,7 +44,7 @@ public class WriteRegisterFromOpenClosedHandler extends WriteRegisterFromNumberH
      */
     @Override
     protected Optional<BigDecimal> preProcessCommand(Command command) {
-        return preProcessOnlyIf(OpenClosedType.class, command, openClosedCommand -> {
+        return applyOnlyIf(OpenClosedType.class, command, openClosedCommand -> {
             return openClosedCommand == OpenClosedType.CLOSED ? config.closedValue : config.openValue;
         });
     }

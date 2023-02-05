@@ -48,7 +48,7 @@ public class WriteRegisterFromPercentHandler extends WriteRegisterFromNumberHand
      */
     @Override
     protected Optional<BigDecimal> preProcessCommand(Command command) {
-        return preProcessOnlyIf(PercentType.class, command, percent -> {
+        return applyOnlyIf(PercentType.class, command, percent -> {
             // Divide by 100 should be always representable exactly -- no need to specify math context
             return percent.toBigDecimal().multiply(range).divide(HUNDRED).add(config.p0Value);
         });

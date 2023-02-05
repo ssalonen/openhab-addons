@@ -44,7 +44,7 @@ public class WriteRegisterFromOnOffHandler extends WriteRegisterFromNumberHandle
      */
     @Override
     protected Optional<BigDecimal> preProcessCommand(Command command) {
-        return preProcessOnlyIf(OnOffType.class, command, onOffCommand -> {
+        return applyOnlyIf(OnOffType.class, command, onOffCommand -> {
             return onOffCommand == OnOffType.OFF ? config.offValue : config.onValue;
         });
     }

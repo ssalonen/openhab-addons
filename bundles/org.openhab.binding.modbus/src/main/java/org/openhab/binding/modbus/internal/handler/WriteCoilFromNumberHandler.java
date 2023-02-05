@@ -47,11 +47,11 @@ public class WriteCoilFromNumberHandler extends WriteChannelHandler {
      * @return command to write over Modbus. Empty optional can be used to skip write.
      */
     protected Optional<BigDecimal> preProcessCommand(Command command) {
-        Optional<BigDecimal> maybeDec = preProcessOnlyIf(DecimalType.class, command, dec -> dec.toBigDecimal());
+        Optional<BigDecimal> maybeDec = applyOnlyIf(DecimalType.class, command, dec -> dec.toBigDecimal());
         if (maybeDec.isPresent()) {
             return maybeDec;
         }
-        return preProcessOnlyIf(QuantityType.class, command, dec -> dec.toBigDecimal());
+        return applyOnlyIf(QuantityType.class, command, dec -> dec.toBigDecimal());
     }
 
     @Override
