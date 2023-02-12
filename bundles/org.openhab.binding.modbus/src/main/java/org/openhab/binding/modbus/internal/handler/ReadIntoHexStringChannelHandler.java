@@ -42,7 +42,8 @@ public class ReadIntoHexStringChannelHandler extends ReadIntoChannelHandler {
 
     @Override
     public void process(BitArray bits) {
-        processUpdatedValue(HexUtils.bytesToHex(bits.copyOfRange(0, relativeStartIndex + config.length).getBytes()));
+        processUpdatedValue(HexUtils
+                .bytesToHex(bits.copyOfRange(relativeStartIndex, relativeStartIndex + config.length).getBytes()));
     }
 
     @Override
@@ -53,7 +54,7 @@ public class ReadIntoHexStringChannelHandler extends ReadIntoChannelHandler {
 
     @Override
     public void process(Exception readError) {
-        processUpdatedValue(UnDefType.UNDEF);
+        updateExpiredChannel(System.currentTimeMillis(), UnDefType.UNDEF);
     }
 
     private void processUpdatedValue(String hexString) {

@@ -51,7 +51,6 @@ public abstract class ReadIntoChannelHandler
     protected final ReadChannelConfiguration config;
     protected final int pollStart;
     protected final Address parsedAddress;
-    protected final ValueType valueType;
 
     public static class Address {
 
@@ -70,8 +69,7 @@ public abstract class ReadIntoChannelHandler
          * @return parsed address
          * @throws IllegalArgumentException on invalid formats
          */
-        static ReadIntoChannelHandler.Address parse(String channelStart)
-                throws IllegalArgumentException {
+        static ReadIntoChannelHandler.Address parse(String channelStart) throws IllegalArgumentException {
             final int channelStartElement;
             final OptionalInt channelStartElementSub;
             {
@@ -96,9 +94,7 @@ public abstract class ReadIntoChannelHandler
         this.stateUpdater = stateUpdater;
         String address = config.address;
         Objects.requireNonNull(address);
-        String valueTypeString = config.valueType;
-        Objects.requireNonNull(valueTypeString);
-        this.valueType = ValueType.fromConfigValue(valueTypeString);
+
         // throws on parse error. XML config description validates format however
         parsedAddress = Address.parse(address);
     }

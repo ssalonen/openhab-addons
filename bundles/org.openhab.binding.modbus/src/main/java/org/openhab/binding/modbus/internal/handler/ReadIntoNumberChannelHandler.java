@@ -13,6 +13,7 @@
 package org.openhab.binding.modbus.internal.handler;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 import java.util.OptionalInt;
 import java.util.function.Consumer;
 
@@ -35,8 +36,14 @@ import org.openhab.core.types.UnDefType;
 @NonNullByDefault
 public class ReadIntoNumberChannelHandler extends ReadIntoChannelHandler {
 
+    protected final ValueType valueType;
+
     public ReadIntoNumberChannelHandler(int pollStart, ReadChannelConfiguration config, Consumer<State> stateUpdater) {
         super(pollStart, config, stateUpdater);
+
+        String valueTypeString = config.valueType;
+        Objects.requireNonNull(valueTypeString);
+        this.valueType = ValueType.fromConfigValue(valueTypeString);
     }
 
     @Override
@@ -131,7 +138,6 @@ public class ReadIntoNumberChannelHandler extends ReadIntoChannelHandler {
      */
     private void processUpdatedValue(State state) {
         // TODO: handle gain and offset
-        // handle UNDEF
         State postProcessedState = postProcessDecodedNumberState(state);
         updateExpiredChannel(System.currentTimeMillis(), postProcessedState);
     }
