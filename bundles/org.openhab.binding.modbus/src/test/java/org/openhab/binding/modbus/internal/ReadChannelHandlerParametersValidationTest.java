@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.List;
 import java.util.stream.Stream;
+import java.util.stream.Stream.Builder;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -30,9 +31,7 @@ import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
  */
 @NonNullByDefault
 public class ReadChannelHandlerParametersValidationTest {
-    private static Stream<Arguments> provideArgsForTestValidateConfig()
-
-    {
+    private static Stream<Arguments> provideArgsForTestValidateConfig() {
         // Arguments:
         // 1. expected validity
         // 2. poll function
@@ -41,7 +40,6 @@ public class ReadChannelHandlerParametersValidationTest {
         // 5. channel start
         // 6. address
         // 7. value type
-        Arguments.of(true, ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS, 4, 3, "6.1", ValueType.BIT);
         return Stream.of(
         //@formatter:off
                 //
@@ -123,6 +121,48 @@ public class ReadChannelHandlerParametersValidationTest {
         List<ChannelConfigValidationMessage> validationErrors = ReadIntoChannelHandler
                 .validateReadParameters(pollerFunctionCode, pollerStart, pollerLength, channelStart, channelValueType);
         assertEquals(expectedValidity, validationErrors.isEmpty(), validationErrors.toString());
+    }
+
+    private static Stream<Arguments> provideArgsForTestValidateConfigRaw() {
+        return Stream.of(
+        //@formatter:off
+                Arguments.of(true, 0, 3, "0", 3),
+                Arguments.of(true, 0, 3, "0", 2),
+                Arguments.of(true, 0, 3, "2", 1),
+                Arguments.of(false, 0, 3, "0", 4),
+                Arguments.of(false, 0, 3, "3", 1),
+                Arguments.of(false, 0, 3, "-3", 1)
+                //@formatter:on
+        )
+                // generate same test with all function codes
+                .flatMap(args -> crossProduct(args, new ModbusReadFunctionCode[] { ModbusReadFunctionCode.READ_COILS,
+                        ModbusReadFunctionCode.READ_INPUT_DISCRETES, ModbusReadFunctionCode.READ_INPUT_REGISTERS,
+                        ModbusReadFunctionCode.READ_MULTIPLE_REGISTERS }));
+
+    }
+
+    @ParameterizedTest
+    @MethodSource("provideArgsForTestValidateConfigRaw")
+    public void testValidateConfigRaw(boolean expectedValidity, int pollerStart, int pollerLength,
+            String channelAddress, int channelLength, ModbusReadFunctionCode fc) {
+        assertEquals(expectedValidity, ReadIntoChannelHandler
+                .validateReadParametersRaw(fc, pollerStart, pollerLength, channelAddress, channelLength).isEmpty(),
+                fc.toString() + " fail");
+    }
+
+    // Generate variation of args, each appended with one of additionalParam
+    private static Stream<Arguments> crossProduct(Arguments args, Object[] additionalParam) {
+        Object[] objs1 = args.get();
+        Builder<Arguments> streamBuilder = Stream.builder();
+
+        for (Object add : additionalParam) {
+            Object[] result = new Object[objs1.length + 1];
+            System.arraycopy(objs1, 0, result, 0, objs1.length);
+            result[objs1.length] = add;
+            streamBuilder.add(Arguments.of(result));
+        }
+
+        return streamBuilder.build();
     }
 
 }

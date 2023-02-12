@@ -34,6 +34,7 @@ import org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal;
 import org.openhab.binding.modbus.internal.config.ModbusPollerConfiguration;
 import org.openhab.binding.modbus.internal.handler.ModbusDataThingHandler;
 import org.openhab.binding.modbus.internal.handler.ReadIntoChannelHandler;
+import org.openhab.binding.modbus.internal.handler.ReadIntoHexStringChannelHandler;
 import org.openhab.binding.modbus.internal.handler.ReadIntoNumberChannelHandler;
 import org.openhab.binding.modbus.internal.handler.ReadIntoOnOffChannelHandler;
 import org.openhab.binding.modbus.internal.handler.ReadIntoOpenClosedChannelHandler;
@@ -406,6 +407,9 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
         String channelTypeId = channelTypeUID.getId();
         ValueType valueType = null;
         boolean writingCoil = false;
+        ModbusReadFunctionCode localFunctionCode = functionCode;
+        // required in xml config description, cannot be null
+        Objects.requireNonNull(localFunctionCode, "poller function code unknown");
         switch (channelTypeId) {
             case CHANNEL_READ_INTO_NUMBER:
             case CHANNEL_READ_INTO_PERCENT:
@@ -413,10 +417,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
             case CHANNEL_READ_INTO_OPEN_CLOSED: {
                 final ReadChannelConfiguration channelConfig = configuration.as(ReadChannelConfiguration.class);
                 valueType = ValueType.fromConfigValue(channelConfig.valueType);
-                ModbusReadFunctionCode localFunctionCode = functionCode;
 
-                // required in xml config description, cannot be null
-                Objects.requireNonNull(localFunctionCode, "poller function code unknown");
                 validationErrors = ReadIntoChannelHandler.validateReadParameters(localFunctionCode, config.getStart(),
                         config.getLength(), channelConfig.address, valueType);
 
@@ -439,11 +440,17 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
                 }
                 break;
             }
-            case CHANNEL_READ_INTO_HEX_STRNG:
-                // TODO: validate read is within polled data
-                // TODO: create handler
-                throw new IllegalStateException("not implemented:" + channelTypeId);
-            // break;
+            case CHANNEL_READ_INTO_HEX_STRNG: {
+                final ReadChannelConfiguration channelConfig = configuration.as(ReadChannelConfiguration.class);
+                validationErrors = ReadIntoChannelHandler.validateReadParametersRaw(localFunctionCode,
+                        config.getStart(), config.getLength(), channelConfig.address, channelConfig.length);
+
+                if (validationErrors.isEmpty()) {
+                    readChannelHandlers.put(channelUID, new ReadIntoHexStringChannelHandler(slaveId, channelConfig,
+                            state -> this.tryUpdateState(channelUID, state)));
+                }
+                break;
+            }
             case CHANNEL_WRITE_COIL_FROM_NUMBER:
             case CHANNEL_WRITE_COIL_FROM_ON_OFF:
                 valueType = ValueType.BIT;
@@ -454,12 +461,9 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
             case CHANNEL_WRITE_REGISTER_FROM_ON_OFF:
             case CHANNEL_WRITE_REGISTER_FROM_OPEN_CLOSED: {
                 final WriteChannelConfiguration channelConfig = configuration.as(WriteChannelConfiguration.class);
-                ModbusReadFunctionCode localFunctionCode = functionCode;
-                // required in xml config description, cannot be null
-
-                Objects.requireNonNull(localFunctionCode, "poller function code unknown");
-                // valueType is initialized with coil writes
                 if (!writingCoil) {
+                    // i.e., not pass-through from
+                    // CHANNEL_WRITE_COIL_FROM_NUMBER/CHANNEL_WRITE_COIL_FROM_ON_OFF
                     valueType = ValueType.fromConfigValue(channelConfig.valueType);
                 }
                 Objects.requireNonNull(valueType); // Invariant

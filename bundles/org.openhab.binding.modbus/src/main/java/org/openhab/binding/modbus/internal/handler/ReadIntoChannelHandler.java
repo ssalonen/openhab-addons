@@ -100,7 +100,7 @@ public abstract class ReadIntoChannelHandler
     }
 
     /**
-     * Validate read parameters used to specify decoding of binary data polled from modbus
+     * Validate read parameters used to specify decoding-of-number from binary data polled from modbus
      *
      * Checks
      * 0. validate format of channelStart. Should be X or X.Y
@@ -201,6 +201,73 @@ public abstract class ReadIntoChannelHandler
                         "Invalid address=X=%d, decoding %s would need data outside polled data. Poller is reading elements from address %d to %d (inclusive) but decoding of valueType=%s starting from address %d would exceeds polled data bounds",
                         channelStartElement, channelValueType, polledFirstBitIndex / dataElementBits,
                         polledLastBitIndex / dataElementBits, channelValueType, channelStartElement);
+                validationIssues.add(new ChannelConfigValidationMessage(errmsg));
+            }
+        }
+
+        return validationIssues;
+    }
+
+    /**
+     * Validate read parameters used to specify decoding-of-N-elements from binary data polled from modbus
+     *
+     * Checks
+     * 0. validate format of channelStart. Should be X
+     * 1. N/A
+     * 2. N/A
+     * 3. N/A
+     * 4. N/A
+     * 5. N/A
+     * 6. Check that decoding starts within the limits of polled data
+     * 7. Check that decoding ends within the limits of polled data
+     *
+     * @param pollerFunctionCode function code used for polled data
+     * @param pollerStart start address for polled data
+     * @param pollerLength length of elements for polled data
+     * @param channelStart start address to start decoding
+     * @param readElements number of elements (bits or registers) needed for decoding
+     * @return Empty list when validation passes without errors. Otherwise list of validation errors is returned.
+     */
+    public static List<ChannelConfigValidationMessage> validateReadParametersRaw(
+            ModbusReadFunctionCode pollerFunctionCode, int pollerStart, int pollerLength, String channelStart,
+            int readElements) {
+
+        List<ChannelConfigValidationMessage> validationIssues = new ArrayList<>();
+
+        // CHECK 0
+        final int channelStartElement;
+        final OptionalInt channelStartElementSub;
+        try {
+            Address parsedAddress = Address.parse(channelStart);
+            channelStartElement = parsedAddress.channelStartElement;
+            channelStartElementSub = parsedAddress.channelStartElementSub;
+        } catch (IllegalArgumentException e) {
+            String errmsg = String.format("Invalid address=%s, expecting X or X.Y", channelStart);
+            validationIssues.add(new ChannelConfigValidationMessage(errmsg));
+            // Critical validation issue, stop validating other things
+            return validationIssues;
+        }
+
+        // CHECK 0: Invariant, XML declaration ensures that sub-index is not specified
+        assert !channelStartElementSub.isPresent();
+
+        // CHECK 6 & 7
+        {
+            // Determine bit positions polled, both start and end inclusive
+            int dataElementBits = ((pollerFunctionCode == ModbusReadFunctionCode.READ_COILS
+                    || pollerFunctionCode == ModbusReadFunctionCode.READ_INPUT_DISCRETES) ? 1 : 16);
+            int polledFirstBitIndex = pollerStart * dataElementBits;
+            int polledLastBitIndex = polledFirstBitIndex + pollerLength * dataElementBits - 1;
+
+            // Determine bit positions read, both start and end inclusive
+            int decodeStartBitIndex = channelStartElement * dataElementBits;
+            int decodeEndBitIndex = decodeStartBitIndex + readElements * dataElementBits - 1;
+
+            if (decodeStartBitIndex < polledFirstBitIndex || decodeEndBitIndex > polledLastBitIndex) {
+                String errmsg = String.format(
+                        "Invalid address=X=%d, decoding hex string would need data outside polled data. Poller is reading elements from address %d to %d (inclusive) but decoding starts from address %d would exceeds polled data bounds",
+                        channelStartElement, polledFirstBitIndex / dataElementBits,
+                        polledLastBitIndex / dataElementBits, channelStartElement);
                 validationIssues.add(new ChannelConfigValidationMessage(errmsg));
             }
         }
