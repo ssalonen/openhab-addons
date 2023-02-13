@@ -410,6 +410,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
         ModbusReadFunctionCode localFunctionCode = functionCode;
         // required in xml config description, cannot be null
         Objects.requireNonNull(localFunctionCode, "poller function code unknown");
+        int pollStart = config.getStart();
         switch (channelTypeId) {
             case CHANNEL_READ_INTO_NUMBER:
             case CHANNEL_READ_INTO_PERCENT:
@@ -418,21 +419,21 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
                 final ReadChannelConfiguration channelConfig = configuration.as(ReadChannelConfiguration.class);
                 valueType = ValueType.fromConfigValue(channelConfig.valueType);
 
-                validationErrors = ReadIntoChannelHandler.validateReadParameters(localFunctionCode, config.getStart(),
+                validationErrors = ReadIntoChannelHandler.validateReadParameters(localFunctionCode, pollStart,
                         config.getLength(), channelConfig.address, valueType);
 
                 if (validationErrors.isEmpty()) {
                     if (CHANNEL_READ_INTO_NUMBER.equals(channelTypeId)) {
-                        readChannelHandlers.put(channelUID, new ReadIntoNumberChannelHandler(config.getStart(),
-                                channelConfig, state -> this.tryUpdateState(channelUID, state)));
+                        readChannelHandlers.put(channelUID, new ReadIntoNumberChannelHandler(pollStart, channelConfig,
+                                state -> this.tryUpdateState(channelUID, state)));
                     } else if (CHANNEL_READ_INTO_PERCENT.equals(channelTypeId)) {
-                        readChannelHandlers.put(channelUID, new ReadIntoPercentChannelHandler(config.getStart(),
-                                channelConfig, state -> this.tryUpdateState(channelUID, state)));
+                        readChannelHandlers.put(channelUID, new ReadIntoPercentChannelHandler(pollStart, channelConfig,
+                                state -> this.tryUpdateState(channelUID, state)));
                     } else if (CHANNEL_READ_INTO_ON_OFF.equals(channelTypeId)) {
-                        readChannelHandlers.put(channelUID, new ReadIntoOnOffChannelHandler(config.getStart(),
-                                channelConfig, state -> this.tryUpdateState(channelUID, state)));
+                        readChannelHandlers.put(channelUID, new ReadIntoOnOffChannelHandler(pollStart, channelConfig,
+                                state -> this.tryUpdateState(channelUID, state)));
                     } else if (CHANNEL_READ_INTO_OPEN_CLOSED.equals(channelTypeId)) {
-                        readChannelHandlers.put(channelUID, new ReadIntoOpenClosedChannelHandler(config.getStart(),
+                        readChannelHandlers.put(channelUID, new ReadIntoOpenClosedChannelHandler(pollStart,
                                 channelConfig, state -> this.tryUpdateState(channelUID, state)));
                     } else {
                         throw new IllegalStateException("Bug: missing switch statement for " + channelTypeId);
@@ -442,11 +443,11 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
             }
             case CHANNEL_READ_INTO_HEX_STRNG: {
                 final ReadChannelConfiguration channelConfig = configuration.as(ReadChannelConfiguration.class);
-                validationErrors = ReadIntoChannelHandler.validateReadParametersRaw(localFunctionCode,
-                        config.getStart(), config.getLength(), channelConfig.address, channelConfig.length);
+                validationErrors = ReadIntoChannelHandler.validateReadParametersRaw(localFunctionCode, pollStart,
+                        config.getLength(), channelConfig.address, channelConfig.length);
 
                 if (validationErrors.isEmpty()) {
-                    readChannelHandlers.put(channelUID, new ReadIntoHexStringChannelHandler(slaveId, channelConfig,
+                    readChannelHandlers.put(channelUID, new ReadIntoHexStringChannelHandler(pollStart, channelConfig,
                             state -> this.tryUpdateState(channelUID, state)));
                 }
                 break;
@@ -468,7 +469,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
                 }
                 Objects.requireNonNull(valueType); // Invariant
                 validationErrors = WriteChannelHandler
-                        .validateWriteParameters(localFunctionCode, config.getStart(), config.getLength(),
+                        .validateWriteParameters(localFunctionCode, pollStart, config.getLength(),
                                 writingCoil ? ModbusBindingConstantsInternal.WRITE_TYPE_COIL
                                         : ModbusBindingConstantsInternal.WRITE_TYPE_HOLDING,
                                 channelConfig.address, valueType);
