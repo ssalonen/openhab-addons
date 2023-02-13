@@ -13,6 +13,7 @@
 package org.openhab.binding.modbus.internal.handler;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -101,6 +102,15 @@ public class WriteRegisterFromNumberHandler extends WriteRegisterChannelHandler 
         Optional<BigDecimal> decimalValue = preProcessCommand(command);
         if (decimalValue.isEmpty()) {
             return;
+        }
+        if (logger.isDebugEnabled()) {
+            BigInteger roundedToBigInteger = decimalValue.get().toBigInteger();
+            int requiredBits = roundedToBigInteger.bitLength();
+            if (requiredBits > valueType.getBits()) {
+                logger.debug(
+                        "Potentially lossy write - value type can be too small. Command '{}', when converted to decimal {}, and rounded to {}, would require {} bits but valueType={} has only {} bits.",
+                        command, decimalValue, roundedToBigInteger, requiredBits, valueType, valueType.getBits());
+            }
         }
         Command preprocessedCommand = new DecimalType(decimalValue.get());
         ModbusRegisterArray registers = ModbusBitUtilities.commandToRegisters(preprocessedCommand, valueType);
