@@ -129,7 +129,9 @@ public class ReadIntoNumberChannelHandler extends ReadIntoChannelHandler {
 
     @Override
     public void process(Exception readError) {
-        processUpdatedValue(UnDefType.UNDEF);
+        if (config.updateUndefOnErrors) {
+            updateExpiredChannel(System.currentTimeMillis(), UnDefType.UNDEF);
+        }
     }
 
     /**

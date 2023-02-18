@@ -54,7 +54,9 @@ public class ReadIntoHexStringChannelHandler extends ReadIntoChannelHandler {
 
     @Override
     public void process(Exception readError) {
-        updateExpiredChannel(System.currentTimeMillis(), UnDefType.UNDEF);
+        if (config.updateUndefOnErrors) {
+            updateExpiredChannel(System.currentTimeMillis(), UnDefType.UNDEF);
+        }
     }
 
     private void processUpdatedValue(String hexString) {

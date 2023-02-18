@@ -71,5 +71,12 @@
             <default>1000</default>
             <advanced>true</advanced>
 		</parameter>
+        <parameter name="updateUndefOnErrors" type="boolean" groupName="advanced">
+            <label>Update UNDEF on Errors</label>
+            <description>Whether to update UNDEF on read errors. If disabled, omits state update on read errors.</description>
+            <required>false</required>
+            <default>false</default>            
+            <advanced>true</advanced>
+        </parameter>
 	</config-description>
 </config-description:config-descriptions>

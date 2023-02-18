@@ -12,7 +12,7 @@
  */
 package org.openhab.binding.modbus.internal.handler;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.math.BigDecimal;
 import java.util.Collection;
@@ -28,6 +28,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.openhab.binding.modbus.config.ReadChannelConfiguration;
 import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
@@ -349,6 +350,29 @@ public class ReadIntoNumberChannelHandlerTest {
     }
 
     @ParameterizedTest
+    @ValueSource(booleans = { true, false })
+    public void testFailure(boolean updateUndefOnErrors) {
+        ModbusReadRequestBlueprint requestMock = Mockito.mock(ModbusReadRequestBlueprint.class);
+
+        ReadChannelConfiguration config = new ReadChannelConfiguration();
+        config.address = "0";
+        config.valueType = ValueType.INT16.getConfigValue();
+        config.updateUndefOnErrors = updateUndefOnErrors;
+        AtomicReference<State> updatedState = new AtomicReference<>();
+        Consumer<State> stateUpdater = state -> updatedState.set(state);
+        ReadIntoNumberChannelHandler handler = new ReadIntoNumberChannelHandler(0, config, stateUpdater);
+        handler.handle(new AsyncModbusFailure<ModbusReadRequestBlueprint>(requestMock,
+                new IllegalArgumentException("test error")));
+
+        // Errors should propagate as UNDEF
+        if (updateUndefOnErrors) {
+            assertEquals(UnDefType.UNDEF, updatedState.get());
+        } else {
+            assertNull(updatedState.get());
+        }
+    }
+
+    @ParameterizedTest
     @MethodSource("provideArgsForReadIntoNumberFromRegistersTest")
     public void testReadIntoSubclasedFromRegisters(State expectedState, ValueType type, ModbusRegisterArray registers,
             int index) {
@@ -478,7 +502,7 @@ public class ReadIntoNumberChannelHandlerTest {
         Consumer<State> stateUpdater = state -> updatedState.set(state);
         ReadIntoNumberChannelHandler handler = new ReadIntoSubclassedHandler(0, config, stateUpdater);
         handler.handle(new AsyncModbusFailure<ModbusReadRequestBlueprint>(requestMock, new Exception("foobar")));
-        assertEquals(new DecimalType(-6), updatedState.get());
+        assertNull(updatedState.get());
     }
 
     public static Collection<Object[]> provideArgsForExtractIndexFromRelativeTest() {

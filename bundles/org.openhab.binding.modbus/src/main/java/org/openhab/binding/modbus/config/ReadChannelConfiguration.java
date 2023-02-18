@@ -29,6 +29,7 @@ public class ReadChannelConfiguration {
     // Address is always specified with valid value (core checks against xml definition)
     public String address = "";
     public long updateUnchangedValuesEveryMillis = 1000L;
+    public boolean updateUndefOnErrors;
 
     public @Nullable String valueType; // Number, Percent, OPEN/CLOSED, ON/OFF
     public BigDecimal closedValue = BigDecimal.ZERO; // OPEN/CLOSED
