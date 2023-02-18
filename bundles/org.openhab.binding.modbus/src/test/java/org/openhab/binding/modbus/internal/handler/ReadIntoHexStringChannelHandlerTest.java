@@ -44,6 +44,12 @@ public class ReadIntoHexStringChannelHandlerTest {
     private ModbusReadRequestBlueprint request = Mockito.mock(ModbusReadRequestBlueprint.class);
 
     private final static ModbusRegisterArray REGISTERS = new ModbusRegisterArray(0xAE41, 0x5652, 0x4340);
+
+    //@formatter:off
+    // Bits in BitArray are in ascending order
+    // bit: 0 0 1 1 0 1 0 1   1   1   0   1   1   0  1  1
+    // idx: 0 1 2 3 4 5 6 7  8    9  10  11  12  13 14 15
+    //@formatter:on
     private final static BitArray BITS = new BitArray(//
             // byte pattern from https://simplymodbus.ca/FC02.htm
             false, false, true, true, false, true, false, true, // 00110101
@@ -56,6 +62,7 @@ public class ReadIntoHexStringChannelHandlerTest {
         assertEquals(3, REGISTERS.size());
     }
 
+    @SuppressWarnings("null")
     public static Collection<Object[]> provideArgsForRegisterTest() {
         return Collections.unmodifiableList(Stream.of(
         //@formatter:off
@@ -69,23 +76,26 @@ public class ReadIntoHexStringChannelHandlerTest {
         ).collect(Collectors.toList()));
     }
 
+    @SuppressWarnings("null")
     public static Collection<Object[]> provideArgsForBitsTest() {
         return Collections.unmodifiableList(Stream.of(
-        //@formatter:off
+                // Expected state, absolute address, length
+                // Note that polling starts from POLL_START=10, so abs. address = 10 is actually refers to 0th bit
+                //@formatter:off
                                 new Object[] { new StringType("00"), "10", 1}, // one false bit
                                 new Object[] { new StringType("00"), "10", 2}, // two false bits
-                                new Object[] { new StringType("04"), "10", 3}, // 001 bits -->     encoded as 0b00000100 = 0x04
+                                new Object[] { new StringType("04"), "10", 3}, // 001 bits -->     encoded as 0b00000100 = 0x04 (i.e. LSB is first bit, etc.)
                                 new Object[] { new StringType("0C"), "10", 4}, // 0011 bits -->    encoded as 0b00001100 = 0x0C
                                 new Object[] { new StringType("AC"), "10", 8}, // 00110101 bits -> encoded as 0b10101100 = 0xAC
 
                                 new Object[] { new StringType("AC01"), "10", 9}, // 00110101 1
                                 new Object[] { new StringType("D6"), "11", 8}, //    0110101 1 encoded as 0b11010110 = 0xD6
 
-                                new Object[] { new StringType("AC03"), "10", 10}, // 00110101 11
-                                new Object[] { new StringType("01D6"), "11", 9}, //   0110101 11 encoded as 111010110 = 0x01D6
+                                new Object[] { new StringType("AC03"), "10", 10}, // 00110101 11, encoded as [0b10101100, 0b00000011] = 0xAC03
+                                new Object[] { new StringType("D601"), "11", 9}, //   0110101 11 encoded as  [0b11010110, 0b00000001] = 0xD601
 
-                                new Object[] { new StringType("AC03"), "10", 11}, // 00110101 110 -> encoded same as "00110101 11"
-                                new Object[] { new StringType("AC0B"), "10", 12}, // 00110101 1101. 1101 would be encoded as 0b1011 = 0x0B
+                                new Object[] { new StringType("AC03"), "10", 11}, // 00110101 110 encoded as  [0b10101100, 0b00000011] = 0xAC03
+                                new Object[] { new StringType("AC0B"), "10", 12}, // 00110101 1101 encoded as [0b10101100, 0b00001011] = 0xAC0B
                                 new Object[] { new StringType("ACDB"), "10", 16}
                         //@formatter:on
         ).collect(Collectors.toList()));
