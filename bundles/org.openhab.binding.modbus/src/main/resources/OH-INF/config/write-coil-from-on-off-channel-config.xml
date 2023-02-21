@@ -31,5 +31,12 @@
             <required>false</required>
             <default>3</default>
 		</parameter>
+        <parameter name="inverted" type="boolean">
+            <label>Inverted logic</label>
+            <description><![CDATA[Whether to invert ON/OFF encoding logic.
+            <br /><br />By default, OFF resets (sets to off) coil status.]]></description>
+            <required>false</required>
+            <default>false</default>
+        </parameter>
 	</config-description>
 </config-description:config-descriptions>

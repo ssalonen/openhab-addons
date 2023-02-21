@@ -44,7 +44,7 @@ public class WriteCoilFromOnOffHandler extends WriteCoilFromNumberHandler {
     @Override
     protected Optional<BigDecimal> preProcessCommand(Command command) {
         return applyOnlyIf(OnOffType.class, command, onOffCommand -> {
-            return onOffCommand == OnOffType.OFF ? BigDecimal.ZERO : BigDecimal.ONE;
+            return (config.inverted ^ (onOffCommand == OnOffType.OFF)) ? BigDecimal.ZERO : BigDecimal.ONE;
         });
     }
 

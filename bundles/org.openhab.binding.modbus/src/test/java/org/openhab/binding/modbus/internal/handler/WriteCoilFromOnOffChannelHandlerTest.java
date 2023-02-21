@@ -48,11 +48,13 @@ public class WriteCoilFromOnOffChannelHandlerTest {
     public static Collection<Object[]> provideArgsForPreProcessTest() {
         return Collections.unmodifiableList(Stream.of(
 //        @formatter:off
-                                new Object[] { BigDecimal.ZERO,          OnOffType.OFF},
-                                new Object[] { BigDecimal.valueOf(1),    OnOffType.ON},
+                                new Object[] { BigDecimal.ZERO,          false, OnOffType.OFF},
+                                new Object[] { BigDecimal.valueOf(1),    true, OnOffType.OFF},
+                                new Object[] { BigDecimal.valueOf(1),    false, OnOffType.ON},
+                                new Object[] { BigDecimal.ZERO,          true, OnOffType.ON},
 
                                 // DecimalType command is not processed, only OnOff comamnds
-                                new Object[] { null,  DecimalType.ZERO, BigDecimal.valueOf(0),   BigDecimal.valueOf(1) }
+                                new Object[] { null,  false, DecimalType.ZERO, BigDecimal.valueOf(0),   BigDecimal.valueOf(1) }
 
                         //@formatter:on
         ).collect(Collectors.toList()));
@@ -66,9 +68,11 @@ public class WriteCoilFromOnOffChannelHandlerTest {
      */
     @ParameterizedTest
     @MethodSource("provideArgsForPreProcessTest")
-    public void testWriteCoilFromOnOffPreProcess(@Nullable BigDecimal expectedPreprocessedNumber, Command command) {
+    public void testWriteCoilFromOnOffPreProcess(@Nullable BigDecimal expectedPreprocessedNumber, boolean inverted,
+            Command command) {
         WriteChannelConfiguration config = new WriteChannelConfiguration();
         config.address = "0"; // not used in test
+        config.inverted = inverted;
         WriteCoilFromOnOffHandler handler = new WriteCoilFromOnOffHandler(SLAVE_ID, config, r -> {
         });
 

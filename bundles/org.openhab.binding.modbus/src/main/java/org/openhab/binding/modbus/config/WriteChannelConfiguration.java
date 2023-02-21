@@ -29,10 +29,15 @@ public class WriteChannelConfiguration {
     // (core checks against xml definition)
     // setting to empty string here to avoid @Nullable
     public String address = "";
-    public String valueType = "";
+    public String valueType = ""; // Number, Percent
     public boolean writeMultiple = false;
     public int writeMaxTries = 3;
 
+    public boolean inverted; // writeCoilFromOnOff, writeCoilFromOpenClosed
+
+    //
+    // For register writes
+    //
     public BigDecimal closedValue = BigDecimal.ZERO; // OPEN/CLOSED
     public BigDecimal openValue = BigDecimal.ONE; // OPEN/CLOSED
 
@@ -41,4 +46,5 @@ public class WriteChannelConfiguration {
 
     public BigDecimal p0Value = BigDecimal.ZERO; // Percent
     public BigDecimal p100Value = BigDecimal.valueOf(100L); // Percent
+
 }
