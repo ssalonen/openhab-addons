@@ -825,15 +825,15 @@ Quick steps:
 1. Configure endpoint Thing, `tcp` or `serial` thing
 2. Create `Rollershutter` Item, named `MyRollershutter`
 3. Configure poller Thing, reading holding registers
-    * `writeRegisterNumber` write channel for UP/DOWN commands
-    * `writeRegisterNumber` write channel for STOP/MOVE commands
+    * `writeRegisterFromNumber` write channel for UP/DOWN commands
+    * `writeRegisterFromNumber` write channel for STOP/MOVE commands
     * `readIntoPercent` read channel for updating item state with rollershutter position (%) read from Modbus
 4. Link the poller channels to item created in step 2
     * Due to [MainUI limitation](https://github.com/openhab/openhab-webui/issues/1478) not allowing "possibly incompatible" links in UI:
         1. change `MyRollershutter` item type to `Dimmer` (compatible with `readIntoPercent`)
         2. link `readIntoPercent`
-        3. change `MyRollershutter` item type to `Number` (compatible with `writeRegisterNumber`)
-        3. link `writeRegisterNumber` channels, configuring `MAP` Profile with `upDownToNumber.map` or `stopMoveToNumber.map` as Filename.
+        3. change `MyRollershutter` item type to `Number` (compatible with `writeRegisterFromNumber`)
+        3. link `writeRegisterFromNumber` channels, configuring `MAP` Profile with `upDownToNumber.map` or `stopMoveToNumber.map` as Filename.
         4. change `MyRollershutter` item type back to `Rollershutter`        
 
 
@@ -860,14 +860,14 @@ channels:
       p0Value: 0
       p100Value: 100
   - id: writeMyRollershutterUpDown
-    channelTypeUID: modbus:writeRegisterNumber
+    channelTypeUID: modbus:writeRegisterFromNumber
     label: Write UP/DOWN to Modbus
     description: 
     configuration:    
       address: "1"
       valueType: int16
   - id: writeMyRollershutterStopMove
-    channelTypeUID: modbus:writeRegisterNumber
+    channelTypeUID: modbus:writeRegisterFromNumber
     label: Write STOP/MOVE to Modbus
     description: 
     configuration:    
