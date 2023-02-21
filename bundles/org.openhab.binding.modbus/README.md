@@ -406,6 +406,11 @@ Poller has channels for reading / writing different types of data.
 | `readIntoOpenClosed` | 1,2,3,4       | Contact   | Interpret read data as OPEN/CLOSED                                                             |
 | `readIntoPercent`    | 1,2,3,4       | Dimmer    | Interpret read data as number, and then scale to percent                                       |
 
+
+NOTE: Due to [MainUI limitation](https://github.com/openhab/openhab-webui/issues/1478) not allowing "possibly incompatible" links in UI, you might need to temporarily change Item type to "comaptible" (see table above) before linking it to the channel. For example, in order to link `readIntoOnOff` channel into `Dimmer` Item in MainUI, one neeeds to change item type temporarily to `Switch`.
+
+Further notes on read channels:
+
 * `readIntoHexString` returns the raw data as hexadecimal string.
 
     For example, reading two registers (length 2) could output hexstring `F1E1AB00`.
@@ -415,7 +420,7 @@ Poller has channels for reading / writing different types of data.
     Here lowest significant bit is the first bit, 2nd lowest bit is the second bit etc.
     Unused extra high bits are set to zero.
 * `readIntoNumber` interprets the binary data using given value type.
-    Further scaling (and attaching unit) of the number can be done using `modbus:gainOffset` profile.
+    Further scaling (and attaching unit) of the number can be done using "Gain-Offset Correction" profile.
 * `readIntoOnOff` interprets the binary data first to number, similar to `readIntoNumber`.
     Then, numbers matching `offValue` are converted to `OFF`, rest to `ON`
 * `readIntoOpenClosed` interprets the binary data first to number, similar to `readIntoNumber`. 
@@ -574,7 +579,7 @@ Main documentation on `autoupdate` in [Items section of openHAB docs](https://ww
 
 ### Profiles
 
-#### `modbus:gainOffset`
+#### Gain-Offset Correction (`modbus:gainOffset`)
 
 This profile is meant for simple scaling and offsetting of values received from the Modbus slave.
 The profile works also in the reverse direction, when commanding items.
@@ -615,7 +620,7 @@ This can be useful when the discrete input is the measurement (e.g. "is valve op
 Poller configuration (Code tab)
 
 ```yaml
-UID: modbus:poller:TCPID:POLLERID
+UID: modbus:poller:MyTCPIdHere:MyPollerIdHere
 label: Regular Poll
 thingTypeUID: modbus:poller
 configuration:
@@ -623,7 +628,7 @@ configuration:
   start: 4
   refresh: 1000  
   type: discrete
-bridgeUID: modbus:tcp:TCPID
+bridgeUID: modbus:tcp:MyTCPIdHere
 channels:
   - id: writeValve
     channelTypeUID: modbus:writeCoilFromOpenClosed
@@ -643,45 +648,49 @@ channels:
 ```
 
 
-### Scaling Example
+### Scaling Example (Numbers with Units of Measurement)
 
 Often Modbus slave might have the numbers stored as integers, with no information of the measurement unit.
 In openHAB, it is recommended to scale and attach units for the read data.
 
 In the below example, modbus data needs to be multiplied by `0.1` to convert the value to Celsius.
-For example, raw modbus register value of `45` corresponds to `4.5 °C`.
+For example, raw modbus number of `45` corresponds to `4.5 °C`.
 
-Note how that unit can be specified within the `gain` parameter of `modbus:gainOffset` profile.
+Note how that unit can be specified within the `gain` parameter of "Gain-Offset Correction" profile.
 This enables the use of quantity-aware `Number` item `Number:Temperature`.
 
 The profile also works the other way round, scaling the commands sent to the item to bare-numbers suitable for Modbus.
 
-`things/modbus_ex_scaling.things`:
+Quick steps:
 
-```java
-Bridge modbus:tcp:localhostTCP3 [ host="127.0.0.1", port=502 ] {
-    Bridge poller holdingPoller [ start=5, length=1, refresh=5000, type="holding" ] {
-        Thing data temperatureDeciCelsius [ readStart="5", readValueType="int16", writeStart="5", writeValueType="int16", writeType="holding" ]
-    }
-}
-```
+1. Configure endpoint Thing, `tcp` or `serial` thing
+2. Create Item with type `Number:Temperature`, named `MyRoomTemperature`
+3. Configure poller Thing
+4. Configure channels to poller
+   * `readIntoNumber` read channel with the correct value type
+5. Link `readTemperature` channel to `MyRoomTemperature`
+   * Configure `Gain-Offset Correction` Profile with `Gain` of `0.1 °C`
 
-`items/modbus_ex_scaling.items`:
+Poller configuration example (Code Tab)
 
-```java
-Number:Temperature TemperatureItem            "Temperature [%.1f °C]"   { channel="modbus:data:localhostTCP3:holdingPoller:temperatureDeciCelsius:number"[ profile="modbus:gainOffset", gain="0.1 °C", pre-gain-offset="0" ] }
-```
-
-`sitemaps/modbus_ex_scaling.sitemap`:
-
-```perl
-sitemap modbus_ex_scaling label="modbus_ex_scaling"
-{
-    Frame {
-        Text item=TemperatureItem
-        Setpoint item=TemperatureItem minValue=0 maxValue=100 step=20
-    }
-}
+```yaml
+UID: modbus:poller:MyTCPIdHere:MyPollerIdHere
+label: Regular Poll
+thingTypeUID: modbus:poller
+configuration:
+  length: 1
+  start: 5
+  refresh: 5000  
+  type: holding
+bridgeUID: modbus:tcp:MyTCPIdHere
+channels:
+  - id: readTemperature
+    channelTypeUID: modbus:readIntoNumber
+    label: Read Temperature
+    description: Read Temperature
+    configuration:
+      address: "5"
+      valueType: int16
 ```
 
 ### Commanding Individual Bits
@@ -690,106 +699,104 @@ In Modbus, holding registers represent 16 bits of data. The protocol allow to wr
 
 The binding provides convenience functionality to command individual bits of a holding register by keeping a cache of the register internally.
 
-In order to use this feature, one specifies `writeStart="X.Y"` (register `X`, bit `Y`) with `writeValueType="bit"` and `writeType="holding"`.
+In order to use this feature, one creates `writeRegisterXX` channel with address `X.Y` (i.e. writing bit `Y` of register `X`) and value type `bit`.
 
-`things/modbus_ex_command_bit.things`:
+Quick steps:
 
-```java
-Bridge modbus:tcp:localhostTCP3 [ host="127.0.0.1", port=502 ] {
-    Bridge poller holdingPoller [ start=5, length=1, refresh=5000, type="holding" ] {
-        Thing data register5 [ readStart="5.1", readValueType="bit", writeStart="5.1", writeValueType="bit", writeType="holding" ]
-        Thing data register5Bit1 [ readStart="5.1", readValueType="bit" ]
-    }
-}
+1. Configure endpoint Thing, `tcp` or `serial` thing
+2. Create Switch Item, named `SwitchExample`
+3. Configure poller Thing, reading holding registers
+    * `writeRegisterFromOnOff` write channel with `address` to single bit
+4. Link poller channel to item created in step 2
+
+If you like, you can also create `readIntoOnOff` channel and update the item based on latest data from Modbus.
+
+Poller configuration example (Code Tab)
+
+```yaml
+UID: modbus:poller:MyTCPIdHere:MyPollerIdHere
+label: Regular Poll
+thingTypeUID: modbus:poller
+configuration:
+  length: 1
+  start: 5
+  refresh: 5000  
+  type: holding
+bridgeUID: modbus:tcp:MyTCPIdHere
+channels:
+  - id: writeSingleBitExampleChannel
+    channelTypeUID: modbus:writeRegisterFromOnOff
+    label: write single bit example
+    description: Write single bit of 16 bit register, based on ON/OFF commands to Switch item
+    configuration:
+      address: "5.1"
+      valueType: bit
 ```
 
-`items/modbus_ex_command_bit.items`:
-
-```java
-Switch SecondLeastSignificantBit            "2nd least significant bit write switch [%d]"   { channel="modbus:data:localhostTCP3:holdingPoller:register5:switch" }
-Number SecondLeastSignificantBitAltRead            "2nd least significant bit is now [%d]"   { channel="modbus:data:localhostTCP3:holdingPoller:register5Bit1:number" }
-```
-
-`sitemaps/modbus_ex_command_bit.sitemap`:
-
-```perl
-sitemap modbus_ex_command_bit label="modbus_ex_command_bit"
-{
-    Frame {
-        Text item=SecondLeastSignificantBitAltRead
-        Switch item=SecondLeastSignificantBit
-    }
-}
-```
 
 ### Dimmer Example
 
 Dimmer type Items are not a straightforward match to Modbus registers, as they feature a numeric value which is limited to 0-100 Percent, as well as handling ON/OFF commands.
 
-Transforms can be used to match and scale both reading and writing.
+For this purpose, the binding offers specialized channels, scaling numbers from Modbus to 0-100 % interval.
+In this example, we assume a dimmer device where 255 register value = 100 % for fully ON, and 0 register value = 0 % (fully OFF)
 
-Example for a dimmer device where 255 register value = 100% for fully ON:
 
-`things/modbus_ex_dimmer.things`:
+Quick steps:
 
-```java
-Bridge modbus:tcp:remoteTCP [ host="192.168.0.10", port=502 ]  {
-   Bridge poller MBDimmer [ start=4700, length=2, refresh=1000, type="holding" ]  {
-          Thing data DimmerReg [ readStart="4700", readValueType="uint16", readTransform="JS:dimread255.js", writeStart="4700", writeValueType="uint16", writeType="holding", writeTransform="JS:dimwrite255.js" ]
-   }
-}
-```
+1. Configure endpoint Thing, `tcp` or `serial` thing
+2. Create Dimmer Item, named `MyDimmer`
+3. Configure poller Thing, reading holding registers
+    * `writeRegisterFromOnOff` write channel for ON/OFF commands
+    * `writeRegisterFromPercent` write channel for percent commands
+    * `readIntoPercent` read channel for updating item state with percent value read from Modbus
+4. Link the poller channels to item created in step 2
+    * First, link the `writeRegisterFromPercent` and `readIntoPercent` channels
+    * Then, due to [MainUI limitation](https://github.com/openhab/openhab-webui/issues/1478) not allowing "possibly incompatible" links in UI:
+        1. change `MyDimmer` item type to `Switch` (compatible with `writeRegisterFromOnOff`)
+        2. link `writeRegisterFromOnOff` into `MyDimmer`
+        3. change `MyDimmer` item type back to `Dimmer`
 
-`items/modbus_ex_dimmer.items`:
+Poller configuration example (Code Tab)
 
-```java
-Dimmer myDimmer "My Dimmer d2 [%.1f]"   { channel="modbus:data:remoteTCP:MBDimmer:DimmerReg:dimmer" }
-```
-
-`sitemaps/modbus_ex_dimmer.sitemap`:
-
-```perl
-sitemap modbus_ex_dimmer label="modbus_ex_dimmer"
-{
-    Frame {
-        Switch item=myDimmer
-        Slider item=myDimmer
-    }
-}
-```
-
-`transform/dimread255.js`:
-
-```javascript
-// Wrap everything in a function (no global variable pollution)
-// variable "input" contains data string passed by binding
-(function(inputData) {
-    // here set the 100% equivalent register value
-    var MAX_SCALE = 255;
-    // convert to percent
-    return Math.round( parseFloat(inputData, 10) * 100 / MAX_SCALE );
-})(input)
-```
-
-`transform/dimwrite255.js`:
-
-```javascript
-// variable "input" contains command string passed by openHAB
-(function(inputData) {
-    // here set the 100% equivalent register value
-    var MAX_SCALE = 255;
-    var out = 0
-    if (inputData == 'ON') {
-          // set max
-         out = MAX_SCALE
-    } else if (inputData == 'OFF') {
-         out = 0
-    } else {
-         // scale from percent
-         out = Math.round( parseFloat(inputData, 10) * MAX_SCALE / 100 )
-    }
-    return out
-})(input)
+```yaml
+UID: modbus:poller:MyTCPIdHere:MyPollerIdHere
+label: Regular Poll
+thingTypeUID: modbus:poller
+configuration:
+  length: 2
+  start: 4700
+  refresh: 1000  
+  type: holding
+bridgeUID: modbus:tcp:MyTCPIdHere
+channels:
+  - id: readPercentMyDimmer
+    channelTypeUID: modbus:readIntoPercent
+    label: Read percent from Modbus
+    description: 
+    configuration:    
+      address: "4700"
+      valueType: uint16
+      p0Value: 0
+      p100Value: 255
+  - id: writeFromMyDimmerPercent
+    channelTypeUID: modbus:writeRegisterFromPercent
+    label: Write to modbus from percent command
+    description: 
+    configuration:    
+      address: "4700"
+      valueType: uint16
+      p0Value: 0
+      p100Value: 255
+  - id: writeFromMyDimmerOnOff
+    channelTypeUID: modbus:writeRegisterFromOnOff
+    label: Write to modbus from On / Off commands
+    description: 
+    configuration:
+      address: "4700"
+      valueType: uint16
+      offValue: 0
+      onValue: 255
 ```
 
 ### Rollershutter Example
@@ -798,7 +805,7 @@ sitemap modbus_ex_dimmer label="modbus_ex_dimmer"
 
 This is an example how different Rollershutter commands can be written to Modbus.
 
-Roller shutter position is read from register 0, `UP`/`DOWN` commands are written to register 1, and `MOVE`/`STOP` commands are written to register 2.
+Roller shutter position is read from register 0 (assumed to be in range 0...100), `UP`/`DOWN` commands are written to register 1, and `MOVE`/`STOP` commands are written to register 2.
 
 The logic of processing commands are summarized in the table
 
@@ -809,72 +816,82 @@ The logic of processing commands are summarized in the table
 | `MOVE`  | `1`                            | 2              |
 | `STOP`  | `0`                            | 2              |
 
-`things/modbus_ex_rollershutter.things`:
 
-```java
-Bridge modbus:tcp:localhostTCPRollerShutter [ host="127.0.0.1", port=502 ] {
-    Bridge poller holding [ start=0, length=3, refresh=1000, type="holding" ] {
-        // Since we are using advanced transformation outputting JSON,
-        // other write parameters (writeValueType, writeStart, writeType) can be omitted
-        Thing data rollershutterData [ readStart="0", readValueType="int16", writeTransform="JS:rollershutter.js" ]
+Here the basic logic is to introduce separate channels for two types of writes (UP/DOWN and STOP/MOVE) and read (rollershutter position).
+Write channel links utilize MAP Profile to convert commands into number, conducting conversion according to above table.
 
-        // For diagnostics
-        Thing data rollershutterDebug0 [ readStart="0", readValueType="int16", writeStart="0", writeValueType="int16", writeType="holding" ]
-        Thing data rollershutterDebug1 [ readStart="1", readValueType="int16" ]
-        Thing data rollershutterDebug2 [ readStart="2", readValueType="int16" ]
-    }
-}
+Quick steps:
+
+1. Configure endpoint Thing, `tcp` or `serial` thing
+2. Create `Rollershutter` Item, named `MyRollershutter`
+3. Configure poller Thing, reading holding registers
+    * `writeRegisterNumber` write channel for UP/DOWN commands
+    * `writeRegisterNumber` write channel for STOP/MOVE commands
+    * `readIntoPercent` read channel for updating item state with rollershutter position (%) read from Modbus
+4. Link the poller channels to item created in step 2
+    * Due to [MainUI limitation](https://github.com/openhab/openhab-webui/issues/1478) not allowing "possibly incompatible" links in UI:
+        1. change `MyRollershutter` item type to `Dimmer` (compatible with `readIntoPercent`)
+        2. link `readIntoPercent`
+        3. change `MyRollershutter` item type to `Number` (compatible with `writeRegisterNumber`)
+        3. link `writeRegisterNumber` channels, configuring `MAP` Profile with `upDownToNumber.map` or `stopMoveToNumber.map` as Filename.
+        4. change `MyRollershutter` item type back to `Rollershutter`        
+
+
+Poller configuration example (Code Tab)
+
+```yaml
+UID: modbus:poller:MyTCPIdHere:MyPollerIdHere
+label: Regular Poll
+thingTypeUID: modbus:poller
+configuration:
+  length: 1
+  start: 0
+  refresh: 1000  
+  type: holding
+bridgeUID: modbus:tcp:MyTCPIdHere
+channels:
+  - id: readMyRollershutterPosition
+    channelTypeUID: modbus:readIntoPercent
+    label: Read MyRollershutter position from Modbus
+    description: 
+    configuration:
+      address: "0"
+      valueType: int16
+      p0Value: 0
+      p100Value: 100
+  - id: writeMyRollershutterUpDown
+    channelTypeUID: modbus:writeRegisterNumber
+    label: Write UP/DOWN to Modbus
+    description: 
+    configuration:    
+      address: "1"
+      valueType: int16
+  - id: writeMyRollershutterStopMove
+    channelTypeUID: modbus:writeRegisterNumber
+    label: Write STOP/MOVE to Modbus
+    description: 
+    configuration:    
+      address: "2"
+      valueType: int16
 ```
 
-`items/modbus_ex_rollershutter.items`:
+MAP transformations, converting UP/DOWN and STOP/MOVE into numbers, which are then encoded by the binding as 16 bit registers when writing to Modbus.
 
-```java
-// We disable auto-update to make sure that rollershutter position is updated from the slave, not "automatically" via commands
-Rollershutter RollershutterItem "Roller shutter position [%.1f]" <temperature> { autoupdate="false", channel="modbus:data:localhostTCPRollerShutter:holding:rollershutterData:rollershutter" }
+`transform/upDownToNumber.map`:
 
-// For diagnostics
-Number RollershutterItemDebug0 "Roller shutter Debug 0 [%d]" <temperature> { channel="modbus:data:localhostTCPRollerShutter:holding:rollershutterDebug0:number" }
-Number RollershutterItemDebug1 "Roller shutter Debug 1 [%d]" <temperature> { channel="modbus:data:localhostTCPRollerShutter:holding:rollershutterDebug1:number" }
-Number RollershutterItemDebug2 "Roller shutter Debug 2 [%d]" <temperature> { channel="modbus:data:localhostTCPRollerShutter:holding:rollershutterDebug2:number" }
+```ini
+UP=1
+DOWN=-1
 ```
 
-`sitemaps/modbus_ex_rollershutter.sitemap`:
 
-```perl
-sitemap modbus_ex_rollershutter label="modbus_ex_rollershutter" {
-    Switch item=RollershutterItem label="Roller shutter [(%d)]" mappings=[UP="up", STOP="X", DOWN="down", MOVE="move"]
+`transform/stopMoveToNumber.map`:
 
-    // For diagnostics
-    Setpoint item=RollershutterItemDebug0 minValue=0 maxValue=100 step=20
-    Text item=RollershutterItemDebug0
-    Text item=RollershutterItemDebug1
-    Text item=RollershutterItemDebug2
-}
+```ini
+MOVE=1
+STOP=0
 ```
 
-`transform/rollershutter.js`:
-
-```javascript
-// Wrap everything in a function
-// variable "input" contains data passed by openHAB
-(function(cmd) {
-    var cmdToValue = {"UP": 1,  "DOWN": -1, "MOVE": 1, "STOP": 0};
-    var cmdToAddress = {"UP": 1, "DOWN": 1, "MOVE": 2, "STOP": 2};
-
-    var value = cmdToValue[cmd];
-    var address = cmdToAddress[cmd];
-    if(value === undefined || address === undefined) {
-        // unknown command, do not write anything
-        return "[]";
-    } else {
-        return (
-            "["
-              + "{\"functionCode\": 6, \"address\":" + address.toString() + ", \"value\": [" + value +  "] }"
-            + "]"
-        );
-    }
-})(input)
-```
 
 ### Eager Updates Using REFRESH
 
@@ -887,33 +904,29 @@ Simple solution is just increase the poll period with the associated performance
 
 It is also possible to use `REFRESH` command to ask the binding to update more frequently for a short while.
 
-`rules/fast_refresh.rules`:
+1. Create new Rule
+    * Create your "Item Event" triggers with extra-condition to trigger when Item "received a command". Repeat this for all items that should trigger faster reresh, e.g. `HeatingEnabled`and `SetTemperature`.
+    * As Rule Action, use Run Script and select javascript and type the following script
+
+
 
 ```javascript
-import org.eclipse.xtext.xbase.lib.Procedures
-import org.openhab.core.types.RefreshType
+function refreshData() {
+    // Send REFRESH to one of the Items linked to the poller thing
+    // Binding will request new data from Modbus device, and 
+    // all channels of the poller will be updated
+    items.HeatingEnabled.sendCommand("REFRESH")
+}
 
-val Procedures$Procedure0 refreshData = [ |
-    // Refresh SetTemperature. In fact, all data things in the same poller are refreshed
-    SetTemperature.sendCommand(RefreshType.REFRESH)
-    return null
-]
-
-rule "Refresh modbus data quickly after changing settings"
-when
-    Item VacationMode received command or
-    Item HeatingEnabled received command
-then
-    if (receivedCommand != RefreshType.REFRESH) {
+if (event.itemCommand.toString() !== "REFRESH") {
         // Update more frequently for a short while, to get
         // refereshed data after the newly received command
         refreshData()
-        createTimer(now.plus(100), refreshData)
-        createTimer(now.plus(200), refreshData)
-        createTimer(now.plus(300), refreshData)
-        createTimer(now.plus(500), refreshData)
-    }
-end
+        setTimeout(refreshData, 100)
+        setTimeout(refreshData, 200)
+        setTimeout(refreshData, 300)
+        setTimeout(refreshData, 500)
+}
 ```
 
 Please be aware that `REFRESH` commands are "throttled" (to be exact, responses are cached) with `poller` parameter `cacheMillis`.
