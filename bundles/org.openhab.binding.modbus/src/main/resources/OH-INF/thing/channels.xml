@@ -22,7 +22,7 @@
 		<config-description-ref uri="thing-type:modbus:read_into_on_off_channel"></config-description-ref>
 	</channel-type>
 	<channel-type id="readIntoOpenClosed">
-		<item-type>Number</item-type>
+		<item-type>Contact</item-type>
 		<label>Interpret read data as OPEN/CLOSED</label>
 		<config-description-ref uri="thing-type:modbus:read_into_open_closed_channel"></config-description-ref>
 	</channel-type>
@@ -63,5 +63,10 @@
         <label>Write coil from ON/OFF commands</label>
         <config-description-ref uri="thing-type:modbus:write_coil_from_on_off_channel"></config-description-ref>
     </channel-type>
-
+    <channel-type id="writeCoilFromOpenClosed">
+        <item-type>Contact</item-type>
+        <label>Write coil from OPEN/CLOSED commands</label>
+        <config-description-ref uri="thing-type:modbus:write_coil_from_open_closed_channel"></config-description-ref>
+    </channel-type>    
+    
 </thing:thing-descriptions>
