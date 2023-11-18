@@ -14,6 +14,7 @@ package org.openhab.binding.modbus.handler;
 
 import static org.openhab.binding.modbus.ModbusBindingConstants.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -391,14 +392,21 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
 
     private synchronized boolean initializeChannelHandlers() {
         boolean allValid = true;
+        List<ChannelConfigValidationMessage> validationErrors = new ArrayList<>();
         for (Channel channel : thing.getChannels()) {
-            boolean validChannel = initChannelHandler(channel, channel.getConfiguration());
-            allValid &= validChannel;
+            List<ChannelConfigValidationMessage> validationForThisChannel = initChannelHandler(channel,
+                    channel.getConfiguration());
+            allValid &= validationForThisChannel.isEmpty();
+            validationErrors.addAll(validationForThisChannel);
+        }
+        // TODO: format errors in a nice summary channel x erroFcrs: .., channel y errors: ...
+        if (!validationErrors.isEmpty()) {
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
         }
         return allValid;
     }
 
-    private boolean initChannelHandler(Channel channel, Configuration configuration) {
+    private List<ChannelConfigValidationMessage> initChannelHandler(Channel channel, Configuration configuration) {
         final List<ChannelConfigValidationMessage> validationErrors;
 
         ChannelUID channelUID = channel.getUID();
@@ -524,13 +532,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
                 throw new IllegalStateException("Unexpected channel: " + channelTypeId);
 
         }
-        if (!validationErrors.isEmpty()) {
-            // TODO: format errors in a nice summary channel x erroFcrs: .., channel y errors: ...
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
-            return false;
-        } else {
-            return true;
-        }
+        return validationErrors;
     }
 
     /**
