@@ -413,9 +413,13 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
         int pollStart = config.getStart();
         switch (channelTypeId) {
             case CHANNEL_READ_INTO_NUMBER:
-            case CHANNEL_READ_INTO_PERCENT:
-            case CHANNEL_READ_INTO_ON_OFF:
-            case CHANNEL_READ_INTO_OPEN_CLOSED: {
+            case CHANNEL_READ_INTO_PERCENT_COLOR:
+            case CHANNEL_READ_INTO_PERCENT_DIMMER:
+            case CHANNEL_READ_INTO_PERCENT_ROLLERSHUTTER:
+            case CHANNEL_READ_INTO_ON_OFF_COLOR:
+            case CHANNEL_READ_INTO_ON_OFF_DIMMER:
+            case CHANNEL_READ_INTO_ON_OFF_SWITCH:
+            case CHANNEL_READ_INTO_OPEN_CLOSED_CONTACT: {
                 final ReadChannelConfiguration channelConfig = configuration.as(ReadChannelConfiguration.class);
                 valueType = ValueType.fromConfigValue(channelConfig.valueType);
 
@@ -426,13 +430,17 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
                     if (CHANNEL_READ_INTO_NUMBER.equals(channelTypeId)) {
                         readChannelHandlers.put(channelUID, new ReadIntoNumberChannelHandler(pollStart, channelConfig,
                                 state -> this.tryUpdateState(channelUID, state)));
-                    } else if (CHANNEL_READ_INTO_PERCENT.equals(channelTypeId)) {
+                    } else if (CHANNEL_READ_INTO_PERCENT_COLOR.equals(channelTypeId)
+                            || CHANNEL_READ_INTO_PERCENT_DIMMER.equals(channelTypeId)
+                            || CHANNEL_READ_INTO_PERCENT_ROLLERSHUTTER.equals(channelTypeId)) {
                         readChannelHandlers.put(channelUID, new ReadIntoPercentChannelHandler(pollStart, channelConfig,
                                 state -> this.tryUpdateState(channelUID, state)));
-                    } else if (CHANNEL_READ_INTO_ON_OFF.equals(channelTypeId)) {
+                    } else if (CHANNEL_READ_INTO_ON_OFF_COLOR.equals(channelTypeId)
+                            || CHANNEL_READ_INTO_ON_OFF_DIMMER.equals(channelTypeId)
+                            || CHANNEL_READ_INTO_ON_OFF_SWITCH.equals(channelTypeId)) {
                         readChannelHandlers.put(channelUID, new ReadIntoOnOffChannelHandler(pollStart, channelConfig,
                                 state -> this.tryUpdateState(channelUID, state)));
-                    } else if (CHANNEL_READ_INTO_OPEN_CLOSED.equals(channelTypeId)) {
+                    } else if (CHANNEL_READ_INTO_OPEN_CLOSED_CONTACT.equals(channelTypeId)) {
                         readChannelHandlers.put(channelUID, new ReadIntoOpenClosedChannelHandler(pollStart,
                                 channelConfig, state -> this.tryUpdateState(channelUID, state)));
                     } else {
@@ -453,14 +461,20 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
                 break;
             }
             case CHANNEL_WRITE_COIL_FROM_NUMBER:
-            case CHANNEL_WRITE_COIL_FROM_ON_OFF:
+            case CHANNEL_WRITE_COIL_FROM_ON_OFF_COLOR:
+            case CHANNEL_WRITE_COIL_FROM_ON_OFF_DIMMER:
+            case CHANNEL_WRITE_COIL_FROM_ON_OFF_SWITCH:
                 valueType = ValueType.BIT;
                 writingCoil = true;
                 // intentional pass through (no break)
             case CHANNEL_WRITE_REGISTER_FROM_NUMBER:
-            case CHANNEL_WRITE_REGISTER_FROM_PERCENT:
-            case CHANNEL_WRITE_REGISTER_FROM_ON_OFF:
-            case CHANNEL_WRITE_REGISTER_FROM_OPEN_CLOSED: {
+            case CHANNEL_WRITE_REGISTER_FROM_PERCENT_COLOR:
+            case CHANNEL_WRITE_REGISTER_FROM_PERCENT_DIMMER:
+            case CHANNEL_WRITE_REGISTER_FROM_PERCENT_ROLLERSHUTTER:
+            case CHANNEL_WRITE_REGISTER_FROM_ON_OFF_COLOR:
+            case CHANNEL_WRITE_REGISTER_FROM_ON_OFF_DIMMER:
+            case CHANNEL_WRITE_REGISTER_FROM_ON_OFF_SWITCH:
+            case CHANNEL_WRITE_REGISTER_FROM_OPEN_CLOSED_CONTACT: {
                 final WriteChannelConfiguration channelConfig = configuration.as(WriteChannelConfiguration.class);
                 if (!writingCoil) {
                     // i.e., not pass-through from
@@ -479,19 +493,25 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler implements Regis
                     if (CHANNEL_WRITE_REGISTER_FROM_NUMBER.equals(channelTypeId)) {
                         writeChannelHandlers.put(channelUID,
                                 new WriteRegisterFromNumberHandler(slaveId, channelConfig, cache, modbusWriter));
-                    } else if (CHANNEL_WRITE_REGISTER_FROM_PERCENT.equals(channelTypeId)) {
+                    } else if (CHANNEL_WRITE_REGISTER_FROM_PERCENT_COLOR.equals(channelTypeId)
+                            || CHANNEL_WRITE_REGISTER_FROM_PERCENT_DIMMER.equals(channelTypeId)
+                            || CHANNEL_WRITE_REGISTER_FROM_PERCENT_ROLLERSHUTTER.equals(channelTypeId)) {
                         writeChannelHandlers.put(channelUID,
                                 new WriteRegisterFromPercentHandler(slaveId, channelConfig, cache, modbusWriter));
-                    } else if (CHANNEL_WRITE_REGISTER_FROM_ON_OFF.equals(channelTypeId)) {
+                    } else if (CHANNEL_WRITE_REGISTER_FROM_ON_OFF_COLOR.equals(channelTypeId)
+                            || CHANNEL_WRITE_REGISTER_FROM_ON_OFF_DIMMER.equals(channelTypeId)
+                            || CHANNEL_WRITE_REGISTER_FROM_ON_OFF_SWITCH.equals(channelTypeId)) {
                         writeChannelHandlers.put(channelUID,
                                 new WriteRegisterFromOnOffHandler(slaveId, channelConfig, cache, modbusWriter));
-                    } else if (CHANNEL_WRITE_REGISTER_FROM_OPEN_CLOSED.equals(channelTypeId)) {
+                    } else if (CHANNEL_WRITE_REGISTER_FROM_OPEN_CLOSED_CONTACT.equals(channelTypeId)) {
                         writeChannelHandlers.put(channelUID,
                                 new WriteRegisterFromOpenClosedHandler(slaveId, channelConfig, cache, modbusWriter));
                     } else if (CHANNEL_WRITE_COIL_FROM_NUMBER.equals(channelTypeId)) {
                         writeChannelHandlers.put(channelUID,
                                 new WriteCoilFromNumberHandler(slaveId, channelConfig, modbusWriter));
-                    } else if (CHANNEL_WRITE_COIL_FROM_ON_OFF.equals(channelTypeId)) {
+                    } else if (CHANNEL_WRITE_COIL_FROM_ON_OFF_COLOR.equals(channelTypeId)
+                            || CHANNEL_WRITE_COIL_FROM_ON_OFF_DIMMER.equals(channelTypeId)
+                            || CHANNEL_WRITE_COIL_FROM_ON_OFF_SWITCH.equals(channelTypeId)) {
                         writeChannelHandlers.put(channelUID,
                                 new WriteCoilFromOnOffHandler(slaveId, channelConfig, modbusWriter));
                     } else {

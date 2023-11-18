@@ -59,7 +59,7 @@ There are four types of data in Modbus, illustrated below
 ![Modbus data types illustrated visually](doc/images/data_types.png "Modbus data types")
 
 | Data type         | Read/Write     | Element Size      |
-|-------------------|----------------|-------------------|
+| ----------------- | -------------- | ----------------- |
 | Holding registers | Read and write | 16 bits = 2 bytes |
 | Input registers   | Read only      | 16 bits = 2 bytes |
 | Coils             | Read and write | 1 bit             |
@@ -71,7 +71,7 @@ Coils and discrete inputs to represent binary on/off values, e.g. valve open/clo
 In Modbus, reading and writing of data is conducted via commands (also known as "Function Code" or FC):
 
 | Data type         | Read FC | Write FC                              |
-|-------------------|---------|---------------------------------------|
+| ----------------- | ------- | ------------------------------------- |
 | Holding registers | 3       | 6 (write single), 16 (write multiple) |
 | Input registers   | 4       | N/A                                   |
 | Coils             | 1       | 5 (write single), 15 (write multiple) |
@@ -284,10 +284,10 @@ Useful tools
 
 This binding supports 4 different things types
 
-| Thing    | Type   | Description                                                                                                                                                                                                                 |
-|----------|--------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `tcp`    | Bridge | Modbus TCP server (Modbus TCP slave)                                                                                                                                                                                        |
-| `serial` | Bridge | Modbus serial slave                                                                                                                                                                                                         |
+| Thing    | Type   | Description                                                                                                                                                                                                                                           |
+| -------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tcp`    | Bridge | Modbus TCP server (Modbus TCP slave)                                                                                                                                                                                                                  |
+| `serial` | Bridge | Modbus serial slave                                                                                                                                                                                                                                   |
 | `poller` | Bridge | Reads data from Modbus device, with a regular interval. One poller corresponds to single Modbus read request (FC01, FC02, FC03, or FC04). Is child of `tcp` or `serial`. Also translates commands to Modbus write requests (FC05/FC15 and FC06/FC16). |
 
 Typically one defines either `tcp` or `serial` bridge, depending on the variant of Modbus device (Modbus slave) communicating with.
@@ -317,7 +317,7 @@ Things can be configured using the UI, or using a `.things` file.
 Basic parameters
 
 | Parameter in UI        | Parameter in text configuration | Type    | Required | Default if omitted | Description                                                 |
-|------------------------|---------------------------------|---------|----------|--------------------|-------------------------------------------------------------|
+| ---------------------- | ------------------------------- | ------- | -------- | ------------------ | ----------------------------------------------------------- |
 | IP Address or Hostname | `host`                          | text    |          | `"localhost"`      | IP address or hostname                                      |
 | Port                   | `port`                          | integer |          | `502`              | Port number                                                 |
 | Id                     | `id`                            | integer |          | `1`                | Slave id. Also known as station address or unit identifier. |
@@ -326,7 +326,7 @@ Basic parameters
 Advanced parameters
 
 | Parameter in UI                         | Parameter in text configuration | Required | Type    | Default if omitted | Description                                                                                                                                                                                   |
-|-----------------------------------------|---------------------------------|----------|---------|--------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| --------------------------------------- | ------------------------------- | -------- | ------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Time Between Transactions               | `timeBetweenTransactionsMillis` |          | integer | `60`               | How long to delay we must have at minimum between two consecutive MODBUS transactions. In milliseconds.                                                                                       |
 | Time Between Reconnections              | `timeBetweenReconnectMillis`    |          | integer | `0`                | How long to wait to before trying to establish a new connection after the previous one has been disconnected. In milliseconds.                                                                |
 | Maximum Connection Tries                | `connectMaxTries`               |          | integer | `1`                | How many times we try to establish the connection. Should be at least 1.                                                                                                                      |
@@ -347,21 +347,21 @@ Similarly, with some slower devices on might need to increase the values.
 
 Basic parameters
 
-| Parameter in UI | Parameter in text configuration | Type    | Required | Default if omitted | Description                                                                                                                                                                                                |  |
-|-----------------|---------------------------------|---------|----------|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--|
-| Serial port     | `port`                          | text    | ✓        |                    | Serial port to use, for example `"/dev/ttyS0"` or `"COM1"`                                                                                                                                                 |  |
+| Parameter in UI | Parameter in text configuration | Type    | Required | Default if omitted | Description                                                                                                                                                                                                |
+| --------------- | ------------------------------- | ------- | -------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Serial port     | `port`                          | text    | ✓        |                    | Serial port to use, for example `"/dev/ttyS0"` or `"COM1"`                                                                                                                                                 |
 | Id              | `id`                            | integer |          | `1`                | Slave id. Also known as station address or unit identifier. See [Wikipedia](https://en.wikipedia.org/wiki/Modbus) and [simplymodbus](https://www.simplymodbus.ca/index.html) articles for more information |  |
-| Baud            | `baud`                          | integer | ✓        |                    | Baud of the connection. Valid values are: `75`, `110`, `300`, `1200`, `2400`, `4800`, `9600`, `19200`, `38400`, `57600`, `115200`.                                                                         |  |
-| Stop Bits       | `stopBits`                      | text    | ✓        |                    | Stop bits. Valid values are: `"1.0"`, `"1.5"`, `"2.0"`.                                                                                                                                                    |  |
-| Parity          | `parity`                        | text    | ✓        |                    | Parity. Valid values are: `"none"`, `"even"`, `"odd"`.                                                                                                                                                     |  |
-| Data Bits       | `dataBits`                      | integer | ✓        |                    | Data bits. Valid values are: `5`, `6`, `7` and `8`.                                                                                                                                                        |  |
-| Encoding        | `encoding`                      | text    |          | `"rtu"`            | Encoding. Valid values are: `"ascii"`, `"rtu"`, `"bin"`.                                                                                                                                                   |  |
-| RS485 Echo Mode | `echo`                          | boolean |          | `false`            | Flag for setting the RS485 echo mode. This controls whether we should try to read back whatever we send on the line, before reading the response. Valid values are: `true`, `false`.                       |  |
+| Baud            | `baud`                          | integer | ✓        |                    | Baud of the connection. Valid values are: `75`, `110`, `300`, `1200`, `2400`, `4800`, `9600`, `19200`, `38400`, `57600`, `115200`.                                                                         |
+| Stop Bits       | `stopBits`                      | text    | ✓        |                    | Stop bits. Valid values are: `"1.0"`, `"1.5"`, `"2.0"`.                                                                                                                                                    |
+| Parity          | `parity`                        | text    | ✓        |                    | Parity. Valid values are: `"none"`, `"even"`, `"odd"`.                                                                                                                                                     |
+| Data Bits       | `dataBits`                      | integer | ✓        |                    | Data bits. Valid values are: `5`, `6`, `7` and `8`.                                                                                                                                                        |
+| Encoding        | `encoding`                      | text    |          | `"rtu"`            | Encoding. Valid values are: `"ascii"`, `"rtu"`, `"bin"`.                                                                                                                                                   |
+| RS485 Echo Mode | `echo`                          | boolean |          | `false`            | Flag for setting the RS485 echo mode. This controls whether we should try to read back whatever we send on the line, before reading the response. Valid values are: `true`, `false`.                       |
 
 Advanced parameters
 
 | Parameter in UI                         | Parameter in text configuration | Required | Type    | Default if omitted | Description                                                                                                                                                                                   |
-|-----------------------------------------|---------------------------------|----------|---------|--------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| --------------------------------------- | ------------------------------- | -------- | ------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Read Operation Timeout                  | `receiveTimeoutMillis`          |          | integer | `1500`             | Timeout for read operations. In milliseconds.                                                                                                                                                 |
 | Flow Control In                         | `flowControlIn`                 |          | text    | `"none"`           | Type of flow control for receiving. Valid values are: `"none"`, `"xon/xoff in"`, `"rts/cts in"`.                                                                                              |
 | Flow Control Out                        | `flowControlOut`                |          | text    | `"none"`           | Type of flow control for sending. Valid values are: `"none"`, `"xon/xoff out"`, `"rts/cts out"`.                                                                                              |
@@ -385,7 +385,7 @@ With low baud rates and/or long read requests (that is, many items polled), ther
 Poller is also responsible of converting openHAB commands into Modbus write requests.
 
 | UI Parameter               | Parameter in text configuration | Type    | Required | Default if omitted | Description                                                                                                                                                                                    |
-|----------------------------|---------------------------------|---------|----------|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| -------------------------- | ------------------------------- | ------- | -------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Start                      | `start`                         | integer |          | `0`                | Address of the first register, coil, or discrete input to poll. Input as zero-based index number.                                                                                              |
 | Length                     | `length`                        | integer | ✓        | (-)                | Number of registers, coils or discrete inputs to read.  Note that protocol limits max length, depending on type                                                                                |
 | Type                       | `type`                          | text    | ✓        | (-)                | Type of modbus items to poll. This matches directly to Modbus request type or function code (FC). Valid values are: `"coil"` (FC01), `"discrete"` (FC02), `"holding"`(FC03), `"input"` (FC04). |
@@ -398,16 +398,16 @@ Poller has channels for reading / writing different types of data.
 
 #### Read channels
 
-| Channel              | Function Code | Item type | Description                                                                                    |
-|----------------------|---------------|-----------|------------------------------------------------------------------------------------------------|
-| `readIntoHexString`  | 1,2,3,4       | String    | Raw binary data as hex string. <br /><br />e.g. `F1E1` could represent one register or 16 bits |
-| `readIntoNumber`     | 1,2,3,4       | Number    | Interpret read data as number                                                                  |
-| `readIntoOnOff`      | 1,2,3,4       | Switch    | Interpret read data as ON/OFF                                                                  |
-| `readIntoOpenClosed` | 1,2,3,4       | Contact   | Interpret read data as OPEN/CLOSED                                                             |
-| `readIntoPercent`    | 1,2,3,4       | Dimmer    | Interpret read data as number, and then scale to percent                                       |
+| Channel                                                                         | Function Code | Item type | Description                                                                                    |
+| ------------------------------------------------------------------------------- | ------------- | --------- | ---------------------------------------------------------------------------------------------- |
+| `readIntoHexString`                                                             | 1,2,3,4       | String    | Raw binary data as hex string. <br /><br />e.g. `F1E1` could represent one register or 16 bits |
+| `readIntoNumber`                                                                | 1,2,3,4       | Number    | Interpret read data as number                                                                  |
+| `readIntoOnOffColor`, `readIntoOnOffDimmer`, `readIntoOnOffSwitch`              | 1,2,3,4       | Switch    | Interpret read data as ON/OFF.                                                                 |
+| `readIntoOpenClosedContact`                                                     | 1,2,3,4       | Contact   | Interpret read data as OPEN/CLOSED                                                             |
+| `readIntoPercentColor`, `readIntoPercentDimmer`, `readIntoPercentRollershutter` | 1,2,3,4       | Dimmer    | Interpret read data as number, and then scale to percent.                                      |
 
 
-NOTE: Due to [MainUI limitation](https://github.com/openhab/openhab-webui/issues/1478) not allowing "possibly incompatible" links in UI, you might need to temporarily change Item type to "comaptible" (see table above) before linking it to the channel. For example, in order to link `readIntoOnOff` channel into `Dimmer` Item in MainUI, one neeeds to change item type temporarily to `Switch`.
+NOTE: Due to [MainUI limitation](https://github.com/openhab/openhab-webui/issues/1478) not allowing "possibly incompatible" links in UI, you might need to temporarily change Item type to "comaptible" (see table above) before linking it to the channel. For example, in order to link `readIntoOnOffDimmer` channel into `Dimmer` Item in MainUI, one neeeds to change item type temporarily to `Switch`.
 
 Further notes on read channels:
 
@@ -421,75 +421,75 @@ Further notes on read channels:
     Unused extra high bits are set to zero.
 * `readIntoNumber` interprets the binary data using given value type.
     Further scaling (and attaching unit) of the number can be done using "Gain-Offset Correction" profile.
-* `readIntoOnOff` interprets the binary data first to number, similar to `readIntoNumber`.
+* `readIntoOnOffColor`, `readIntoOnOffDimmer`, `readIntoOnOffSwitch` channels interpret the binary data first to number, similar to `readIntoNumber`.
     Then, numbers matching `offValue` are converted to `OFF`, rest to `ON`
-* `readIntoOpenClosed` interprets the binary data first to number, similar to `readIntoNumber`. 
+* `readIntoOpenClosedContact` interprets the binary data first to number, similar to `readIntoNumber`. 
     Then, numbers matching `closedValue` are converted to `CLOSED`, rest to `OPEN`
-* `readIntoPercent` interprets the binary data first to number, similar to `readIntoNumber`.
+* `readIntoPercentColor`, `readIntoPercentDimmer`, `readIntoPercentRollershutter` channels interpret the binary data first to number, similar to `readIntoNumber`.
     Then, number is scaled to percentage using number range (`p0Value`, `p100Value`).
     Numbers outside the range are "clipped" to 0 % or 100 %.
 
 
 Read channel configuration:
 
-| UI Parameter                           | Parameter in text configuration    | Channels                              | Required | Default | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-|----------------------------------------|------------------------------------|---------------------------------------|----------|---------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Read address                           | `address`                          | (all)                                 |          |         |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Interval for Updating Unchanged Values | `updateUnchangedValuesEveryMillis` | (all)                                 |          | 1000    | Interval to update unchanged values. <br /><br />Modbus binding by default is not updating the item and channel state every time new data is polled from a slave, for performance reasons. Instead, the state is updated whenever it differs from previously updated state, or when enough time has passed since the last update. The time interval can be adjusted using this parameter. Use value of `0` if you like to update state with every poll, even though the value has not changed. In milliseconds. |
-| Update UNDEF on Errors                 | `updateUndefOnErrors`              | (all)                                 |          | false   | Whether to update UNDEF on read errors. If disabled, omits state update on read errors.                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Read value type                        | `valueType`                        | (all but `readIntoHexString`)         | ✓        |         | Method to decode the binary data from Modbus to number                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| CLOSED value                           | `closedValue`                      | `readIntoOpenClosed`                  |          | 0       | Number representing CLOSED                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| OFF value                              | `offValue`                         | `readIntoOnOff`                       |          | 0       | Number representing OFF                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| 0% value                               | `p0Value`                          | `readIntoPercent`                     |          | 0       | Number corresponding to 0%                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| 100% value                             | `p100Value`                        | `readIntoPercent`                     |          | 100     | Number corresponding to 100%                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Inverted logic                         | `inverted`                         | `readIntoOnOff`, `readIntoOpenClosed` |          | false   | Whether to invert OFF/ON or OPEN/CLOSED decoding logic                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Length                                 | `length`                           | `readIntoHexString`                   | ✓        |         | Number of elements (registers, coils or discrete inputs) to return                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| UI Parameter                           | Parameter in text configuration    | Channels                                                                                        | Required | Default | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| -------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- | -------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Read address                           | `address`                          | (all)                                                                                           |          |         |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Interval for Updating Unchanged Values | `updateUnchangedValuesEveryMillis` | (all)                                                                                           |          | 1000    | Interval to update unchanged values. <br /><br />Modbus binding by default is not updating the item and channel state every time new data is polled from a slave, for performance reasons. Instead, the state is updated whenever it differs from previously updated state, or when enough time has passed since the last update. The time interval can be adjusted using this parameter. Use value of `0` if you like to update state with every poll, even though the value has not changed. In milliseconds. |
+| Update UNDEF on Errors                 | `updateUndefOnErrors`              | (all)                                                                                           |          | false   | Whether to update UNDEF on read errors. If disabled, omits state update on read errors.                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Read value type                        | `valueType`                        | (all but `readIntoHexString`)                                                                   | ✓        |         | Method to decode the binary data from Modbus to number                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| CLOSED value                           | `closedValue`                      | `readIntoOpenClosedContact`                                                                     |          | 0       | Number representing CLOSED                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| OFF value                              | `offValue`                         | `readIntoOnOffColor`, `readIntoOnOffDimmer`, `readIntoOnOffSwitch`                              |          | 0       | Number representing OFF                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| 0% value                               | `p0Value`                          | `readIntoPercentColor`, `readIntoPercentDimmer`, `readIntoPercentRollershutter`                 |          | 0       | Number corresponding to 0%                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 100% value                             | `p100Value`                        | `readIntoPercentColor`, `readIntoPercentDimmer`, `readIntoPercentRollershutter`                 |          | 100     | Number corresponding to 100%                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Inverted logic                         | `inverted`                         | `readIntoOnOffColor`, `readIntoOnOffDimmer`, `readIntoOnOffSwitch`, `readIntoOpenClosedContact` |          | false   | Whether to invert OFF/ON or OPEN/CLOSED decoding logic                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Length                                 | `length`                           | `readIntoHexString`                                                                             | ✓        |         | Number of elements (registers, coils or discrete inputs) to return                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 
 #### Write channels
 
 For writing holding registers (FC06/FC16):
 
-| Channel                       | Item type | Description                                                                                 |
-|-------------------------------|-----------|---------------------------------------------------------------------------------------------|
-| `writeRegisterFromNumber`     | Number    | Convert `DecimalType` command as number, and then encode as one or more registers           |
-| `writeRegisterFromOnOff`      | Switch    | Convert ON/OFF command as number, and then encode as one or more registers                  |
-| `writeRegisterFromOpenClosed` | Contact   | Convert OPEN/CLOSED command as number, and then encode as one or more registers             |
-| `writeRegisterFromPercent`    | Dimmer    | Convert `PercentType` command as number (scaling), and then encode as one or more registers |
+| Channel                                                                                                    | Item type | Description                                                                                 |
+| ---------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------- |
+| `writeRegisterFromNumber`                                                                                  | Number    | Convert `DecimalType` command as number, and then encode as one or more registers           |
+| `writeRegisterFromOnOffColor`, `writeRegisterFromOnOffDimmer`, `writeRegisterFromOnOffSwitch`              | Switch    | Convert ON/OFF command as number, and then encode as one or more registers                  |
+| `writeRegisterFromOpenClosedContact`                                                                       | Contact   | Convert OPEN/CLOSED command as number, and then encode as one or more registers             |
+| `writeRegisterFromPercentColor`, `writeRegisterFromPercentDimmer`, `writeRegisterFromPercentRollershutter` | Dimmer    | Convert `PercentType` command as number (scaling), and then encode as one or more registers |
 
 
 * `writeRegisterFromNumber` converts the number command to binary data (one or more registers) using given value type.
   
   It is also possible to write individual bit of a register, if corresponding poller is set-up.
   In this case, the binding automatically combines the cached register value with the new new command.
-* `writeRegisterFromOnOff` converts ON/OFF command to number (controlled via `onValue` and `offValue`), and then encodes it to binary data using given value type.
-* `writeRegisterFromOpenClosed` converts OPEN/CLOSED command to number (controlled via `openValue` and `closedValue`), and then encodes it to binary data using given value type.
-* `writeRegisterFromPercent` converts percent command to number, using scale set via `p0Value` and `p100Value`.
+* `writeRegisterFromOnOffColor`, `writeRegisterFromOnOffDimmer`, `writeRegisterFromOnOffSwitch` channels convert ON/OFF command to number (controlled via `onValue` and `offValue`), and then encodes it to binary data using given value type.
+* `writeRegisterFromOpenClosedContact` converts OPEN/CLOSED command to number (controlled via `openValue` and `closedValue`), and then encodes it to binary data using given value type.
+* `writeRegisterFromPercentColor`, `writeRegisterFromPercentDimmer`, `writeRegisterFromPercentRollershutter` channels convert percent command to number, using scale set via `p0Value` and `p100Value`.
   Then, the number is encoded to binary using given value type.
 
 For writing coils (FC05/FC15):
 
-| Channel                   | Item type | Description                               |
-|---------------------------|-----------|-------------------------------------------|
-| `writeCoilFromNumber`     | Number    | Convert `DecimalType` command as 0/1 coil |
-| `writeCoilFromOnOff`      | Switch    | Convert OFF/ON command as 0/1 coil        |
-| `writeCoilFromOpenClosed` | Contact   | Convert CLOSED/OPEN command as 0/1 coil   |
+| Channel                                                                           | Item type | Description                               |
+| --------------------------------------------------------------------------------- | --------- | ----------------------------------------- |
+| `writeCoilFromNumber`                                                             | Number    | Convert `DecimalType` command as 0/1 coil |
+| `writeCoilFromOnOffColor`, `writeCoilFromOnOffDimmer`, `writeCoilFromOnOffSwitch` | Switch    | Convert OFF/ON command as 0/1 coil        |
+| `writeCoilFromOpenClosedContact`                                                  | Contact   | Convert CLOSED/OPEN command as 0/1 coil   |
 
 Write channel configuration:
 
-| UI Parameter                 | Parameter in text configuration | Channels                                              | Required | Default | Description                                                                                                                                                                                                                         |
-|------------------------------|---------------------------------|-------------------------------------------------------|----------|---------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Write address                | `address`                       | (all)                                                 |          |         |                                                                                                                                                                                                                                     |
-| Maximum Tries When Writing   | `writeMaxTries`                 | (all)                                                 |          | 3       | Number of tries when writing data, if some of the writes fail. For single try, enter 1.                                                                                                                                             |
-| Write using FC15/FC16 always | `writeMultiple`                 | (all)                                                 |          | false   | Whether single coil/register of data is written using FC15/FC16 ("Write Multiple Coils", "Write Multiple Holding Registers").<br /><br />If false, FC05/FC06 is used with singlecoil/ register. Some devices only accept FC15/FC16. |
-| Write value type             | `valueType`                     | `writeRegisterFromNumber`, `writeRegisterFromPercent` | ✓        |         | Method to decode the binary data from Modbus to number                                                                                                                                                                              |
-| CLOSED value                 | `closedValue`                   | `writeRegisterFromOpenClosed`                         |          | 0       | Number representing CLOSED                                                                                                                                                                                                          |
-| OPEN value                   | `openValue`                     | `writeRegisterFromOpenClosed`                         |          | 0       | Number representing OPEN                                                                                                                                                                                                            |
-| OFF value                    | `offValue`                      | `writeRegisterFromOnOff`                              |          | 0       | Number representing OFF                                                                                                                                                                                                             |
-| ON value                     | `onValue`                       | `writeRegisterFromOnOff`                              |          | 0       | Number representing ON                                                                                                                                                                                                              |
-| 0% value                     | `p0Value`                       | `writeRegisterFromPercent`                            |          | 0       | Number corresponding to 0%                                                                                                                                                                                                          |
-| 100% value                   | `p100Value`                     | `writeRegisterFromPercent`                            |          | 100     | Number corresponding to 100%                                                                                                                                                                                                        |
-| Inverted logic               | `inverted`                      | `writeCoilFromOnOff`, `writeCoilFromOpenClosed`       |          | false   | Whether to invert OFF/ON or CLOSED/OPEN encoding logic                                                                                                                                                                              |
+| UI Parameter                 | Parameter in text configuration | Channels                                                                                                                              | Required | Default | Description                                                                                                                                                                                                                         |
+| ---------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Write address                | `address`                       | (all)                                                                                                                                 |          |         |                                                                                                                                                                                                                                     |
+| Maximum Tries When Writing   | `writeMaxTries`                 | (all)                                                                                                                                 |          | 3       | Number of tries when writing data, if some of the writes fail. For single try, enter 1.                                                                                                                                             |
+| Write using FC15/FC16 always | `writeMultiple`                 | (all)                                                                                                                                 |          | false   | Whether single coil/register of data is written using FC15/FC16 ("Write Multiple Coils", "Write Multiple Holding Registers").<br /><br />If false, FC05/FC06 is used with singlecoil/ register. Some devices only accept FC15/FC16. |
+| Write value type             | `valueType`                     | `writeRegisterFromNumber`, `writeRegisterFromPercentColor`, `writeRegisterFromPercentDimmer`, `writeRegisterFromPercentRollershutter` | ✓        |         | Method to decode the binary data from Modbus to number                                                                                                                                                                              |
+| CLOSED value                 | `closedValue`                   | `writeRegisterFromOpenClosedContact`                                                                                                  |          | 0       | Number representing CLOSED                                                                                                                                                                                                          |
+| OPEN value                   | `openValue`                     | `writeRegisterFromOpenClosedContact`                                                                                                  |          | 0       | Number representing OPEN                                                                                                                                                                                                            |
+| OFF value                    | `offValue`                      | `writeRegisterFromOnOffColor`, `writeRegisterFromOnOffDimmer`, `writeRegisterFromOnOffSwitch`                                         |          | 0       | Number representing OFF                                                                                                                                                                                                             |
+| ON value                     | `onValue`                       | `writeRegisterFromOnOffColor`, `writeRegisterFromOnOffDimmer`, `writeRegisterFromOnOffSwitch`                                         |          | 0       | Number representing ON                                                                                                                                                                                                              |
+| 0% value                     | `p0Value`                       | `writeRegisterFromPercentColor`, `writeRegisterFromPercentDimmer`, `writeRegisterFromPercentRollershutter`                            |          | 0       | Number corresponding to 0%                                                                                                                                                                                                          |
+| 100% value                   | `p100Value`                     | `writeRegisterFromPercentColor`, `writeRegisterFromPercentDimmer`, `writeRegisterFromPercentRollershutter`                            |          | 100     | Number corresponding to 100%                                                                                                                                                                                                        |
+| Inverted logic               | `inverted`                      | `writeCoilFromOnOffColor`, `writeCoilFromOnOffDimmer`, `writeCoilFromOnOffSwitch`, `writeCoilFromOpenClosedContact`                   |          | false   | Whether to invert OFF/ON or CLOSED/OPEN encoding logic                                                                                                                                                                              |
 
 
 
@@ -516,7 +516,7 @@ Split your poller into multiple smaller ones to work around this problem.
 Items are configured the typical way, linking channels to item.
 
 If you want to have read/write behaviour for the item, link both read channel and write channel into same item.
-For example, it is possible to link both `readIntoPercent` (e.g. representing current valve position) and `writeRegisterFromPercent` (e.g. representing command valve position) channels into same item.
+For example, it is possible to link both `readIntoPercentDimmer` (e.g. representing how much valve is open right now) and `writeRegisterFromPercentDimmer` (e.g. commanding valve to certain position) channels into same item.
 With channel link profiles, you can do further transformations to data, allowing support of item types that are not natively supported by the binding, e.g. Rollershutter.
 
 ### Auto-update setting with items
@@ -631,14 +631,14 @@ configuration:
 bridgeUID: modbus:tcp:MyTCPIdHere
 channels:
   - id: writeValve
-    channelTypeUID: modbus:writeCoilFromOpenClosed
+    channelTypeUID: modbus:writeCoilFromOpenClosedContact
     label: Command valve OPEN/CLOSED
     description: Commands valve to open or to close
     configuration:
       address: "5"
       valueType: bit
   - id: readValve
-    channelTypeUID: modbus:readIntoOpenClosed
+    channelTypeUID: modbus:readIntoOpenClosedContact
     label: Read valve status
     description: Read valve open or closed status
     configuration:
@@ -704,12 +704,12 @@ In order to use this feature, one creates `writeRegisterXX` channel with address
 Quick steps:
 
 1. Configure endpoint Thing, `tcp` or `serial` thing
-2. Create Switch Item, named `SwitchExample`
-3. Configure poller Thing, reading holding registers
-    * `writeRegisterFromOnOff` write channel with `address` to single bit
+2. Create `Switch` Item, named `SwitchExample`
+3. Configure `poller` Thing, reading holding registers
+    * `writeRegisterFromOnOffSwitch` write channel with `address` to single bit
 4. Link poller channel to item created in step 2
 
-If you like, you can also create `readIntoOnOff` channel and update the item based on latest data from Modbus.
+If you like, you can also create `readIntoOnOffSwitch` channel and update the item based on latest data from Modbus.
 
 Poller configuration example (Code Tab)
 
@@ -725,7 +725,7 @@ configuration:
 bridgeUID: modbus:tcp:MyTCPIdHere
 channels:
   - id: writeSingleBitExampleChannel
-    channelTypeUID: modbus:writeRegisterFromOnOff
+    channelTypeUID: modbus:writeRegisterFromOnOffSwitch
     label: write single bit example
     description: Write single bit of 16 bit register, based on ON/OFF commands to Switch item
     configuration:
@@ -747,15 +747,12 @@ Quick steps:
 1. Configure endpoint Thing, `tcp` or `serial` thing
 2. Create Dimmer Item, named `MyDimmer`
 3. Configure poller Thing, reading holding registers
-    * `writeRegisterFromOnOff` write channel for ON/OFF commands
-    * `writeRegisterFromPercent` write channel for percent commands
-    * `readIntoPercent` read channel for updating item state with percent value read from Modbus
+    * `writeRegisterFromOnOffDimmer` write channel for ON/OFF commands
+    * `writeRegisterFromPercentDimmer` write channel for percent commands
+    * `readIntoPercentDimmer` read channel for updating item state with percent value read from Modbus
 4. Link the poller channels to item created in step 2
-    * First, link the `writeRegisterFromPercent` and `readIntoPercent` channels
-    * Then, due to [MainUI limitation](https://github.com/openhab/openhab-webui/issues/1478) not allowing "possibly incompatible" links in UI:
-        1. change `MyDimmer` item type to `Switch` (compatible with `writeRegisterFromOnOff`)
-        2. link `writeRegisterFromOnOff` into `MyDimmer`
-        3. change `MyDimmer` item type back to `Dimmer`
+    * First, link the `writeRegisterFromPercentDimmer` and `readIntoPercentDimmer` channels
+    * link `writeRegisterFromOnOffDimmer` into `MyDimmer`
 
 Poller configuration example (Code Tab)
 
@@ -810,7 +807,7 @@ Roller shutter position is read from register 0 (assumed to be in range 0...100)
 The logic of processing commands are summarized in the table
 
 | Command | Number written to Modbus slave | Register index |
-|---------|--------------------------------|----------------|
+| ------- | ------------------------------ | -------------- |
 | `UP`    | `1`                            | 1              |
 | `DOWN`  | `-1`                           | 1              |
 | `MOVE`  | `1`                            | 2              |
@@ -827,14 +824,10 @@ Quick steps:
 3. Configure poller Thing, reading holding registers
     * `writeRegisterFromNumber` write channel for UP/DOWN commands
     * `writeRegisterFromNumber` write channel for STOP/MOVE commands
-    * `readIntoPercent` read channel for updating item state with rollershutter position (%) read from Modbus
+    * `readIntoPercentRollershutter` read channel for updating item state with rollershutter position (%) read from Modbus
 4. Link the poller channels to item created in step 2
-    * Due to [MainUI limitation](https://github.com/openhab/openhab-webui/issues/1478) not allowing "possibly incompatible" links in UI:
-        1. change `MyRollershutter` item type to `Dimmer` (compatible with `readIntoPercent`)
-        2. link `readIntoPercent`
-        3. change `MyRollershutter` item type to `Number` (compatible with `writeRegisterFromNumber`)
-        3. link `writeRegisterFromNumber` channels, configuring `MAP` Profile with `upDownToNumber.map` or `stopMoveToNumber.map` as Filename.
-        4. change `MyRollershutter` item type back to `Rollershutter`        
+    * link `readIntoPercentRollershutter` channel to `MyRollershutter`
+    * link `writeRegisterFromNumber` channels with `MyRollershutter`. When linking, configure `MAP` Profile with `upDownToNumber.map` or `stopMoveToNumber.map` as Filename.
 
 
 Poller configuration example (Code Tab)

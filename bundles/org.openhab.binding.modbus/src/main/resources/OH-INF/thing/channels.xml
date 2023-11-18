@@ -16,40 +16,80 @@
 		<label>Interpret read data as number</label>
 		<config-description-ref uri="thing-type:modbus:read_into_number_channel"></config-description-ref>
 	</channel-type>
-	<channel-type id="readIntoOnOff">
+    <channel-type id="readIntoOnOffColor">
+        <item-type>Switch</item-type>
+        <label>Interpret read data as ON/OFF (Color item)</label>
+        <config-description-ref uri="thing-type:modbus:read_into_on_off_channel"></config-description-ref>
+    </channel-type>
+    <channel-type id="readIntoOnOffDimmer">
+        <item-type>Switch</item-type>
+        <label>Interpret read data as ON/OFF (Dimmer item)</label>
+        <config-description-ref uri="thing-type:modbus:read_into_on_off_channel"></config-description-ref>
+    </channel-type>
+	<channel-type id="readIntoOnOffSwitch">
 		<item-type>Switch</item-type>
-		<label>Interpret read data as ON/OFF</label>
+		<label>Interpret read data as ON/OFF (Switch item)</label>
 		<config-description-ref uri="thing-type:modbus:read_into_on_off_channel"></config-description-ref>
 	</channel-type>
-	<channel-type id="readIntoOpenClosed">
+	<channel-type id="readIntoOpenClosedContact">
 		<item-type>Contact</item-type>
-		<label>Interpret read data as OPEN/CLOSED</label>
+		<label>Interpret read data as OPEN/CLOSED (Contact item)</label>
 		<config-description-ref uri="thing-type:modbus:read_into_open_closed_channel"></config-description-ref>
 	</channel-type>
-	<channel-type id="readIntoPercent">
+    <channel-type id="readIntoPercentColor">
+        <item-type>Color</item-type>
+        <label>Interpret read data as percent (0-100%) (Color item)</label>
+        <config-description-ref uri="thing-type:modbus:read_into_number_channel"></config-description-ref>
+    </channel-type>
+	<channel-type id="readIntoPercentDimmer">
 		<item-type>Dimmer</item-type>
-		<label>Interpret read data as percent (0-100%)</label>
+		<label>Interpret read data as percent (0-100%) (Dimmer item)</label>
 		<config-description-ref uri="thing-type:modbus:read_into_number_channel"></config-description-ref>
 	</channel-type>
-	
+    <channel-type id="readIntoPercentRollershutter">
+        <item-type>Rollershutter</item-type>
+        <label>Interpret read data as percent (0-100%) (Rollershutter item)</label>
+        <config-description-ref uri="thing-type:modbus:read_into_number_channel"></config-description-ref>
+    </channel-type>
+    
     <channel-type id="writeRegisterFromNumber">
         <item-type>Number</item-type>
         <label>Write register from DecimalType number commands</label>
         <config-description-ref uri="thing-type:modbus:write_register_from_number_channel"></config-description-ref>
     </channel-type>
-    <channel-type id="writeRegisterFromOnOff">
-        <item-type>Switch</item-type>
-        <label>Write register from ON/OFF commands</label>
+    <channel-type id="writeRegisterFromOnOffColor">
+        <item-type>Color</item-type>
+        <label>Write register from ON/OFF commands (Color item)</label>
         <config-description-ref uri="thing-type:modbus:write_register_from_on_off_channel"></config-description-ref>
     </channel-type>
-    <channel-type id="writeRegisterFromOpenClosed">
+    <channel-type id="writeRegisterFromOnOffDimmer">
+        <item-type>Dimmer</item-type>
+        <label>Write register from ON/OFF commands (Dimmer item)</label>
+        <config-description-ref uri="thing-type:modbus:write_register_from_on_off_channel"></config-description-ref>
+    </channel-type>
+    <channel-type id="writeRegisterFromOnOffSwitch">
+        <item-type>Switch</item-type>
+        <label>Write register from ON/OFF commands (Switch item)</label>
+        <config-description-ref uri="thing-type:modbus:write_register_from_on_off_channel"></config-description-ref>
+    </channel-type>
+    <channel-type id="writeRegisterFromOpenClosedContact">
         <item-type>Contact</item-type>
-        <label>Write register from OPEN/CLOSED commands</label>
+        <label>Write register from OPEN/CLOSED commands (Contact item)</label>
         <config-description-ref uri="thing-type:modbus:write_register_from_open_closed_channel"></config-description-ref>
     </channel-type>
-    <channel-type id="writeRegisterFromPercent">
+    <channel-type id="writeRegisterFromPercentColor">
+        <item-type>Color</item-type>
+        <label>Write register from percent (0-100%) commands (Color item)</label>
+        <config-description-ref uri="thing-type:modbus:write_register_from_percent_channel"></config-description-ref>
+    </channel-type>
+    <channel-type id="writeRegisterFromPercentDimmer">
         <item-type>Dimmer</item-type>
-        <label>Write register from percent (0-100%) commands</label>
+        <label>Write register from percent (0-100%) commands (Dimmer item)</label>
+        <config-description-ref uri="thing-type:modbus:write_register_from_percent_channel"></config-description-ref>
+    </channel-type>
+    <channel-type id="writeRegisterFromPercentRollershutter">
+        <item-type>Rollershutter</item-type>
+        <label>Write register from percent (0-100%) commands (Rollershutter item)</label>
         <config-description-ref uri="thing-type:modbus:write_register_from_percent_channel"></config-description-ref>
     </channel-type>
     
@@ -58,14 +98,24 @@
         <label>Write coil from number commands</label>
         <config-description-ref uri="thing-type:modbus:write_coil_from_number_channel"></config-description-ref>
     </channel-type>
-    <channel-type id="writeCoilFromOnOff">
-        <item-type>Switch</item-type>
-        <label>Write coil from ON/OFF commands</label>
+    <channel-type id="writeCoilFromOnOffColor">
+        <item-type>Color</item-type>
+        <label>Write coil from ON/OFF commands (Color item)</label>
         <config-description-ref uri="thing-type:modbus:write_coil_from_on_off_channel"></config-description-ref>
     </channel-type>
-    <channel-type id="writeCoilFromOpenClosed">
+    <channel-type id="writeCoilFromOnOffDimmer">
+        <item-type>Dimmer</item-type>
+        <label>Write coil from ON/OFF commands (Dimmer item)</label>
+        <config-description-ref uri="thing-type:modbus:write_coil_from_on_off_channel"></config-description-ref>
+    </channel-type>
+    <channel-type id="writeCoilFromOnOffSwitch">
+        <item-type>Switch</item-type>
+        <label>Write coil from ON/OFF commands (Switch item)</label>
+        <config-description-ref uri="thing-type:modbus:write_coil_from_on_off_channel"></config-description-ref>
+    </channel-type>
+    <channel-type id="writeCoilFromOpenClosedContact">
         <item-type>Contact</item-type>
-        <label>Write coil from OPEN/CLOSED commands</label>
+        <label>Write coil from OPEN/CLOSED commands (Contact item)</label>
         <config-description-ref uri="thing-type:modbus:write_coil_from_open_closed_channel"></config-description-ref>
     </channel-type>    
     
