@@ -1,0 +1,4 @@
+channels:
+  value:
+    itemType: Number
+    itemDimension: Power

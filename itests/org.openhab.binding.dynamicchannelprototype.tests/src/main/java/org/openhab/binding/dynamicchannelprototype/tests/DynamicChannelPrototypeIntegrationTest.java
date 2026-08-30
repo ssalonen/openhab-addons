@@ -15,12 +15,16 @@ package org.openhab.binding.dynamicchannelprototype.tests;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import java.io.InputStream;
+import java.util.Objects;
+
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.openhab.binding.dynamicchannelprototype.internal.DynamicChannelPrototypeHandler;
 import org.openhab.binding.dynamicchannelprototype.internal.DynamicChannelPrototypeHandlerFactory;
+import org.openhab.binding.dynamicchannelprototype.internal.YamlChannelConfiguration;
 import org.openhab.core.events.EventPublisher;
 import org.openhab.core.i18n.UnitProvider;
 import org.openhab.core.items.ItemProvider;
@@ -37,7 +41,6 @@ import org.openhab.core.thing.ThingProvider;
 import org.openhab.core.thing.ThingRegistry;
 import org.openhab.core.thing.ThingUID;
 import org.openhab.core.thing.binding.ThingHandlerFactory;
-import org.openhab.core.thing.binding.builder.ChannelBuilder;
 import org.openhab.core.thing.binding.builder.ThingBuilder;
 import org.openhab.core.thing.link.ItemChannelLink;
 import org.openhab.core.thing.link.ItemChannelLinkProvider;
@@ -63,7 +66,7 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
     private Thing thing;
 
     @BeforeEach
-    public void setUp() {
+    public void setUp() throws Exception {
         registerVolatileStorageService();
         thingProvider = getService(ThingProvider.class, ManagedThingProvider.class);
         itemProvider = getService(ItemProvider.class, ManagedItemProvider.class);
@@ -73,8 +76,9 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
         eventPublisher = getService(EventPublisher.class);
         assertNotNull(getService(ThingHandlerFactory.class, DynamicChannelPrototypeHandlerFactory.class));
 
+        InputStream yaml = Objects.requireNonNull(getClass().getResourceAsStream("/power-channel.yaml"));
         thing = ThingBuilder.create(DynamicChannelPrototypeHandlerFactory.THING_TYPE, THING_UID)
-                .withChannel(ChannelBuilder.create(CHANNEL_UID, "Number:Power").build()).build();
+                .withChannel(YamlChannelConfiguration.parse(yaml).createChannel(CHANNEL_UID)).build();
         thingProvider.add(thing);
         waitForAssert(() -> {
             thing = thingRegistry.get(THING_UID);
@@ -93,6 +97,16 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
         linkProvider.remove(new ItemChannelLink(ITEM_NAME, CHANNEL_UID).getUID());
         itemProvider.remove(ITEM_NAME);
         thingProvider.remove(THING_UID);
+    }
+
+    @Test
+    public void yamlConfigurationCreatesDimensionedDynamicChannel() throws Exception {
+        InputStream yaml = Objects.requireNonNull(getClass().getResourceAsStream("/power-channel.yaml"));
+
+        YamlChannelConfiguration parsed = YamlChannelConfiguration.parse(yaml);
+        org.openhab.core.thing.Channel channel = parsed.createChannel(CHANNEL_UID);
+
+        assertEquals("Number:Power", channel.getAcceptedItemType());
     }
 
     @Test
