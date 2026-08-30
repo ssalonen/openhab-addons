@@ -1,0 +1,9 @@
+-include: ../itest-common.bndrun
+
+Bundle-SymbolicName: ${project.artifactId}
+
+-runrequires: \
+    bnd.identity;id='org.openhab.binding.dynamicchannelprototype.tests'
+
+-runblacklist: \
+    bnd.identity;id='org.openhab.core.storage.json'
