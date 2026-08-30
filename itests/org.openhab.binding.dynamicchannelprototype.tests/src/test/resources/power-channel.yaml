@@ -1,4 +1,7 @@
-channels:
-  value:
-    itemType: Number
-    itemDimension: Power
+version: 1
+things:
+  dynamicchannelprototype:value:power:
+    channels:
+      value:
+        itemType: Number
+        itemDimension: Power
