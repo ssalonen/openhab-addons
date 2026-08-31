@@ -35,6 +35,7 @@ public class DynamicChannelPrototypeProfileFactory implements ProfileFactory {
     public static final ProfileTypeUID POWER_PROFILE_TYPE = new ProfileTypeUID("dynamicchannelprototype", "power");
     public static final ProfileTypeUID THRESHOLD_PROFILE_TYPE = new ProfileTypeUID("dynamicchannelprototype",
             "threshold");
+    public static final ProfileTypeUID ROLLER_PROFILE_TYPE = new ProfileTypeUID("dynamicchannelprototype", "roller");
 
     @Override
     public @Nullable Profile createProfile(ProfileTypeUID profileTypeUID, ProfileCallback callback,
@@ -43,12 +44,14 @@ public class DynamicChannelPrototypeProfileFactory implements ProfileFactory {
             return new PowerProfile(callback, context);
         } else if (THRESHOLD_PROFILE_TYPE.equals(profileTypeUID)) {
             return new ThresholdProfile(callback, context);
+        } else if (ROLLER_PROFILE_TYPE.equals(profileTypeUID)) {
+            return new RollerShutterProfile(callback);
         }
         return null;
     }
 
     @Override
     public Collection<ProfileTypeUID> getSupportedProfileTypeUIDs() {
-        return Set.of(POWER_PROFILE_TYPE, THRESHOLD_PROFILE_TYPE);
+        return Set.of(POWER_PROFILE_TYPE, THRESHOLD_PROFILE_TYPE, ROLLER_PROFILE_TYPE);
     }
 }

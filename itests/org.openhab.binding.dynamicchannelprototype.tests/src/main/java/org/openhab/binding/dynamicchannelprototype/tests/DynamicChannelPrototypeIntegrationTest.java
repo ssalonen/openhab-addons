@@ -35,6 +35,7 @@ import org.openhab.core.items.ManagedItemProvider;
 import org.openhab.core.items.events.ItemEventFactory;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.library.types.PercentType;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.model.yaml.YamlModelRepository;
 import org.openhab.core.model.yaml.internal.items.YamlChannelLinkProvider;
@@ -64,9 +65,12 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
             "profiled-power");
     private static final ThingUID PROFILED_SWITCH_THING_UID = new ThingUID("dynamicchannelprototype", "value",
             "profiled-switch");
+    private static final ThingUID PROFILED_ROLLER_THING_UID = new ThingUID("dynamicchannelprototype", "value",
+            "profiled-rollershutter");
     private static final ChannelUID DIRECT_CHANNEL_UID = new ChannelUID(DIRECT_THING_UID, "value");
     private static final String DIRECT_ITEM_NAME = "DirectPower";
     private static final String PROFILED_POWER_ITEM_NAME = "ProfiledPower";
+    private static final String PROFILED_ROLLER_ITEM_NAME = "ProfiledRollerShutter";
     private static final String THRESHOLD_SWITCH_ITEM_NAME = "ThresholdSwitch";
 
     private ManagedThingProvider thingProvider;
@@ -110,9 +114,9 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
         things = List.copyOf(yamlThingProvider.getAllFromModel(yamlModelName));
         items = List.copyOf(yamlItemProvider.getAllFromModel(yamlModelName));
         links = List.copyOf(yamlChannelLinkProvider.getAllFromModel(yamlModelName));
-        assertEquals(3, things.size());
-        assertEquals(3, items.size());
-        assertEquals(3, links.size());
+        assertEquals(4, things.size());
+        assertEquals(4, items.size());
+        assertEquals(4, links.size());
 
         things.forEach(thingProvider::add);
         waitForAssert(() -> things.forEach(thing -> assertNotNull(thingRegistry.get(thing.getUID()).getHandler())));
@@ -145,10 +149,13 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
     public void dynamicallyConfiguredProfiledChannelsExposeTheirDeclaredItemTypes() {
         Thing profiledPowerThing = thingRegistry.get(PROFILED_POWER_THING_UID);
         Thing profiledSwitchThing = thingRegistry.get(PROFILED_SWITCH_THING_UID);
+        Thing profiledRollerThing = thingRegistry.get(PROFILED_ROLLER_THING_UID);
         assertNull(profiledPowerThing.getChannel("value").getChannelTypeUID());
         assertEquals("Number:Power", profiledPowerThing.getChannel("value").getAcceptedItemType());
         assertNull(profiledSwitchThing.getChannel("value").getChannelTypeUID());
-        assertEquals("Number", profiledSwitchThing.getChannel("value").getAcceptedItemType());
+        assertEquals("Switch", profiledSwitchThing.getChannel("value").getAcceptedItemType());
+        assertNull(profiledRollerThing.getChannel("value").getChannelTypeUID());
+        assertEquals("RollerShutter", profiledRollerThing.getChannel("value").getAcceptedItemType());
     }
 
     @Test
@@ -160,6 +167,16 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
 
         eventPublisher.post(ItemEventFactory.createCommandEvent(PROFILED_POWER_ITEM_NAME, new QuantityType<>("5 kW")));
         waitForAssert(() -> assertEquals(new DecimalType(49), handler.getLastCommand()));
+    }
+
+    @Test
+    public void rollerProfileConvertsRawStateAndPercentCommand() {
+        DynamicChannelPrototypeHandler handler = handler(PROFILED_ROLLER_THING_UID);
+        handler.emitRaw(new DecimalType(25));
+        waitForAssert(() -> assertEquals(new PercentType(25), itemRegistry.get(PROFILED_ROLLER_ITEM_NAME).getState()));
+
+        eventPublisher.post(ItemEventFactory.createCommandEvent(PROFILED_ROLLER_ITEM_NAME, new PercentType(40)));
+        waitForAssert(() -> assertEquals(new DecimalType(40), handler.getLastCommand()));
     }
 
     @Test
