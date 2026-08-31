@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
@@ -44,6 +45,10 @@ public class DynamicChannelPrototypeHandler extends BaseThingHandler {
     }
 
     public void emitPower(QuantityType<?> state) {
+        updateState(new ChannelUID(getThing().getUID(), "value"), state);
+    }
+
+    public void emitRaw(DecimalType state) {
         updateState(new ChannelUID(getThing().getUID(), "value"), state);
     }
 

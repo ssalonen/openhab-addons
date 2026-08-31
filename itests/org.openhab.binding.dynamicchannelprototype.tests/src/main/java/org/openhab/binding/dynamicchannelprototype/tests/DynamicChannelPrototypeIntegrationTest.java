@@ -27,14 +27,17 @@ import org.junit.jupiter.api.Test;
 import org.openhab.binding.dynamicchannelprototype.internal.DynamicChannelPrototypeHandler;
 import org.openhab.binding.dynamicchannelprototype.internal.DynamicChannelPrototypeHandlerFactory;
 import org.openhab.core.events.EventPublisher;
-import org.openhab.core.i18n.UnitProvider;
+import org.openhab.core.items.Item;
 import org.openhab.core.items.ItemProvider;
 import org.openhab.core.items.ItemRegistry;
 import org.openhab.core.items.ManagedItemProvider;
 import org.openhab.core.items.events.ItemEventFactory;
-import org.openhab.core.library.items.NumberItem;
+import org.openhab.core.library.types.DecimalType;
+import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.model.yaml.YamlModelRepository;
+import org.openhab.core.model.yaml.internal.items.YamlChannelLinkProvider;
+import org.openhab.core.model.yaml.internal.items.YamlItemProvider;
 import org.openhab.core.model.yaml.internal.things.YamlThingProvider;
 import org.openhab.core.test.java.JavaOSGiTest;
 import org.openhab.core.thing.ChannelUID;
@@ -49,15 +52,21 @@ import org.openhab.core.thing.link.ItemChannelLinkProvider;
 import org.openhab.core.thing.link.ManagedItemChannelLinkProvider;
 
 /**
- * Proves that a binding can use a user-defined, dimensioned Channel without a static Number:Power channel type.
+ * Proves direct typed channels and raw numeric channels with link profiles using native openHAB YAML configuration.
  *
  * @author Sami Salonen - Initial contribution
  */
 @NonNullByDefault({})
 public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
-    private static final ThingUID THING_UID = new ThingUID("dynamicchannelprototype", "value", "power");
-    private static final ChannelUID CHANNEL_UID = new ChannelUID(THING_UID, "value");
-    private static final String ITEM_NAME = "PrototypePower";
+    private static final ThingUID DIRECT_THING_UID = new ThingUID("dynamicchannelprototype", "value", "direct");
+    private static final ThingUID PROFILED_POWER_THING_UID = new ThingUID("dynamicchannelprototype", "value",
+            "profiled-power");
+    private static final ThingUID PROFILED_SWITCH_THING_UID = new ThingUID("dynamicchannelprototype", "value",
+            "profiled-switch");
+    private static final ChannelUID DIRECT_CHANNEL_UID = new ChannelUID(DIRECT_THING_UID, "value");
+    private static final String DIRECT_ITEM_NAME = "DirectPower";
+    private static final String PROFILED_POWER_ITEM_NAME = "ProfiledPower";
+    private static final String THRESHOLD_SWITCH_ITEM_NAME = "ThresholdSwitch";
 
     private ManagedThingProvider thingProvider;
     private ManagedItemProvider itemProvider;
@@ -66,8 +75,12 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
     private ThingRegistry thingRegistry;
     private YamlModelRepository yamlModelRepository;
     private YamlThingProvider yamlThingProvider;
+    private YamlItemProvider yamlItemProvider;
+    private YamlChannelLinkProvider yamlChannelLinkProvider;
     private EventPublisher eventPublisher;
-    private Thing thing;
+    private List<Thing> things;
+    private List<Item> items;
+    private List<ItemChannelLink> links;
     private String yamlModelName;
 
     @BeforeEach
@@ -80,6 +93,8 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
         thingRegistry = getService(ThingRegistry.class);
         yamlModelRepository = getService(YamlModelRepository.class);
         yamlThingProvider = getService(ThingProvider.class, YamlThingProvider.class);
+        yamlItemProvider = getService(ItemProvider.class, YamlItemProvider.class);
+        yamlChannelLinkProvider = getService(ItemChannelLinkProvider.class, YamlChannelLinkProvider.class);
         eventPublisher = getService(EventPublisher.class);
         assertNotNull(getService(ThingHandlerFactory.class, DynamicChannelPrototypeHandlerFactory.class));
 
@@ -90,47 +105,66 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
         assertNotNull(yamlModelName);
         assertEquals(List.of(), errors);
         assertEquals(List.of(), warnings);
-        thing = yamlThingProvider.getAllFromModel(yamlModelName).iterator().next();
-        thingProvider.add(thing);
-        waitForAssert(() -> {
-            thing = thingRegistry.get(THING_UID);
-            assertNotNull(thing);
-            assertNotNull(thing.getHandler());
-        });
 
-        UnitProvider units = getService(UnitProvider.class);
-        NumberItem powerItem = new NumberItem("Number:Power", ITEM_NAME, units);
-        itemProvider.add(powerItem);
-        linkProvider.add(new ItemChannelLink(ITEM_NAME, CHANNEL_UID));
+        things = List.copyOf(yamlThingProvider.getAllFromModel(yamlModelName));
+        items = List.copyOf(yamlItemProvider.getAllFromModel(yamlModelName));
+        links = List.copyOf(yamlChannelLinkProvider.getAllFromModel(yamlModelName));
+        assertEquals(3, things.size());
+        assertEquals(3, items.size());
+        assertEquals(3, links.size());
+
+        things.forEach(thingProvider::add);
+        waitForAssert(() -> things.forEach(thing -> assertNotNull(thingRegistry.get(thing.getUID()).getHandler())));
+        items.forEach(itemProvider::add);
+        links.forEach(linkProvider::add);
     }
 
     @AfterEach
     public void tearDown() {
-        linkProvider.remove(new ItemChannelLink(ITEM_NAME, CHANNEL_UID).getUID());
-        itemProvider.remove(ITEM_NAME);
-        thingProvider.remove(THING_UID);
+        links.forEach(link -> linkProvider.remove(link.getUID()));
+        items.forEach(item -> itemProvider.remove(item.getName()));
+        things.forEach(thing -> thingProvider.remove(thing.getUID()));
         yamlModelRepository.removeIsolatedModel(yamlModelName);
     }
 
     @Test
-    public void openhabYamlConfigurationCreatesDimensionedDynamicChannel() {
-        assertEquals("Number:Power", thing.getChannel(CHANNEL_UID).getAcceptedItemType());
-    }
+    public void typedDynamicChannelPreservesQuantityOnStateAndCommand() {
+        assertEquals("Number:Power",
+                thingRegistry.get(DIRECT_THING_UID).getChannel(DIRECT_CHANNEL_UID).getAcceptedItemType());
 
-    @Test
-    public void bindingStateReachesLinkedDimensionedItem() {
-        DynamicChannelPrototypeHandler handler = (DynamicChannelPrototypeHandler) thing.getHandler();
-        waitForAssert(() -> {
-            handler.emitPower(new QuantityType<>("5 kW"));
-            assertEquals(new QuantityType<>("5 kW"), itemRegistry.get(ITEM_NAME).getState());
-        });
-    }
+        DynamicChannelPrototypeHandler handler = handler(DIRECT_THING_UID);
+        handler.emitPower(new QuantityType<>("5 kW"));
+        waitForAssert(() -> assertEquals(new QuantityType<>("5 kW"), itemRegistry.get(DIRECT_ITEM_NAME).getState()));
 
-    @Test
-    public void dimensionedItemCommandReachesBindingWithItsUnit() {
-        DynamicChannelPrototypeHandler handler = (DynamicChannelPrototypeHandler) thing.getHandler();
-        eventPublisher.post(ItemEventFactory.createCommandEvent(ITEM_NAME, new QuantityType<>("5 kW")));
-
+        eventPublisher.post(ItemEventFactory.createCommandEvent(DIRECT_ITEM_NAME, new QuantityType<>("5 kW")));
         waitForAssert(() -> assertEquals(new QuantityType<>("5 kW"), handler.getLastCommand()));
+    }
+
+    @Test
+    public void powerProfileConvertsRawStateAndCommandAtANumberChannel() {
+        DynamicChannelPrototypeHandler handler = handler(PROFILED_POWER_THING_UID);
+        handler.emitRaw(new DecimalType(49));
+        waitForAssert(
+                () -> assertEquals(new QuantityType<>("5 kW"), itemRegistry.get(PROFILED_POWER_ITEM_NAME).getState()));
+
+        eventPublisher.post(ItemEventFactory.createCommandEvent(PROFILED_POWER_ITEM_NAME, new QuantityType<>("5 kW")));
+        waitForAssert(() -> assertEquals(new DecimalType(49), handler.getLastCommand()));
+    }
+
+    @Test
+    public void thresholdProfileConvertsRawStateAndSwitchCommandAtANumberChannel() {
+        DynamicChannelPrototypeHandler handler = handler(PROFILED_SWITCH_THING_UID);
+        handler.emitRaw(new DecimalType(51));
+        waitForAssert(() -> assertEquals(OnOffType.ON, itemRegistry.get(THRESHOLD_SWITCH_ITEM_NAME).getState()));
+
+        eventPublisher.post(ItemEventFactory.createCommandEvent(THRESHOLD_SWITCH_ITEM_NAME, OnOffType.ON));
+        waitForAssert(() -> assertEquals(new DecimalType(100), handler.getLastCommand()));
+
+        eventPublisher.post(ItemEventFactory.createCommandEvent(THRESHOLD_SWITCH_ITEM_NAME, OnOffType.OFF));
+        waitForAssert(() -> assertEquals(new DecimalType(0), handler.getLastCommand()));
+    }
+
+    private DynamicChannelPrototypeHandler handler(ThingUID thingUID) {
+        return (DynamicChannelPrototypeHandler) thingRegistry.get(thingUID).getHandler();
     }
 }
