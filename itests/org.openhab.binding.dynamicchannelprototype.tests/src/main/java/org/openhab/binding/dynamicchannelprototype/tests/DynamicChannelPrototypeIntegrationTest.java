@@ -141,6 +141,18 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
     }
 
     @Test
+    public void profiledChannelsExposeOutputTypesForItemLinking() {
+        Thing profiledPowerThing = thingRegistry.get(PROFILED_POWER_THING_UID);
+        Thing profiledSwitchThing = thingRegistry.get(PROFILED_SWITCH_THING_UID);
+        assertEquals("dynamicchannelprototype:profiled-power",
+                profiledPowerThing.getChannel("value").getChannelTypeUID().getAsString());
+        assertEquals("Number:Power", profiledPowerThing.getChannel("value").getAcceptedItemType());
+        assertEquals("dynamicchannelprototype:profiled-switch",
+                profiledSwitchThing.getChannel("value").getChannelTypeUID().getAsString());
+        assertEquals("Switch", profiledSwitchThing.getChannel("value").getAcceptedItemType());
+    }
+
+    @Test
     public void powerProfileConvertsRawStateAndCommandAtANumberChannel() {
         DynamicChannelPrototypeHandler handler = handler(PROFILED_POWER_THING_UID);
         handler.emitRaw(new DecimalType(49));

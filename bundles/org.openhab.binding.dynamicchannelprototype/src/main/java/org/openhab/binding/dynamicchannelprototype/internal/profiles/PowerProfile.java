@@ -55,9 +55,15 @@ public class PowerProfile implements StateProfile {
 
     @Override
     public void onCommandFromItem(Command command) {
+        BigDecimal value;
         if (command instanceof DecimalType decimal) {
-            callback.handleCommand(new DecimalType(decimal.toBigDecimal().divide(gain).subtract(offset)));
+            value = decimal.toBigDecimal();
+        } else if (command instanceof QuantityType<?> quantity) {
+            value = quantity.toBigDecimal();
+        } else {
+            return;
         }
+        callback.handleCommand(new DecimalType(value.divide(gain).subtract(offset)));
     }
 
     @Override
