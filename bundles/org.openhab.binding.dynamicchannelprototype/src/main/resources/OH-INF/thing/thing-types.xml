@@ -3,18 +3,8 @@
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
 	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
-	<thing-type id="value" extensible="profiled-power,profiled-switch">
+	<thing-type id="value">
 		<label>Dynamic Channel Prototype</label>
 		<description>A prototype Thing whose value Channel is provided by user configuration.</description>
 	</thing-type>
-	<channel-type id="profiled-power">
-		<item-type>Number:Power</item-type>
-		<label>Profiled Power</label>
-		<description>A raw numeric Channel whose link profile exposes power.</description>
-	</channel-type>
-	<channel-type id="profiled-switch">
-		<item-type>Switch</item-type>
-		<label>Profiled Switch</label>
-		<description>A raw numeric Channel whose link profile exposes a Switch.</description>
-	</channel-type>
 </thing:thing-descriptions>

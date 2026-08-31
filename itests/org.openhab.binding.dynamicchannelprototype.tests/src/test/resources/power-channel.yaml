@@ -8,11 +8,12 @@ things:
   dynamicchannelprototype:value:profiled-power:
     channels:
       value:
-        type: profiled-power
+        itemType: Number
+        itemDimension: Power
   dynamicchannelprototype:value:profiled-switch:
     channels:
       value:
-        type: profiled-switch
+        itemType: Number
 items:
   DirectPower:
     type: Number

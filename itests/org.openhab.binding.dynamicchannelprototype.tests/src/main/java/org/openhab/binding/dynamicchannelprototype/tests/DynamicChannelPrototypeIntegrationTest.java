@@ -14,6 +14,7 @@ package org.openhab.binding.dynamicchannelprototype.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -141,15 +142,13 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
     }
 
     @Test
-    public void profiledChannelsExposeOutputTypesForItemLinking() {
+    public void dynamicallyConfiguredProfiledChannelsExposeTheirDeclaredItemTypes() {
         Thing profiledPowerThing = thingRegistry.get(PROFILED_POWER_THING_UID);
         Thing profiledSwitchThing = thingRegistry.get(PROFILED_SWITCH_THING_UID);
-        assertEquals("dynamicchannelprototype:profiled-power",
-                profiledPowerThing.getChannel("value").getChannelTypeUID().getAsString());
+        assertNull(profiledPowerThing.getChannel("value").getChannelTypeUID());
         assertEquals("Number:Power", profiledPowerThing.getChannel("value").getAcceptedItemType());
-        assertEquals("dynamicchannelprototype:profiled-switch",
-                profiledSwitchThing.getChannel("value").getChannelTypeUID().getAsString());
-        assertEquals("Switch", profiledSwitchThing.getChannel("value").getAcceptedItemType());
+        assertNull(profiledSwitchThing.getChannel("value").getChannelTypeUID());
+        assertEquals("Number", profiledSwitchThing.getChannel("value").getAcceptedItemType());
     }
 
     @Test
