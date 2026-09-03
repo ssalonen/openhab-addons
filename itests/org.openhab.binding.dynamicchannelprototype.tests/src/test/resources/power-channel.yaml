@@ -17,7 +17,7 @@ things:
   dynamicchannelprototype:value:profiled-rollershutter:
     channels:
       value:
-        itemType: RollerShutter
+        itemType: Rollershutter
 items:
   DirectPower:
     type: Number
@@ -31,8 +31,8 @@ items:
         profile: dynamicchannelprototype:power
         gain: 0.1
         offset: 1
-  ProfiledRollerShutter:
-    type: RollerShutter
+  ProfiledRollershutter:
+    type: Rollershutter
     channels:
       dynamicchannelprototype:value:profiled-rollershutter:value:
         profile: dynamicchannelprototype:roller

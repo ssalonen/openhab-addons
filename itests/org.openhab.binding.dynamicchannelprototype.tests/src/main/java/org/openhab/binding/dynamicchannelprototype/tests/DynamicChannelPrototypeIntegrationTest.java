@@ -70,7 +70,7 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
     private static final ChannelUID DIRECT_CHANNEL_UID = new ChannelUID(DIRECT_THING_UID, "value");
     private static final String DIRECT_ITEM_NAME = "DirectPower";
     private static final String PROFILED_POWER_ITEM_NAME = "ProfiledPower";
-    private static final String PROFILED_ROLLER_ITEM_NAME = "ProfiledRollerShutter";
+    private static final String PROFILED_ROLLER_ITEM_NAME = "ProfiledRollershutter";
     private static final String THRESHOLD_SWITCH_ITEM_NAME = "ThresholdSwitch";
 
     private ManagedThingProvider thingProvider;
@@ -155,7 +155,7 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
         assertNull(profiledSwitchThing.getChannel("value").getChannelTypeUID());
         assertEquals("Switch", profiledSwitchThing.getChannel("value").getAcceptedItemType());
         assertNull(profiledRollerThing.getChannel("value").getChannelTypeUID());
-        assertEquals("RollerShutter", profiledRollerThing.getChannel("value").getAcceptedItemType());
+        assertEquals("Rollershutter", profiledRollerThing.getChannel("value").getAcceptedItemType());
     }
 
     @Test
