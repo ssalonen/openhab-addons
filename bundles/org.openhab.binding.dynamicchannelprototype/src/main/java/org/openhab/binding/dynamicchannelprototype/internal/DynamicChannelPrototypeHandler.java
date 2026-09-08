@@ -12,16 +12,21 @@
  */
 package org.openhab.binding.dynamicchannelprototype.internal;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.QuantityType;
+import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.binding.BaseThingHandler;
+import org.openhab.core.thing.binding.builder.ChannelBuilder;
+import org.openhab.core.thing.binding.builder.ThingBuilder;
+import org.openhab.core.thing.type.ChannelTypeUID;
 import org.openhab.core.types.Command;
 
 /**
@@ -33,15 +38,39 @@ import org.openhab.core.types.Command;
  */
 @NonNullByDefault
 public class DynamicChannelPrototypeHandler extends BaseThingHandler {
+    private final DynamicChannelPrototypeChannelTypeProvider channelTypeProvider;
     private final AtomicReference<@Nullable Command> lastCommand = new AtomicReference<>();
 
-    public DynamicChannelPrototypeHandler(Thing thing) {
+    public DynamicChannelPrototypeHandler(Thing thing, DynamicChannelPrototypeChannelTypeProvider channelTypeProvider) {
         super(thing);
+        this.channelTypeProvider = channelTypeProvider;
     }
 
     @Override
     public void initialize() {
+        applyUiChannelTypeShims();
         updateStatus(ThingStatus.ONLINE);
+    }
+
+    private void applyUiChannelTypeShims() {
+        List<Channel> channels = getThing().getChannels();
+        List<Channel> shimmedChannels = channels.stream().map(this::withUiChannelTypeShim).toList();
+        if (!channels.equals(shimmedChannels)) {
+            ThingBuilder builder = editThing();
+            builder.withChannels(shimmedChannels);
+            updateThing(builder.build());
+        }
+    }
+
+    private Channel withUiChannelTypeShim(Channel channel) {
+        if (channel.getChannelTypeUID() != null) {
+            return channel;
+        }
+        ChannelTypeUID shimChannelTypeUID = channelTypeProvider.getShimChannelTypeUID(channel.getAcceptedItemType());
+        if (shimChannelTypeUID == null) {
+            return channel;
+        }
+        return ChannelBuilder.create(channel).withType(shimChannelTypeUID).build();
     }
 
     public void emitPower(QuantityType<?> state) {

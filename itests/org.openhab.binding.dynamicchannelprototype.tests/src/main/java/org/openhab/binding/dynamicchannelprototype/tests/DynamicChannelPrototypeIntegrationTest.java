@@ -14,7 +14,6 @@ package org.openhab.binding.dynamicchannelprototype.tests;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -52,6 +51,7 @@ import org.openhab.core.thing.binding.ThingHandlerFactory;
 import org.openhab.core.thing.link.ItemChannelLink;
 import org.openhab.core.thing.link.ItemChannelLinkProvider;
 import org.openhab.core.thing.link.ManagedItemChannelLinkProvider;
+import org.openhab.core.thing.type.ChannelTypeUID;
 
 /**
  * Proves direct typed channels and raw numeric channels with link profiles using native openHAB YAML configuration.
@@ -146,15 +146,18 @@ public class DynamicChannelPrototypeIntegrationTest extends JavaOSGiTest {
     }
 
     @Test
-    public void dynamicallyConfiguredProfiledChannelsExposeTheirDeclaredItemTypes() {
+    public void yamlDynamicChannelsAreShimmedWithUiChannelTypes() {
         Thing profiledPowerThing = thingRegistry.get(PROFILED_POWER_THING_UID);
         Thing profiledSwitchThing = thingRegistry.get(PROFILED_SWITCH_THING_UID);
         Thing profiledRollerThing = thingRegistry.get(PROFILED_ROLLER_THING_UID);
-        assertNull(profiledPowerThing.getChannel("value").getChannelTypeUID());
+        assertEquals(new ChannelTypeUID("dynamicchannelprototype", "shim-number-power"),
+                profiledPowerThing.getChannel("value").getChannelTypeUID());
         assertEquals("Number:Power", profiledPowerThing.getChannel("value").getAcceptedItemType());
-        assertNull(profiledSwitchThing.getChannel("value").getChannelTypeUID());
+        assertEquals(new ChannelTypeUID("dynamicchannelprototype", "shim-switch"),
+                profiledSwitchThing.getChannel("value").getChannelTypeUID());
         assertEquals("Switch", profiledSwitchThing.getChannel("value").getAcceptedItemType());
-        assertNull(profiledRollerThing.getChannel("value").getChannelTypeUID());
+        assertEquals(new ChannelTypeUID("dynamicchannelprototype", "shim-rollershutter"),
+                profiledRollerThing.getChannel("value").getChannelTypeUID());
         assertEquals("Rollershutter", profiledRollerThing.getChannel("value").getAcceptedItemType());
     }
 
