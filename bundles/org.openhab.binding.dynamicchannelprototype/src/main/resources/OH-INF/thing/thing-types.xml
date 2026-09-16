@@ -3,7 +3,8 @@
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
 	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
-	<thing-type id="value">
+	<thing-type id="value"
+		extensible="shim-string,shim-switch,shim-number,shim-number-dimensionless,shim-number-angle,shim-number-area,shim-number-catalyticactivity,shim-number-dataamount,shim-number-datatransferrate,shim-number-density,shim-number-electriccapacitance,shim-number-electriccharge,shim-number-electricconductance,shim-number-electricconductivity,shim-number-electriccurrent,shim-number-electricinductance,shim-number-electricpotential,shim-number-electricresistance,shim-number-energy,shim-number-force,shim-number-frequency,shim-number-illuminance,shim-number-intensity,shim-number-length,shim-number-luminousflux,shim-number-luminousintensity,shim-number-magneticflux,shim-number-magneticfluxdensity,shim-number-mass,shim-number-power,shim-number-pressure,shim-number-radiationdoseabsorbed,shim-number-radiationdoseeffective,shim-number-radioactivity,shim-number-solidangle,shim-number-speed,shim-number-temperature,shim-number-time,shim-number-volume,shim-number-volumetricflowrate,shim-rollershutter">
 		<label>Dynamic Channel Prototype</label>
 		<description>A prototype Thing whose value Channel is provided by user configuration.</description>
 	</thing-type>
