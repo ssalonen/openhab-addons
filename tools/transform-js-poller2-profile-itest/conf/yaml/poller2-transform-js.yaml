@@ -1,0 +1,29 @@
+version: 1
+things:
+  modbus:tcp:profile-experiment:
+    config:
+      host: host.docker.internal
+      port: 1502
+      id: 1
+  modbus:poller2:profile-experiment:
+    bridge: modbus:tcp:profile-experiment
+    config:
+      start: 100
+      length: 1
+      refresh: 500
+      type: holding
+    channels:
+      power:
+        itemType: Number
+        itemDimension: Power
+        config:
+          address: "100"
+          valueType: uint16
+items:
+  ProfileExperimentPower:
+    type: Number
+    dimension: Power
+    channels:
+      modbus:poller2:profile-experiment:power:
+        profile: transform:JS
+        toItemScript: "| Number(input) / 10 + ' W'"
