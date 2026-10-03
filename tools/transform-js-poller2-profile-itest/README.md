@@ -55,6 +55,8 @@ channels:
 
 For current Main UI compatibility, the effective runtime channel was assigned a generated `Number:Power` ChannelType. This does not change the YAML declaration or the raw Modbus value; it only lets Main UI render the channel and open the standard link flow.
 
+The checked-in evidence image [`evidence/main-ui-poller2-online.png`](evidence/main-ui-poller2-online.png) captures the authenticated Main UI Things list with `modbus:poller2:profile-experiment` ONLINE. Its SHA-256 is `ab1c54f03370efea6f6b07cbafeff9cbc2e44004713a257250d8924be83bf407`; reproduce the visible-runtime capture after a clean deploy and compare its digest before accepting UI changes.
+
 ### Direct compatible links without a profile
 
 The same raw register value, `42`, was linked through Main UI with the `Default` profile to two newly created `Number:Power` Items:
