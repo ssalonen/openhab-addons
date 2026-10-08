@@ -16,11 +16,11 @@ import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
-/** Source Item-channel link and the compatible replacement link that can be created during apply. */
+/** A user-facing Item link impact, including links that must be reviewed manually. */
 @NonNullByDefault
-public record MigrationLink(String itemName, String sourceChannelUid, String targetChannelUid,
-        Map<String, Object> configuration) {
-    public MigrationLink {
-        configuration = Map.copyOf(configuration);
+public record MigrationImpact(String itemName, String sourceChannelUid, String targetChannelUid,
+        Map<String, Object> profileConfiguration, boolean targetLinkPlanned) {
+    public MigrationImpact {
+        profileConfiguration = Map.copyOf(profileConfiguration);
     }
 }
