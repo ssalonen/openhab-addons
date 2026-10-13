@@ -16,24 +16,41 @@ import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Hashtable;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.openhab.binding.modbus.internal.ModbusHandlerFactory;
 import org.openhab.core.config.core.Configuration;
+import org.openhab.core.events.EventPublisher;
 import org.openhab.core.io.transport.modbus.ModbusManager;
+import org.openhab.core.items.ItemRegistry;
+import org.openhab.core.items.events.ItemEventFactory;
+import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.model.yaml.YamlModelRepository;
 import org.openhab.core.service.WatchService;
 import org.openhab.core.test.java.JavaOSGiTest;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Channel;
+import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.ManagedThingProvider;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingRegistry;
@@ -43,6 +60,10 @@ import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.ThingUID;
 import org.openhab.core.thing.binding.ThingHandlerFactory;
 import org.openhab.core.thing.binding.builder.BridgeBuilder;
+import org.openhab.core.thing.link.ItemChannelLink;
+import org.openhab.core.thing.link.ItemChannelLinkRegistry;
+import org.openhab.core.transform.TransformationService;
+import org.openhab.core.types.RefreshType;
 
 /**
  * End-to-end coverage for poller2 Things supplied by the native YAML model provider.
@@ -208,6 +229,97 @@ public class ModbusPoller2YamlOSGiTest extends JavaOSGiTest {
             assertEquals("Channel 'outside-window': Address 101 is outside poll window 100..100",
                     poller.getStatusInfo().getDescription());
         });
+    }
+
+    @Test
+    public void nativeYamlLinkedItemReceivesTransformedRegisterStates() throws Exception {
+        ItemRegistry itemRegistry = getService(ItemRegistry.class);
+        ItemChannelLinkRegistry linkRegistry = getService(ItemChannelLinkRegistry.class);
+        assertNotNull(itemRegistry);
+        assertNotNull(linkRegistry);
+        EventPublisher eventPublisher = getService(EventPublisher.class);
+        assertNotNull(eventPublisher);
+        linkRegistry.waitForCompletedAsyncActivationTasks();
+
+        Hashtable<String, Object> properties = new Hashtable<>();
+        properties.put("openhab.transform", "YAMLSCALE");
+        registerService((TransformationService) (function, value) -> new BigDecimal(value)
+                .multiply(new BigDecimal("0.1")).add(BigDecimal.ONE).toPlainString(), properties);
+
+        try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            server.setSoTimeout(10000);
+            ExecutorService executor = Executors.newSingleThreadExecutor();
+            AtomicReference<@Nullable Socket> connection = new AtomicReference<>();
+            try {
+                Future<?> replies = executor.submit(() -> {
+                    for (int raw : new int[] { 49, 79 }) {
+                        try (Socket socket = server.accept()) {
+                            connection.set(socket);
+                            socket.setSoTimeout(10000);
+                            byte[] request = socket.getInputStream().readNBytes(12);
+                            assertEquals(12, request.length);
+                            assertEquals(3, request[7]);
+                            assertEquals(100, request[9]);
+                            assertEquals(1, request[11]);
+                            byte[] response = { request[0], request[1], 0, 0, 0, 5, request[6], 3, 2, 0, (byte) raw };
+                            socket.getOutputStream().write(response);
+                            socket.getOutputStream().flush();
+                        }
+                    }
+                    return null;
+                });
+                thingProvider
+                        .update(BridgeBuilder.create(new ThingTypeUID("modbus", "tcp"), ENDPOINT_UID)
+                                .withConfiguration(
+                                        new Configuration(Map.of("host", "127.0.0.1", "port", server.getLocalPort())))
+                                .build());
+                loadYaml("""
+                        version: 1
+                        things:
+                          modbus:poller2:yaml-endpoint:holding:
+                            bridge: modbus:tcp:yaml-endpoint
+                            config:
+                              start: 100
+                              length: 1
+                              type: holding
+                              refresh: 0
+                            channels:
+                              scaled:
+                                itemType: Number
+                                config:
+                                  address: "100"
+                                  valueType: int16
+                                  readTransform: "YAMLSCALE(scale)"
+                        items:
+                          YamlScaled:
+                            type: Number
+                            channel: modbus:poller2:yaml-endpoint:holding:scaled
+                        """);
+                ChannelUID channelUID = new ChannelUID(POLLER_UID, "scaled");
+                waitForAssert(() -> {
+                    Thing poller = requireNonNull(thingRegistry.get(POLLER_UID));
+                    assertEquals(ThingStatus.ONLINE, poller.getStatus());
+                    assertNotNull(poller.getHandler());
+                    assertNotNull(linkRegistry.get(new ItemChannelLink("YamlScaled", channelUID).getUID()));
+                    assertNotNull(itemRegistry.get("YamlScaled"));
+                });
+                eventPublisher.post(ItemEventFactory.createCommandEvent("YamlScaled", RefreshType.REFRESH));
+                waitForAssert(() -> assertEquals(new DecimalType("5.9"),
+                        requireNonNull(itemRegistry.get("YamlScaled")).getState()));
+                eventPublisher.post(ItemEventFactory.createCommandEvent("YamlScaled", RefreshType.REFRESH));
+                waitForAssert(() -> assertEquals(new DecimalType("8.9"),
+                        requireNonNull(itemRegistry.get("YamlScaled")).getState()));
+                replies.get(10, TimeUnit.SECONDS);
+            } finally {
+                Socket socket = connection.get();
+                if (socket != null) {
+                    socket.close();
+                }
+                server.close();
+                executor.shutdownNow();
+                assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
+            }
+        }
     }
 
     private void loadYaml(String yaml) throws IOException {
