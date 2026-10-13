@@ -322,6 +322,117 @@ public class ModbusPoller2YamlOSGiTest extends JavaOSGiTest {
         }
     }
 
+    @Test
+    public void nativeYamlLinkedItemCommandsWriteTransformedHoldingRegisters() throws Exception {
+        ItemRegistry itemRegistry = getService(ItemRegistry.class);
+        ItemChannelLinkRegistry linkRegistry = getService(ItemChannelLinkRegistry.class);
+        EventPublisher eventPublisher = getService(EventPublisher.class);
+        assertNotNull(itemRegistry);
+        assertNotNull(linkRegistry);
+        assertNotNull(eventPublisher);
+        linkRegistry.waitForCompletedAsyncActivationTasks();
+
+        Hashtable<String, Object> properties = new Hashtable<>();
+        properties.put("openhab.transform", "YAMLWRITE");
+        registerService((TransformationService) (function, value) -> new BigDecimal(value)
+                .multiply(new BigDecimal("100")).add(new BigDecimal("7")).toPlainString(), properties);
+
+        try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            server.setSoTimeout(10000);
+            ExecutorService executor = Executors.newSingleThreadExecutor();
+            AtomicReference<@Nullable Socket> connection = new AtomicReference<>();
+            try {
+                Future<?> replies = executor.submit(() -> {
+                    int writes = 0;
+                    int[] expectedValues = { 1237, 4567 };
+                    while (writes < expectedValues.length) {
+                        try (Socket socket = server.accept()) {
+                            connection.set(socket);
+                            socket.setSoTimeout(10000);
+                            byte[] request = socket.getInputStream().readNBytes(12);
+                            assertEquals(12, request.length);
+                            // Core can request an initial state when the native Item link becomes active.
+                            if (request[7] == 3) {
+                                assertEquals(100,
+                                        (Byte.toUnsignedInt(request[8]) << 8) | Byte.toUnsignedInt(request[9]));
+                                assertEquals(1,
+                                        (Byte.toUnsignedInt(request[10]) << 8) | Byte.toUnsignedInt(request[11]));
+                                byte[] response = { request[0], request[1], 0, 0, 0, 5, request[6], 3, 2, 0, 0 };
+                                socket.getOutputStream().write(response);
+                                socket.getOutputStream().flush();
+                                continue;
+                            }
+                            // FC6 acknowledges a write by echoing the complete request.
+                            socket.getOutputStream().write(request);
+                            socket.getOutputStream().flush();
+                            assertEquals(0, request[2]);
+                            assertEquals(0, request[3]);
+                            assertEquals(0, request[4]);
+                            assertEquals(6, request[5]);
+                            assertEquals(1, request[6]);
+                            assertEquals(6, request[7]);
+                            assertEquals(321, (Byte.toUnsignedInt(request[8]) << 8) | Byte.toUnsignedInt(request[9]));
+                            assertEquals(expectedValues[writes++],
+                                    (Byte.toUnsignedInt(request[10]) << 8) | Byte.toUnsignedInt(request[11]),
+                                    "FC6 wire value must contain the transformed Item command");
+                        }
+                    }
+                    return null;
+                });
+                thingProvider
+                        .update(BridgeBuilder.create(new ThingTypeUID("modbus", "tcp"), ENDPOINT_UID)
+                                .withConfiguration(
+                                        new Configuration(Map.of("host", "127.0.0.1", "port", server.getLocalPort())))
+                                .build());
+                loadYaml("""
+                        version: 1
+                        things:
+                          modbus:poller2:yaml-endpoint:holding:
+                            bridge: modbus:tcp:yaml-endpoint
+                            config:
+                              start: 100
+                              length: 1
+                              type: holding
+                              refresh: 0
+                            channels:
+                              writable:
+                                itemType: Number
+                                config:
+                                  address: "100"
+                                  valueType: int16
+                                  writeStart: "321"
+                                  writeValueType: int16
+                                  writeTransform: "YAMLWRITE(scale)"
+                                  writeMultipleEvenWithSingleRegisterOrCoil: false
+                                  writeMaxTries: 1
+                        items:
+                          YamlWritable:
+                            type: Number
+                            channel: modbus:poller2:yaml-endpoint:holding:writable
+                        """);
+                ChannelUID channelUID = new ChannelUID(POLLER_UID, "writable");
+                waitForAssert(() -> {
+                    Thing poller = requireNonNull(thingRegistry.get(POLLER_UID));
+                    assertEquals(ThingStatus.ONLINE, poller.getStatus());
+                    assertNotNull(poller.getHandler());
+                    assertNotNull(linkRegistry.get(new ItemChannelLink("YamlWritable", channelUID).getUID()));
+                    assertNotNull(itemRegistry.get("YamlWritable"));
+                });
+                eventPublisher.post(ItemEventFactory.createCommandEvent("YamlWritable", new DecimalType("12.3")));
+                eventPublisher.post(ItemEventFactory.createCommandEvent("YamlWritable", new DecimalType("45.6")));
+                replies.get(10, TimeUnit.SECONDS);
+            } finally {
+                Socket socket = connection.get();
+                if (socket != null) {
+                    socket.close();
+                }
+                server.close();
+                executor.shutdownNow();
+                assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
+            }
+        }
+    }
+
     private void loadYaml(String yaml) throws IOException {
         Files.writeString(yamlFile, yaml);
         yamlRepository.processWatchEvent(WatchService.Kind.CREATE, yamlFile);
