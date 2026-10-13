@@ -465,12 +465,26 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
      * If data or error was just recently received (i.e. cache is fresh), return the cached response.
      */
     public void refresh() {
+        RefreshContext context = prepareRefresh();
+        if (context != null) {
+            // Transport submission must not hold the lifecycle monitor: synchronous callbacks may acquire other locks.
+            context.communication().submitOneTimePoll(context.request(), context.callbacks(), context.callbacks());
+        }
+    }
+
+    private record RefreshContext(ModbusReadRequestBlueprint request, ModbusCommunicationInterface communication,
+            ReadCallbackDelegator callbacks) {
+    }
+
+    private synchronized @Nullable RefreshContext prepareRefresh() {
         ModbusReadRequestBlueprint localRequest = this.request;
-        if (localRequest == null) {
-            return;
+        ModbusCommunicationInterface localComms = comms;
+        ReadCallbackDelegator localCallbacks = callbackDelegator;
+        if (localRequest == null || localComms == null || disposed || hasConfigurationError()) {
+            return null;
         }
         ModbusRegisterArray possiblyMutatedCache = lastPolledDataCache.get();
-        AtomicStampedValue<PollResult> lastPollResult = callbackDelegator.lastResult;
+        AtomicStampedValue<PollResult> lastPollResult = localCallbacks.lastResult;
         if (lastPollResult != null && possiblyMutatedCache != null) {
             AsyncModbusReadResult lastSuccessfulPollResult = lastPollResult.getValue().result;
             if (lastSuccessfulPollResult != null) {
@@ -479,27 +493,22 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                 if (lastRegisters != null && !possiblyMutatedCache.equals(lastRegisters)) {
                     // Register has been mutated in between by a data thing that writes "individual bits"
                     // Invalidate cache for a fresh poll
-                    callbackDelegator.resetCache();
+                    localCallbacks.resetCache();
                 }
             }
         }
 
         long oldDataThreshold = System.currentTimeMillis() - cacheMillis;
         boolean cacheWasRecentEnoughForUpdate = cacheMillis > 0
-                && this.callbackDelegator.updateChildrenWithOldData(oldDataThreshold);
+                && localCallbacks.updateChildrenWithOldData(oldDataThreshold);
         if (cacheWasRecentEnoughForUpdate) {
             logger.debug(
                     "Poller {} received refresh() and cache was recent enough (age at most {} ms). Reusing old response",
                     getThing().getUID(), cacheMillis);
-        } else {
-            // cache expired, poll new data
-            logger.debug("Poller {} received refresh() but the cache is not applicable. Polling new data",
-                    getThing().getUID());
-            ModbusCommunicationInterface localComms = comms;
-            if (localComms != null) {
-                localComms.submitOneTimePoll(localRequest, callbackDelegator, callbackDelegator);
-            }
+            return null;
         }
+        // Captured callbacks reject results if this context is superseded before submission.
+        return new RefreshContext(localRequest, localComms, localCallbacks);
     }
 
     /**
