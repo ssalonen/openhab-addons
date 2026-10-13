@@ -232,6 +232,61 @@ public class ModbusPoller2ThingHandlerTest {
         fixture.handler.dispose();
     }
 
+    @Test
+    public void observesOnlyFreshDecodedUnlinkedCandidatePolls() throws EndpointNotInitializedException {
+        LifecycleFixture fixture = new LifecycleFixture();
+        fixture.handler.initialize();
+        org.junit.jupiter.api.Assertions.assertTrue(fixture.handler.getObservation().isEmpty());
+        java.time.Instant stagedAt = java.time.Instant.now();
+        fixture.pollRegisters(42);
+        var observed = fixture.handler.getObservation().orElseThrow();
+        assertEquals(fixture.handler.getThing().getUID(), observed.thingUID());
+        assertEquals(new org.openhab.core.library.types.DecimalType(42), observed.states().get(fixture.channelUID));
+        org.junit.jupiter.api.Assertions.assertFalse(observed.observedAt().isBefore(stagedAt));
+        org.junit.jupiter.api.Assertions.assertFalse(observed.configurationSignature().isBlank());
+        org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
+                () -> observed.states().clear());
+        org.mockito.Mockito.clearInvocations(fixture.callback);
+        fixture.handler.handleCommand(fixture.channelUID, RefreshType.REFRESH);
+        verify(fixture.callback).stateUpdated(fixture.channelUID, new org.openhab.core.library.types.DecimalType(42));
+        assertEquals(observed, fixture.handler.getObservation().orElseThrow());
+        fixture.handler.dispose();
+    }
+
+    @Test
+    public void clearsCandidateObservationAcrossLifecycles() throws EndpointNotInitializedException {
+        LifecycleFixture fixture = new LifecycleFixture();
+        fixture.handler.initialize();
+        fixture.pollRegisters(42);
+        var old = fixture.handler.getObservation().orElseThrow();
+        fixture.handler.initialize();
+        org.junit.jupiter.api.Assertions.assertTrue(fixture.handler.getObservation().isEmpty());
+        fixture.pollRegisters(43);
+        var fresh = fixture.handler.getObservation().orElseThrow();
+        org.junit.jupiter.api.Assertions.assertNotEquals(old.generation(), fresh.generation());
+        assertEquals(new org.openhab.core.library.types.DecimalType(43), fresh.states().get(fixture.channelUID));
+        fixture.handler.dispose();
+        org.junit.jupiter.api.Assertions.assertTrue(fixture.handler.getObservation().isEmpty());
+    }
+
+    @Test
+    public void clearsCandidateObservationOnReadFailure() throws EndpointNotInitializedException {
+        LifecycleFixture fixture = new LifecycleFixture();
+        fixture.handler.initialize();
+        fixture.pollRegisters(42);
+        var failures = ArgumentCaptor.forClass(org.openhab.core.io.transport.modbus.ModbusFailureCallback.class);
+        verify(fixture.communication).registerRegularPoll(any(), org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyLong(), any(), failures.capture());
+        var failure = mock(org.openhab.core.io.transport.modbus.AsyncModbusFailure.class);
+        org.mockito.Mockito.when(failure.getCause()).thenReturn(new IllegalStateException("read failure"));
+        failures.getValue().handle(failure);
+        org.junit.jupiter.api.Assertions.assertTrue(fixture.handler.getObservation().isEmpty());
+        fixture.pollRegisters(43);
+        assertEquals(new org.openhab.core.library.types.DecimalType(43),
+                fixture.handler.getObservation().orElseThrow().states().get(fixture.channelUID));
+        fixture.handler.dispose();
+    }
+
     private static class LifecycleFixture {
         final ChannelUID channelUID = new ChannelUID("modbus:poller2:poller2:value");
         final org.openhab.core.io.transport.modbus.ModbusCommunicationInterface communication = mock(

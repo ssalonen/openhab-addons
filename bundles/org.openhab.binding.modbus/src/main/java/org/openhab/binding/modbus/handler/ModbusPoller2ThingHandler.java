@@ -12,6 +12,7 @@
  */
 package org.openhab.binding.modbus.handler;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -37,10 +38,11 @@ import org.openhab.binding.modbus.internal.handler.Poller2WriteChannelConfigurat
 import org.openhab.binding.modbus.internal.handler.Poller2WriteRequest;
 import org.openhab.binding.modbus.internal.handler.Poller2WriteResult;
 import org.openhab.binding.modbus.internal.handler.PollerRegisterCache;
+import org.openhab.binding.modbus.migration.Poller2Observation;
+import org.openhab.binding.modbus.migration.Poller2ObservationCollector;
 import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
 import org.openhab.core.io.transport.modbus.AsyncModbusReadResult;
 import org.openhab.core.io.transport.modbus.AsyncModbusWriteResult;
-import org.openhab.core.io.transport.modbus.BitArray;
 import org.openhab.core.io.transport.modbus.ModbusCommunicationInterface;
 import org.openhab.core.io.transport.modbus.ModbusReadRequestBlueprint;
 import org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprint;
@@ -55,6 +57,7 @@ import org.openhab.core.thing.binding.builder.ThingBuilder;
 import org.openhab.core.thing.type.ChannelTypeUID;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
+import org.openhab.core.types.State;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,6 +78,8 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
     private final PollerRegisterCache registerCache = new PollerRegisterCache();
     private volatile int pollStart;
     private long writeGeneration;
+    private final Poller2ObservationCollector observations = new Poller2ObservationCollector();
+    private long observationGeneration;
 
     public ModbusPoller2ThingHandler(Bridge bridge, ModbusChannelTypeProvider channelTypeProvider) {
         super(bridge);
@@ -168,6 +173,8 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
     public synchronized void dispose() {
         writeGeneration++;
         registerCache.invalidate();
+        observations.invalidate();
+        observationGeneration = 0;
         super.dispose();
     }
 
@@ -277,22 +284,36 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
 
     @Override
     protected void onPollResult(AsyncModbusReadResult result, boolean cached) {
+        Instant observedAt = Instant.now();
+        if (!cached && observationGeneration == 0) {
+            observationGeneration = observations.beginLifecycle(getThing());
+        }
+        long generation = observationGeneration;
+        Map<ChannelUID, State> states = new LinkedHashMap<>();
         if (!cached) {
             result.getRegisters().ifPresent(registers -> registerCache.acceptSuccessfulPoll(pollStart, registers));
         }
         result.getRegisters().ifPresent(registers -> channels
-                .forEach((uid, channel) -> updateState(uid, channel.acceptRegisters(registers, pollStart))));
+                .forEach((uid, channel) -> states.put(uid, channel.acceptRegisters(registers, pollStart))));
         result.getRegisters().ifPresent(registers -> rawChannels
-                .forEach((uid, channel) -> updateState(uid, channel.acceptRegisters(registers, pollStart))));
-        result.getBits().ifPresent(bits -> updateBitChannels(bits));
+                .forEach((uid, channel) -> states.put(uid, channel.acceptRegisters(registers, pollStart))));
+        result.getBits().ifPresent(
+                bits -> bitChannels.forEach((uid, channel) -> states.put(uid, channel.acceptBits(bits, pollStart))));
+        if (!cached) {
+            observations.record(generation, observedAt, states);
+        }
+        states.forEach(this::updateState);
     }
 
-    private void updateBitChannels(BitArray bits) {
-        bitChannels.forEach((uid, channel) -> updateState(uid, channel.acceptBits(bits, pollStart)));
+    /** Returns fresh decoded channel states without requiring Item-channel links. */
+    public Optional<Poller2Observation> getObservation() {
+        return observations.getObservation();
     }
 
     @Override
     protected void onPollFailure(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+        observations.invalidate();
+        observationGeneration = 0;
         channels.forEach((uid, channel) -> updateState(uid, channel.acceptReadFailure()));
         bitChannels.forEach((uid, channel) -> updateState(uid, channel.acceptReadFailure()));
         rawChannels.forEach((uid, channel) -> updateState(uid, channel.acceptReadFailure()));
