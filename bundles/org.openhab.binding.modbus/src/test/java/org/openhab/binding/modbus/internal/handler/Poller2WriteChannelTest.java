@@ -105,6 +105,19 @@ public class Poller2WriteChannelTest {
     }
 
     @Test
+    public void fullRegisterWriteInvalidatesOverlayImage() {
+        PollerRegisterCache cache = new PollerRegisterCache();
+        cache.acceptSuccessfulPoll(100, new ModbusRegisterArray(0));
+        Poller2WriteChannel word = new Poller2WriteChannel(100, ValueType.UINT16, List.of("default"), 2, false);
+        Poller2WriteChannel bit = new Poller2WriteChannel(100, 3, List.of("default"), 2, false);
+
+        assertTrue(word.requestFor(new org.openhab.core.library.types.DecimalType(7), 9, cache).isPresent());
+        assertTrue(bit.requestFor(OnOffType.ON, 9, cache).isEmpty());
+        cache.acceptSuccessfulPoll(100, new ModbusRegisterArray(7));
+        assertTrue(bit.requestFor(OnOffType.ON, 9, cache).isPresent());
+    }
+
+    @Test
     public void refusesHoldingRegisterBitWriteWithoutSuccessfulPoll() {
         Poller2WriteChannel channel = new Poller2WriteChannel(100, 3, List.of("default"), 2, false);
 

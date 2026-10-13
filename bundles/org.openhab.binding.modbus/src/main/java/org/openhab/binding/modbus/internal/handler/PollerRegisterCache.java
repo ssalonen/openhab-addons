@@ -29,6 +29,10 @@ public final class PollerRegisterCache {
     private int start;
     private @Nullable ModbusRegisterArray registers;
 
+    public synchronized void invalidate() {
+        registers = null;
+    }
+
     public synchronized void acceptSuccessfulPoll(int start, ModbusRegisterArray registers) {
         this.start = start;
         this.registers = registers;

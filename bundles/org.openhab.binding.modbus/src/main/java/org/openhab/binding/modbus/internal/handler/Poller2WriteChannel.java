@@ -104,6 +104,9 @@ public final class Poller2WriteChannel {
         }
         try {
             ModbusRegisterArray registers = ModbusBitUtilities.commandToRegisters(transformed.get(), valueType);
+            if (registerCache != null) {
+                registerCache.invalidate();
+            }
             return Optional.of(new ModbusWriteRegisterRequestBlueprint(slaveId, address, registers,
                     effectiveWriteMultiple || registers.size() > 1, maxTries));
         } catch (IllegalArgumentException e) {
