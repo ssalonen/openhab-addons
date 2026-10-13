@@ -119,6 +119,28 @@ public class ModbusPoller2ThingHandlerTest {
         org.mockito.Mockito.verifyNoInteractions(fixture.communication);
     }
 
+    @Test
+    public void ignoresWriteCallbacksAfterReinitialization() throws EndpointNotInitializedException {
+        LifecycleFixture fixture = new LifecycleFixture();
+        fixture.handler.initialize();
+        fixture.handler.handleCommand(fixture.channelUID, new org.openhab.core.library.types.DecimalType(7));
+        ArgumentCaptor<org.openhab.core.io.transport.modbus.ModbusWriteCallback> responses = ArgumentCaptor
+                .forClass(org.openhab.core.io.transport.modbus.ModbusWriteCallback.class);
+        ArgumentCaptor<org.openhab.core.io.transport.modbus.ModbusFailureCallback> failures = ArgumentCaptor
+                .forClass(org.openhab.core.io.transport.modbus.ModbusFailureCallback.class);
+        verify(fixture.communication).submitOneTimeWrite(any(), responses.capture(), failures.capture());
+        fixture.handler.dispose();
+        fixture.handler.initialize();
+        org.mockito.Mockito.clearInvocations(fixture.callback, fixture.communication);
+
+        responses.getValue().handle(mock(org.openhab.core.io.transport.modbus.AsyncModbusWriteResult.class));
+        var failure = mock(org.openhab.core.io.transport.modbus.AsyncModbusFailure.class);
+        org.mockito.Mockito.when(failure.getCause()).thenReturn(new IllegalStateException("old write"));
+        failures.getValue().handle(failure);
+
+        org.mockito.Mockito.verifyNoInteractions(fixture.callback, fixture.communication);
+    }
+
     private static class LifecycleFixture {
         final ChannelUID channelUID = new ChannelUID("modbus:poller2:poller2:value");
         final org.openhab.core.io.transport.modbus.ModbusCommunicationInterface communication = mock(

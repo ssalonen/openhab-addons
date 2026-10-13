@@ -73,6 +73,7 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
     private volatile Map<ChannelUID, Poller2WriteChannel> writeChannels = Map.of();
     private final PollerRegisterCache registerCache = new PollerRegisterCache();
     private volatile int pollStart;
+    private long writeGeneration;
 
     public ModbusPoller2ThingHandler(Bridge bridge, ModbusChannelTypeProvider channelTypeProvider) {
         super(bridge);
@@ -162,6 +163,12 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
         super.initialize();
     }
 
+    @Override
+    public synchronized void dispose() {
+        writeGeneration++;
+        super.dispose();
+    }
+
     private void applyGeneratedChannelTypes() {
         List<Channel> channels = getThing().getChannels();
         List<Channel> generatedChannels = channels.stream().map(this::withGeneratedChannelType).toList();
@@ -188,6 +195,7 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
         }
         ModbusCommunicationInterface communication;
         Optional<ModbusWriteRequestBlueprint> writeRequest;
+        long generation;
         synchronized (this) {
             Poller2WriteChannel writeChannel = writeChannels.get(channelUID);
             ModbusReadRequestBlueprint readRequest = getRequest();
@@ -195,11 +203,13 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
             if (writeChannel == null || readRequest == null || communication == null) {
                 return;
             }
+            generation = writeGeneration;
             writeRequest = writeChannel.requestFor(command, readRequest.getUnitID(), registerCache);
         }
         writeRequest.ifPresent(request -> {
             logger.trace("Submitting poller2 write task {}", request);
-            communication.submitOneTimeWrite(request, this::onWriteResponse, this::onWriteFailure);
+            communication.submitOneTimeWrite(request, result -> onWriteResponse(generation, result),
+                    failure -> onWriteFailure(generation, failure));
         });
     }
 
@@ -212,6 +222,7 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
     public Poller2WriteResult submitActionWrite(Poller2WriteRequest actionRequest) {
         ModbusCommunicationInterface communication;
         Optional<ModbusWriteRequestBlueprint> writeRequest;
+        long generation;
         synchronized (this) {
             Poller2WriteChannel writeChannel = writeChannels.entrySet().stream()
                     .filter(entry -> entry.getKey().getId().equals(actionRequest.channelId())).map(Map.Entry::getValue)
@@ -228,6 +239,7 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
             if (readRequest == null || communication == null) {
                 return Poller2WriteResult.NOT_READY;
             }
+            generation = writeGeneration;
             writeRequest = writeChannel.requestFor(actionRequest.command(), readRequest.getUnitID(), registerCache,
                     actionRequest.writeMultiple());
             if (writeRequest.isEmpty()) {
@@ -235,16 +247,23 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
             }
         }
         logger.trace("Submitting poller2 action write task {}", writeRequest.get());
-        communication.submitOneTimeWrite(writeRequest.get(), this::onWriteResponse, this::onWriteFailure);
+        communication.submitOneTimeWrite(writeRequest.get(), result -> onWriteResponse(generation, result),
+                failure -> onWriteFailure(generation, failure));
         return Poller2WriteResult.ACCEPTED;
     }
 
-    private void onWriteResponse(AsyncModbusWriteResult result) {
+    private synchronized void onWriteResponse(long generation, AsyncModbusWriteResult result) {
+        if (generation != writeGeneration) {
+            return;
+        }
         updateStatus(ThingStatus.ONLINE);
         reconcileAfterWrite();
     }
 
-    private void onWriteFailure(AsyncModbusFailure<ModbusWriteRequestBlueprint> failure) {
+    private synchronized void onWriteFailure(long generation, AsyncModbusFailure<ModbusWriteRequestBlueprint> failure) {
+        if (generation != writeGeneration) {
+            return;
+        }
         Exception cause = failure.getCause();
         updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
                 "Error with write: %s: %s".formatted(cause.getClass().getName(), cause.getMessage()));
