@@ -17,6 +17,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -133,8 +134,8 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
                 parsedChannels.put(channel.getUID(), parsed.channel().orElseThrow());
             } else if (bitPoller) {
                 Poller2BitChannelConfiguration parsed = Poller2BitChannelConfiguration.create(channel.getUID().getId(),
-                        channel.getConfiguration().getProperties(), configuration.getStart(),
-                        configuration.getLength());
+                        channel.getConfiguration().getProperties(), configuration.getStart(), configuration.getLength(),
+                        Objects.requireNonNullElse(channel.getAcceptedItemType(), "Switch"));
                 Optional<String> error = parsed.error();
                 if (error.isPresent()) {
                     configurationErrors.add(error.get());
@@ -166,6 +167,7 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
     @Override
     public synchronized void dispose() {
         writeGeneration++;
+        registerCache.invalidate();
         super.dispose();
     }
 
@@ -270,8 +272,10 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
     }
 
     @Override
-    protected void onPollResult(AsyncModbusReadResult result) {
-        result.getRegisters().ifPresent(registers -> registerCache.acceptSuccessfulPoll(pollStart, registers));
+    protected void onPollResult(AsyncModbusReadResult result, boolean cached) {
+        if (!cached) {
+            result.getRegisters().ifPresent(registers -> registerCache.acceptSuccessfulPoll(pollStart, registers));
+        }
         result.getRegisters().ifPresent(registers -> channels
                 .forEach((uid, channel) -> updateState(uid, channel.acceptRegisters(registers, pollStart))));
         result.getRegisters().ifPresent(registers -> rawChannels

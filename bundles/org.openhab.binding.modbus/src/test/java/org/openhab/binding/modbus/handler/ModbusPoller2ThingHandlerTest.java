@@ -141,6 +141,80 @@ public class ModbusPoller2ThingHandlerTest {
         org.mockito.Mockito.verifyNoInteractions(fixture.callback, fixture.communication);
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = { false, true })
+    public void requiresAFreshPollForBitWritesAfterReinitialization(boolean disposeFirst)
+            throws EndpointNotInitializedException {
+        LifecycleFixture fixture = new LifecycleFixture("holding", "Number",
+                java.util.Map.of("address", "0", "valueType", "uint16", "writeStart", "0.0", "writeValueType", "bit"));
+        fixture.handler.initialize();
+        fixture.pollRegisters(2);
+        if (disposeFirst) {
+            fixture.handler.dispose();
+        }
+        fixture.handler.initialize();
+
+        assertEquals(org.openhab.binding.modbus.internal.handler.Poller2WriteResult.INVALID_COMMAND,
+                fixture.handler.submitActionWrite(org.openhab.binding.modbus.internal.handler.Poller2WriteRequest
+                        .holding("value", org.openhab.core.library.types.OnOffType.ON)));
+        fixture.pollRegisters(4);
+        assertEquals(org.openhab.binding.modbus.internal.handler.Poller2WriteResult.ACCEPTED,
+                fixture.handler.submitActionWrite(org.openhab.binding.modbus.internal.handler.Poller2WriteRequest
+                        .holding("value", org.openhab.core.library.types.OnOffType.ON)));
+        fixture.handler.dispose();
+    }
+
+    @Test
+    public void cachedRefreshPublishesStateWithoutReauthorizingConsumedBitWrites()
+            throws EndpointNotInitializedException {
+        LifecycleFixture fixture = new LifecycleFixture("holding", "Number",
+                java.util.Map.of("address", "0", "valueType", "uint16", "writeStart", "0.0", "writeValueType", "bit"));
+        fixture.handler.initialize();
+        fixture.pollRegisters(2);
+        var command = org.openhab.binding.modbus.internal.handler.Poller2WriteRequest.holding("value",
+                org.openhab.core.library.types.OnOffType.ON);
+        assertEquals(org.openhab.binding.modbus.internal.handler.Poller2WriteResult.ACCEPTED,
+                fixture.handler.submitActionWrite(command));
+        org.mockito.Mockito.clearInvocations(fixture.callback);
+
+        fixture.handler.handleCommand(fixture.channelUID, RefreshType.REFRESH);
+
+        verify(fixture.callback).stateUpdated(fixture.channelUID, new org.openhab.core.library.types.DecimalType(2));
+        verify(fixture.communication, org.mockito.Mockito.never()).submitOneTimePoll(any(), any(), any());
+        assertEquals(org.openhab.binding.modbus.internal.handler.Poller2WriteResult.INVALID_COMMAND,
+                fixture.handler.submitActionWrite(command));
+        fixture.pollRegisters(4);
+        assertEquals(org.openhab.binding.modbus.internal.handler.Poller2WriteResult.ACCEPTED,
+                fixture.handler.submitActionWrite(command));
+        var writes = ArgumentCaptor.forClass(org.openhab.core.io.transport.modbus.ModbusWriteRequestBlueprint.class);
+        verify(fixture.communication, times(2)).submitOneTimeWrite(writes.capture(), any(), any());
+        assertEquals(5, ((org.openhab.core.io.transport.modbus.ModbusWriteRegisterRequestBlueprint) writes.getValue())
+                .getRegisters().getRegister(0));
+        fixture.handler.dispose();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = { "coil", "discrete" })
+    public void publishesContactStatesForAcceptedContactChannels(String type) throws EndpointNotInitializedException {
+        LifecycleFixture fixture = new LifecycleFixture(type, "Contact", java.util.Map.of("address", "0"));
+        fixture.handler.initialize();
+        var reads = ArgumentCaptor.forClass(org.openhab.core.io.transport.modbus.ModbusReadCallback.class);
+        verify(fixture.communication).registerRegularPoll(any(), org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyLong(), reads.capture(), any());
+        var result = mock(org.openhab.core.io.transport.modbus.AsyncModbusReadResult.class);
+        org.mockito.Mockito.when(result.getRegisters()).thenReturn(java.util.Optional.empty());
+        org.mockito.Mockito.when(result.getBits())
+                .thenReturn(java.util.Optional.of(new org.openhab.core.io.transport.modbus.BitArray(true)));
+        reads.getValue().handle(result);
+        verify(fixture.callback).stateUpdated(fixture.channelUID, org.openhab.core.library.types.OpenClosedType.OPEN);
+
+        org.mockito.Mockito.when(result.getBits())
+                .thenReturn(java.util.Optional.of(new org.openhab.core.io.transport.modbus.BitArray(false)));
+        reads.getValue().handle(result);
+        verify(fixture.callback).stateUpdated(fixture.channelUID, org.openhab.core.library.types.OpenClosedType.CLOSED);
+        fixture.handler.dispose();
+    }
+
     private static class LifecycleFixture {
         final ChannelUID channelUID = new ChannelUID("modbus:poller2:poller2:value");
         final org.openhab.core.io.transport.modbus.ModbusCommunicationInterface communication = mock(
@@ -163,14 +237,30 @@ public class ModbusPoller2ThingHandlerTest {
         }
 
         LifecycleFixture() throws EndpointNotInitializedException {
+            this("holding", "Number", java.util.Map.of("address", "0", "valueType", "uint16", "writeStart", "0",
+                    "writeValueType", "uint16"));
+        }
+
+        void pollRegisters(int value) {
+            var reads = ArgumentCaptor.forClass(org.openhab.core.io.transport.modbus.ModbusReadCallback.class);
+            verify(communication, org.mockito.Mockito.atLeastOnce()).registerRegularPoll(any(),
+                    org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), reads.capture(),
+                    any());
+            var result = mock(org.openhab.core.io.transport.modbus.AsyncModbusReadResult.class);
+            org.mockito.Mockito.when(result.getRegisters()).thenReturn(
+                    java.util.Optional.of(new org.openhab.core.io.transport.modbus.ModbusRegisterArray(value)));
+            org.mockito.Mockito.when(result.getBits()).thenReturn(java.util.Optional.empty());
+            reads.getValue().handle(result);
+        }
+
+        LifecycleFixture(String type, String itemType, java.util.Map<String, Object> channelConfiguration)
+                throws EndpointNotInitializedException {
             Bridge bridge = BridgeBuilder.create(ModbusBindingConstantsInternal.THING_TYPE_MODBUS_POLLER2, "poller2")
-                    .withConfiguration(new Configuration(java.util.Map.of("type", "holding", "start", 0, "length", 1,
-                            "refresh", 1000, "cacheMillis", 0)))
-                    .withChannel(ChannelBuilder.create(channelUID).withAcceptedItemType("Number")
+                    .withConfiguration(new Configuration(java.util.Map.of("type", type, "start", 0, "length", 1,
+                            "refresh", 1000, "cacheMillis", Integer.MAX_VALUE)))
+                    .withChannel(ChannelBuilder.create(channelUID).withAcceptedItemType(itemType)
                             .withType(new ChannelTypeUID("modbus", "number"))
-                            .withConfiguration(new Configuration(java.util.Map.of("address", "0", "valueType", "uint16",
-                                    "writeStart", "0", "writeValueType", "uint16")))
-                            .build())
+                            .withConfiguration(new Configuration(channelConfiguration)).build())
                     .build();
             Bridge endpoint = mock(Bridge.class);
             org.openhab.binding.modbus.internal.handler.ModbusTcpThingHandler endpointHandler = mock(

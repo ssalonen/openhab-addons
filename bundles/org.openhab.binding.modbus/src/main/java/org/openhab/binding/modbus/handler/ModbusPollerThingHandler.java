@@ -87,7 +87,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                 }
             }
             logger.debug("Thing {} received response {}", thing.getUID(), result);
-            notifyChildren(result);
+            notifyChildren(result, false);
             if (generation != callbackGeneration || disposed) {
                 return;
             }
@@ -141,12 +141,12 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
             return Optional.ofNullable(this.lastResult).map(result -> result.copyIfStampAfter(oldestStamp))
                     .map(result -> {
                         logger.debug("Thing {} reusing cached data: {}", thing.getUID(), result.getValue());
-                        notifyChildren(result.getValue());
+                        notifyChildren(result.getValue(), true);
                         return true;
                     }).orElse(false);
         }
 
-        private void notifyChildren(PollResult pollResult) {
+        private void notifyChildren(PollResult pollResult, boolean cached) {
             @Nullable
             AsyncModbusReadResult result = pollResult.result;
             @Nullable
@@ -162,7 +162,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                 return;
             }
             if (result != null) {
-                onPollResult(result);
+                onPollResult(result, cached);
             } else if (failure != null) {
                 onPollFailure(failure);
             }
@@ -180,8 +180,9 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
      * Receives a successful poll result after it has been delivered to legacy child handlers.
      *
      * @param result successful Modbus read result
+     * @param cached whether this is a replay rather than a new device response
      */
-    protected void onPollResult(AsyncModbusReadResult result) {
+    protected void onPollResult(AsyncModbusReadResult result, boolean cached) {
         // Subclasses may consume poller-owned channels.
     }
 
