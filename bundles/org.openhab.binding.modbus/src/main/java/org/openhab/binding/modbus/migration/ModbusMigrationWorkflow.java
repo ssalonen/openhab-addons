@@ -23,15 +23,18 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /**
  * Public, opt-in migration workflow. Preview is the only operation that can inspect configuration without a supplied
- * preview identity; staging, validation, cutover, rollback, and cleanup are separate actions. State is runtime-local.
+ * preview identity; staging, validation, cutover, rollback, and cleanup are separate actions. Recovery state is
+ * retained in Core storage when supplied.
  * 
  * @author Sami Salonen - Staged migration and fail-closed validation
+ * @author Sami Salonen - Durable workflow restart recovery and independent revert
  */
 @NonNullByDefault
 public final class ModbusMigrationWorkflow {
     private record Sources(List<LegacyPoller> pollers, List<LegacyData> data) {
     }
 
+    private final MigrationJournal journal;
     private final Map<String, Sources> sources = new HashMap<>();
     private final MigrationValidation validation;
     private final Map<String, Instant> stagedAt = new HashMap<>();
@@ -49,6 +52,29 @@ public final class ModbusMigrationWorkflow {
 
     public ModbusMigrationWorkflow(ModbusMigrationPlanner planner, MigrationApplier applier,
             MigrationValidation validation) {
+        this(planner, applier, validation, new MigrationJournal());
+    }
+
+    ModbusMigrationWorkflow(ModbusMigrationPlanner planner, MigrationApplier applier, MigrationJournal journal) {
+        this(planner, applier, (preview, group, createdAt) -> new MigrationValidation.Observation(preview.identity(),
+                group.sourcePollerUid(), Instant.EPOCH, MigrationValidation.Outcome.UNAVAILABLE), journal);
+    }
+
+    ModbusMigrationWorkflow(ModbusMigrationPlanner planner, MigrationApplier applier, MigrationValidation validation,
+            MigrationJournal journal) {
+        this.journal = journal;
+        for (MigrationJournal.Workflow entry : journal.workflows()) {
+            String identity = entry.preview().identity();
+            previews.put(identity, entry.preview());
+            sources.put(identity, new Sources(entry.pollers(), entry.data()));
+            if (entry.outcome().equals("STAGED")) {
+                applied.add(identity);
+                stagedAt.put(identity, Instant.parse(entry.stagedAt()));
+            } else if (entry.outcome().equals("STAGING") || entry.outcome().equals("RECOVERY")) {
+                recovery.add(identity);
+            }
+            switched.addAll(entry.switched());
+        }
         this.validation = validation;
         this.planner = planner;
         this.applier = applier;
@@ -56,9 +82,21 @@ public final class ModbusMigrationWorkflow {
 
     public synchronized MigrationPreview preview(List<LegacyPoller> pollers, List<LegacyData> dataThings) {
         MigrationPreview preview = planner.preview(pollers, dataThings);
-        previews.put(preview.identity(), preview);
-        sources.putIfAbsent(preview.identity(), new Sources(List.copyOf(pollers), List.copyOf(dataThings)));
+        MigrationJournal.Workflow snapshot = journal.snapshot(new MigrationJournal.Workflow(preview, pollers,
+                dataThings, "PREVIEW", Instant.EPOCH.toString(), List.of()));
+        previews.putIfAbsent(preview.identity(), snapshot.preview());
+        sources.putIfAbsent(preview.identity(), new Sources(snapshot.pollers(), snapshot.data()));
+        if (!applied.contains(preview.identity()) && !recovery.contains(preview.identity())) {
+            save(preview.identity(), "PREVIEW");
+        }
         return preview;
+    }
+
+    private void save(String identity, String outcome) {
+        Sources source = java.util.Objects.requireNonNull(sources.get(identity));
+        journal.workflow(new MigrationJournal.Workflow(java.util.Objects.requireNonNull(previews.get(identity)),
+                source.pollers(), source.data(), outcome, stagedAt.getOrDefault(identity, Instant.EPOCH).toString(),
+                switched.stream().filter(key -> key.startsWith(identity + ":")).sorted().toList()));
     }
 
     public synchronized void apply(String previewIdentity, List<LegacyPoller> pollers, List<LegacyData> dataThings) {
@@ -70,14 +108,20 @@ public final class ModbusMigrationWorkflow {
             if (recovery.contains(previewIdentity)) {
                 throw new IllegalStateException("Stage recovery required; retry rollback");
             }
+            save(previewIdentity, "STAGING");
             try {
                 applier.createTargets(java.util.Objects.requireNonNull(previews.get(previewIdentity)));
             } catch (ManagedModbusMigrationApplier.IncompleteStageException e) {
                 recovery.add(previewIdentity);
+                save(previewIdentity, "RECOVERY");
+                throw e;
+            } catch (RuntimeException e) {
+                save(previewIdentity, "PREVIEW");
                 throw e;
             }
             stagedAt.put(previewIdentity, Instant.now());
             applied.add(previewIdentity);
+            save(previewIdentity, "STAGED");
         }
     }
 
@@ -103,9 +147,8 @@ public final class ModbusMigrationWorkflow {
         MigrationPreview preview = appliedPreview(previewIdentity);
         Sources reviewedSources = java.util.Objects.requireNonNull(sources.get(previewIdentity));
         Set<String> removedLinks = new HashSet<>();
-        preview.groups().stream()
-                .filter(candidate -> switched.contains(previewIdentity + ":" + candidate.sourcePollerUid()))
-                .flatMap(candidate -> candidate.links().stream())
+        preview.groups().stream().flatMap(candidate -> candidate.links().stream())
+                .filter(link -> switched.contains(linkKey(previewIdentity, link)))
                 .forEach(link -> removedLinks.add(link.itemName() + " -> " + link.sourceChannelUid()));
         List<LegacyData> expectedData = reviewedSources.data().stream()
                 .map(data -> new LegacyData(data.uid(), data.pollerUid(), data.configuration(), data.links().stream()
@@ -115,20 +158,37 @@ public final class ModbusMigrationWorkflow {
         if (!expectedIdentity.equals(planner.preview(pollers, dataThings).identity())) {
             throw new IllegalArgumentException("cutover requires the exact, current reviewed source configuration");
         }
-        String key = previewIdentity + ":" + sourcePollerUid;
-        if (switched.contains(key)) {
+        MigrationGroup selected = group(preview, sourcePollerUid);
+        if (!selected.links().isEmpty()
+                && selected.links().stream().allMatch(link -> switched.contains(linkKey(previewIdentity, link)))) {
             return;
         }
         if (validate(previewIdentity, sourcePollerUid).outcome() != MigrationValidation.Outcome.MATCH) {
             throw new IllegalStateException("Fresh candidate validation is not MATCH; cutover unavailable");
         }
-        applier.cutover(preview, group(preview, sourcePollerUid));
-        switched.add(key);
+        applier.cutover(preview, selected);
+        selected.links().forEach(link -> switched.add(linkKey(previewIdentity, link)));
+        save(previewIdentity, "STAGED");
     }
 
     private MigrationGroup group(MigrationPreview preview, String sourcePollerUid) {
         return preview.groups().stream().filter(group -> group.sourcePollerUid().equals(sourcePollerUid)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("unknown reviewed poller group"));
+    }
+
+    private static String linkKey(String identity, MigrationLink link) {
+        return identity + ":" + link.itemName() + " -> " + link.sourceChannelUid();
+    }
+
+    public synchronized void revert(String previewIdentity, String itemName, String sourceChannelUid) {
+        MigrationPreview preview = appliedPreview(previewIdentity);
+        MigrationLink link = preview.groups().stream().flatMap(group -> group.links().stream())
+                .filter(candidate -> candidate.itemName().equals(itemName)
+                        && candidate.sourceChannelUid().equals(sourceChannelUid))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("unknown reviewed Item-channel link"));
+        applier.revertLink(preview, link);
+        switched.remove(linkKey(previewIdentity, link));
+        save(previewIdentity, applied.contains(previewIdentity) ? "STAGED" : "RECOVERY");
     }
 
     public synchronized void rollback(String previewIdentity) {
@@ -138,6 +198,7 @@ public final class ModbusMigrationWorkflow {
         recovery.remove(previewIdentity);
         stagedAt.remove(previewIdentity);
         switched.removeIf(key -> key.startsWith(previewIdentity + ":"));
+        save(previewIdentity, "ROLLED_BACK");
     }
 
     public synchronized void cleanupLegacy(String previewIdentity) {

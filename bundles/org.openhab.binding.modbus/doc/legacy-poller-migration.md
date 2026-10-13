@@ -57,7 +57,7 @@ When that integration is available, explicit cutover removes each eligible legac
 Only empty or exactly `system:default` profile configurations are eligible; other profiles and rule/widget rewrites remain manual.
 The switch is per poller, and legacy Things remain online.
 Source configuration drift or an existing target link refuses the operation.
-A partial switch is compensated; a failed compensation retains an in-memory journal for retry through rollback.
+A partial switch is compensated; failed compensation retains a Core storage journal for explicit revert or rollback, including after a component/runtime restart.
 
 ## Verify live operation
 
@@ -69,7 +69,21 @@ With both configurations still available:
    Do not assume action acceptance means that a device write succeeded.
 1. Check logs and Thing status for configuration or communication errors before considering the migration accepted.
 
-## Roll back or clean up
+## Revert one link, roll back, or clean up
+
+Restore one exact reviewed Item-channel link independently of the other links in its poller group:
+
+```text
+openhab> modbus migrate revert <preview-identity> <item-name> <original-source-channel-uid>
+```
+
+Revert removes only that link's migration-owned replacement and restores the original source link with its exact reviewed profile configuration.
+Other Items and links, staged candidate Things, and online legacy Things are retained.
+It works without candidate validation, even when validation is `UNAVAILABLE` or a partial cutover needs recovery.
+A link changed since migration is refused instead of overwritten; correct the conflict explicitly and retry.
+Repeated revert is harmless once its link recovery record has been resolved.
+
+### Roll back the complete staged migration
 
 If verification fails, restore switched legacy links and remove only migration-owned candidates:
 
@@ -91,7 +105,16 @@ Treat cleanup as a separate, irreversible change: export again immediately befor
 The migration plans safe legacy read topology only.
 It does not automatically convert custom read transforms, write configuration, or JSON-producing write transforms; those appear as manual work and are excluded from generated YAML and apply.
 It never removes legacy resources during preview or apply.
-Preview identities, candidate ownership, and compensation journals are **in memory only** and are lost on console component/runtime restart.
-Durable manifests, restart recovery, independent per-channel revert, full candidate configuration validation, and provider-owned file patches are not implemented.
-Do not rely on console rollback after restart; use your external configuration backup.
+The console requires the official Core `StorageService` and stores its versioned journal in `modbus-migration-journal`.
+Before provider mutation it stores an immutable reviewed source revision/configuration, original links/profiles, target manifest, and write-ahead ownership/link intent.
+Outcomes, staging timestamps, remaining compensation work, and switched link identities are reloaded on component/runtime restart.
+An interrupted stage is recovery-only: retry rollback with its original identity before applying again.
+Rollback will not remove pre-existing or replacement Things with unknown ownership, and it never deletes legacy Things.
+
+Core's public `Storage` API supports `put`/`get`, but has no synchronous flush or transaction API.
+The journal writes and reads back each record before mutation; physical durability follows the selected Core storage backend.
+The standard JSON backend defers disk commits, so abrupt process termination or power loss before its commit may lose recent records.
+Normal component/runtime restart recovery is supported, but a crash-consistent transactional migration is **not** claimed.
+Retain the independent configuration backup and saved preview identity for that failure boundary.
+Full candidate configuration validation and provider-owned file patches are not implemented.
 Generated preview YAML describes the eventual linked configuration; importing it directly is not the unlinked console staging operation.

@@ -25,5 +25,9 @@ public interface MigrationApplier {
         throw new UnsupportedOperationException("cutover unavailable");
     }
 
+    default void revertLink(MigrationPreview preview, MigrationLink link) {
+        throw new UnsupportedOperationException("link revert unavailable");
+    }
+
     void removeLegacy(MigrationPreview preview);
 }

@@ -19,6 +19,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.io.console.Console;
 import org.openhab.core.io.console.extensions.AbstractConsoleCommandExtension;
 import org.openhab.core.io.console.extensions.ConsoleCommandExtension;
+import org.openhab.core.storage.StorageService;
 import org.openhab.core.thing.ManagedThingProvider;
 import org.openhab.core.thing.ThingRegistry;
 import org.openhab.core.thing.link.ItemChannelLinkRegistry;
@@ -30,6 +31,7 @@ import org.osgi.service.component.annotations.Reference;
  * User-facing, explicit Modbus poller migration commands.
  * 
  * @author Sami Salonen - Unlinked staging and fail-closed cutover commands
+ * @author Sami Salonen - Core storage journal and explicit link revert
  */
 @Component(service = ConsoleCommandExtension.class)
 @NonNullByDefault
@@ -39,11 +41,13 @@ public final class ModbusMigrationConsoleCommandExtension extends AbstractConsol
 
     @Activate
     public ModbusMigrationConsoleCommandExtension(@Reference ThingRegistry thingRegistry,
-            @Reference ItemChannelLinkRegistry linkRegistry, @Reference ManagedThingProvider thingProvider) {
+            @Reference ItemChannelLinkRegistry linkRegistry, @Reference ManagedThingProvider thingProvider,
+            @Reference StorageService storageService) {
         super("modbus", "Safe Modbus migration commands.");
         adapter = new ManagedModbusMigrationAdapter(thingRegistry, linkRegistry, thingProvider);
+        MigrationJournal journal = new MigrationJournal(storageService.getStorage("modbus-migration-journal"));
         workflow = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
-                new ManagedModbusMigrationApplier(thingProvider, linkRegistry));
+                new ManagedModbusMigrationApplier(thingProvider, linkRegistry, journal, thingRegistry), journal);
     }
 
     @Override
@@ -58,6 +62,7 @@ public final class ModbusMigrationConsoleCommandExtension extends AbstractConsol
                 case "apply" -> apply(args, console);
                 case "validate" -> validate(args, console);
                 case "cutover" -> cutover(args, console);
+                case "revert" -> revert(args, console);
                 case "rollback" -> rollback(args, console);
                 default -> printUsage(console);
             }
@@ -109,6 +114,16 @@ public final class ModbusMigrationConsoleCommandExtension extends AbstractConsol
         console.println("Eligible reviewed links switched for " + args[3] + "; legacy Things retained.");
     }
 
+    private void revert(String[] args, Console console) {
+        if (args.length != 5) {
+            printUsage(console);
+            return;
+        }
+        workflow.revert(args[2], args[3], args[4]);
+        console.println("Original links and profiles restored for " + args[3] + " -> " + args[4]
+                + "; legacy Things and staged candidates retained.");
+    }
+
     private void rollback(String[] args, Console console) {
         if (args.length != 3) {
             printUsage(console);
@@ -126,6 +141,8 @@ public final class ModbusMigrationConsoleCommandExtension extends AbstractConsol
                         "Report fresh validation; unavailable blocks cutover"),
                 buildCommandUsage("migrate cutover <identity> <source-poller-uid>",
                         "Explicitly replace eligible links after fresh MATCH"),
+                buildCommandUsage("migrate revert <identity> <item-name> <source-channel-uid>",
+                        "Restore original links and profiles; retain candidates and legacy Things"),
                 buildCommandUsage("migrate rollback <identity>",
                         "Restore switched legacy links and remove owned candidates"));
     }
