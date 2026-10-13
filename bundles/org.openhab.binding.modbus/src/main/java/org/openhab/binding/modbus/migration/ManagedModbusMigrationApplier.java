@@ -15,7 +15,9 @@ package org.openhab.binding.modbus.migration;
 import static org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal.THING_TYPE_MODBUS_POLLER2;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.config.core.Configuration;
@@ -27,9 +29,28 @@ import org.openhab.core.thing.binding.builder.ChannelBuilder;
 import org.openhab.core.thing.link.ItemChannelLink;
 import org.openhab.core.thing.link.ItemChannelLinkRegistry;
 
-/** Applies managed targets only and compensates every object created by a failed apply. */
+/**
+ * Stages unlinked managed candidates and journals explicit link switches in memory for compensation.
+ * 
+ * @author Sami Salonen - Unlinked staging and explicit link cutover
+ */
 @NonNullByDefault
 public final class ManagedModbusMigrationApplier implements MigrationApplier {
+    /**
+     * Signals that staging left owned targets which must be removed before another attempt.
+     * 
+     * @author Sami Salonen - Retryable staging recovery
+     */
+    static final class IncompleteStageException extends IllegalStateException {
+        private static final long serialVersionUID = 1L;
+
+        IncompleteStageException(RuntimeException cause) {
+            super("Stage compensation incomplete; retry rollback", cause);
+        }
+    }
+
+    private final Map<String, List<MigrationLink>> switchedLinks = new HashMap<>();
+    private final Map<String, List<ThingUID>> ownedTargets = new HashMap<>();
     private final ManagedThingProvider thingProvider;
     private final ItemChannelLinkRegistry linkRegistry;
 
@@ -41,7 +62,7 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
     @Override
     public void createTargets(MigrationPreview preview) {
         List<ThingUID> createdThings = new ArrayList<>();
-        List<ItemChannelLink> createdLinks = new ArrayList<>();
+        ownedTargets.put(preview.identity(), createdThings);
         try {
             for (MigrationGroup group : preview.groups()) {
                 ThingUID targetUid = new ThingUID(group.targetPollerUid());
@@ -54,20 +75,18 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
                 group.channels().forEach(channel -> builder.withChannel(ChannelBuilder
                         .create(new ChannelUID(targetUid, channel.id())).withAcceptedItemType(channel.itemType())
                         .withConfiguration(new Configuration(channel.configuration())).build()));
-                thingProvider.add(builder.build());
+                // Provider listeners may throw after the add has already changed managed state.
                 createdThings.add(targetUid);
-                for (MigrationLink link : group.links()) {
-                    ItemChannelLink targetLink = new ItemChannelLink(link.itemName(),
-                            new ChannelUID(link.targetChannelUid()), new Configuration(link.configuration()));
-                    linkRegistry.add(targetLink);
-                    createdLinks.add(targetLink);
-                }
+                thingProvider.add(builder.build());
+
             }
         } catch (RuntimeException e) {
             try {
-                remove(createdLinks, createdThings);
+                remove(createdThings);
+                ownedTargets.remove(preview.identity());
             } catch (RuntimeException compensationFailure) {
                 e.addSuppressed(compensationFailure);
+                throw new IncompleteStageException(e);
             }
             throw e;
         }
@@ -75,30 +94,22 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
 
     @Override
     public void removeTargets(MigrationPreview preview) {
-        List<ItemChannelLink> links = new ArrayList<>();
-        List<ThingUID> things = new ArrayList<>();
         for (MigrationGroup group : preview.groups()) {
-            ThingUID targetUid = new ThingUID(group.targetPollerUid());
-            things.add(targetUid);
-            for (MigrationLink link : group.links()) {
-                links.add(new ItemChannelLink(link.itemName(), new ChannelUID(link.targetChannelUid())));
-            }
+            restore(preview.identity() + ":" + group.sourcePollerUid());
         }
-        remove(links, things);
+        List<ThingUID> things = ownedTargets.get(preview.identity());
+        if (things != null) {
+            remove(things);
+            ownedTargets.remove(preview.identity());
+        }
     }
 
-    private void remove(List<ItemChannelLink> links, List<ThingUID> things) {
+    private void remove(List<ThingUID> things) {
         List<RuntimeException> failures = new ArrayList<>();
-        for (ItemChannelLink link : links) {
-            try {
-                linkRegistry.remove(link.getUID());
-            } catch (RuntimeException e) {
-                failures.add(e);
-            }
-        }
-        for (ThingUID thing : things.reversed()) {
+        for (ThingUID thing : new ArrayList<>(things).reversed()) {
             try {
                 thingProvider.remove(thing);
+                things.remove(thing);
             } catch (RuntimeException e) {
                 failures.add(e);
             }
@@ -109,6 +120,66 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
             failures.forEach(failure::addSuppressed);
             throw failure;
         }
+    }
+
+    @Override
+    public void cutover(MigrationPreview preview, MigrationGroup group) {
+        String key = preview.identity() + ":" + group.sourcePollerUid();
+        if (switchedLinks.containsKey(key)) {
+            throw new IllegalStateException("Existing cutover journal; rollback before retry");
+        }
+        for (MigrationLink link : group.links()) {
+            if (!(link.configuration().isEmpty() || link.configuration().equals(Map.of("profile", "system:default")))) {
+                throw new IllegalStateException("Non-default profiles require manual migration");
+            }
+            ItemChannelLink source = linkRegistry.get(sourceLink(link).getUID());
+            if (source == null || !source.getConfiguration().getProperties().equals(link.configuration())) {
+                throw new IllegalStateException("Legacy link changed since review");
+            }
+            if (linkRegistry.get(targetLink(link).getUID()) != null) {
+                throw new IllegalStateException("Refusing existing target link");
+            }
+        }
+        List<MigrationLink> journal = new ArrayList<>();
+        switchedLinks.put(key, journal);
+        try {
+            for (MigrationLink link : group.links()) {
+                journal.add(link);
+                linkRegistry.remove(sourceLink(link).getUID());
+                linkRegistry.add(targetLink(link));
+            }
+        } catch (RuntimeException failure) {
+            try {
+                restore(key);
+            } catch (RuntimeException compensationFailure) {
+                failure.addSuppressed(compensationFailure);
+            }
+            throw failure;
+        }
+    }
+
+    private ItemChannelLink sourceLink(MigrationLink link) {
+        return new ItemChannelLink(link.itemName(), new ChannelUID(link.sourceChannelUid()),
+                new Configuration(link.configuration()));
+    }
+
+    private ItemChannelLink targetLink(MigrationLink link) {
+        return new ItemChannelLink(link.itemName(), new ChannelUID(link.targetChannelUid()),
+                new Configuration(link.configuration()));
+    }
+
+    private void restore(String key) {
+        List<MigrationLink> journal = switchedLinks.get(key);
+        if (journal == null) {
+            return;
+        }
+        for (MigrationLink link : new ArrayList<>(journal).reversed()) {
+            // Never restore production legacy delivery while target removal is still failing.
+            linkRegistry.remove(targetLink(link).getUID());
+            linkRegistry.add(sourceLink(link));
+            journal.remove(link);
+        }
+        switchedLinks.remove(key);
     }
 
     @Override

@@ -28,7 +28,7 @@ Save the complete console output with the backup.
 Review every target poller, channel, and replacement link, and resolve every `MANUAL:` entry yourself.
 Do not change the legacy source configuration between preview and apply.
 
-## Apply
+## Stage unlinked candidates
 
 Apply exactly the identity returned by the reviewed preview:
 
@@ -36,9 +36,28 @@ Apply exactly the identity returned by the reviewed preview:
 openhab> modbus migrate apply <preview-identity>
 ```
 
-Apply creates the reviewed managed target Things/channels and replacement links.
+Apply stages the reviewed managed target Things/channels **without any production Item links**.
 It does **not** delete legacy Things or legacy links.
 It can refuse an unknown or stale identity; when that happens, generate a new preview and repeat review rather than substituting an identity.
+
+## Validate and explicitly cut over one poller
+
+```text
+openhab> modbus migrate validate <preview-identity> <legacy-poller-uid>
+openhab> modbus migrate cutover <preview-identity> <legacy-poller-uid>
+```
+
+Validation is a separate dependency seam, not a comparison of Item caches.
+In this slice the console has no binding-owned observation provider, so validation reports `UNAVAILABLE` and cutover is blocked.
+There is no force flag, acknowledgement bypass, or automatic link switch in apply.
+An observation integration must compare all planned channels from fresh post-create device polls, verify candidate configuration/lifecycle, and report `MATCH`, `MISMATCH`, or `UNAVAILABLE` with the reviewed identity, poller UID, and timestamp.
+No live-device validation or boundary-coverage claim is made here.
+
+When that integration is available, explicit cutover removes each eligible legacy Item-channel link **before** adding its reviewed replacement.
+Only empty or exactly `system:default` profile configurations are eligible; other profiles and rule/widget rewrites remain manual.
+The switch is per poller, and legacy Things remain online.
+Source configuration drift or an existing target link refuses the operation.
+A partial switch is compensated; a failed compensation retains an in-memory journal for retry through rollback.
 
 ## Verify live operation
 
@@ -52,16 +71,19 @@ With both configurations still available:
 
 ## Roll back or clean up
 
-If verification fails, remove only the generated migration targets and replacement links:
+If verification fails, restore switched legacy links and remove only migration-owned candidates:
 
 ```text
 openhab> modbus migrate rollback <preview-identity>
 ```
 
-Rollback leaves every legacy Thing and link untouched.
+Before cutover, rollback leaves every legacy Thing and link untouched.
+After cutover, it removes owned replacement links before restoring the reviewed legacy links and their eligible profiles.
+If rollback fails, retry the same command before any further migration action.
 
 There is no `cleanupLegacy` console command.
-After successful live verification, clean up legacy Things and links separately through your normal managed-configuration process, using the backup to restore them if needed.
+After successful live verification, disable legacy polling before considering separate deletion through your normal managed-configuration process.
+Retain the backup for restoration.
 Treat cleanup as a separate, irreversible change: export again immediately before it, remove only the legacy resources you reviewed, then verify the surviving `poller2` configuration once more.
 
 ## Scope and limitations
@@ -69,3 +91,7 @@ Treat cleanup as a separate, irreversible change: export again immediately befor
 The migration plans safe legacy read topology only.
 It does not automatically convert custom read transforms, write configuration, or JSON-producing write transforms; those appear as manual work and are excluded from generated YAML and apply.
 It never removes legacy resources during preview or apply.
+Preview identities, candidate ownership, and compensation journals are **in memory only** and are lost on console component/runtime restart.
+Durable manifests, restart recovery, independent per-channel revert, full candidate configuration validation, and provider-owned file patches are not implemented.
+Do not rely on console rollback after restart; use your external configuration backup.
+Generated preview YAML describes the eventual linked configuration; importing it directly is not the unlinked console staging operation.

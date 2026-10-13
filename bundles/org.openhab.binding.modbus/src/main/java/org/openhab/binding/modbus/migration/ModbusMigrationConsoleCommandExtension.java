@@ -26,7 +26,11 @@ import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
-/** User-facing, explicit Modbus poller migration commands. */
+/**
+ * User-facing, explicit Modbus poller migration commands.
+ * 
+ * @author Sami Salonen - Unlinked staging and fail-closed cutover commands
+ */
 @Component(service = ConsoleCommandExtension.class)
 @NonNullByDefault
 public final class ModbusMigrationConsoleCommandExtension extends AbstractConsoleCommandExtension {
@@ -52,6 +56,8 @@ public final class ModbusMigrationConsoleCommandExtension extends AbstractConsol
             switch (args[1]) {
                 case "preview" -> preview(console);
                 case "apply" -> apply(args, console);
+                case "validate" -> validate(args, console);
+                case "cutover" -> cutover(args, console);
                 case "rollback" -> rollback(args, console);
                 default -> printUsage(console);
             }
@@ -77,7 +83,30 @@ public final class ModbusMigrationConsoleCommandExtension extends AbstractConsol
         }
         ManagedModbusMigrationAdapter.Snapshot snapshot = adapter.snapshot();
         workflow.apply(args[2], snapshot.pollers(), snapshot.data());
-        console.println("Migration applied; legacy Things and links were not removed.");
+        console.println("Candidates staged UNLINKED; production links and legacy Things remain unchanged.");
+    }
+
+    private void validate(String[] args, Console console) {
+        if (args.length != 4) {
+            printUsage(console);
+            return;
+        }
+        MigrationValidation.Observation observation = workflow.validate(args[2], args[3]);
+        console.println("Candidate validation: " + observation.outcome() + "; source poller: "
+                + observation.sourcePollerUid() + "; observed at: " + observation.observedAt());
+        if (observation.outcome() == MigrationValidation.Outcome.UNAVAILABLE) {
+            console.println("No fresh binding-owned comparison is available; cutover is blocked (no override).");
+        }
+    }
+
+    private void cutover(String[] args, Console console) {
+        if (args.length != 4) {
+            printUsage(console);
+            return;
+        }
+        ManagedModbusMigrationAdapter.Snapshot snapshot = adapter.snapshot();
+        workflow.cutover(args[2], args[3], snapshot.pollers(), snapshot.data());
+        console.println("Eligible reviewed links switched for " + args[3] + "; legacy Things retained.");
     }
 
     private void rollback(String[] args, Console console) {
@@ -86,13 +115,18 @@ public final class ModbusMigrationConsoleCommandExtension extends AbstractConsol
             return;
         }
         workflow.rollback(args[2]);
-        console.println("Migration targets and replacement links were removed; legacy Things remain untouched.");
+        console.println("Migration-owned targets removed and cutover links restored; legacy Things remain untouched.");
     }
 
     @Override
     public List<String> getUsages() {
         return Arrays.asList(buildCommandUsage("migrate preview", "Show safe targets, manual work, and identity"),
-                buildCommandUsage("migrate apply <identity>", "Create reviewed managed targets and replacement links"),
-                buildCommandUsage("migrate rollback <identity>", "Remove only targets and links created by apply"));
+                buildCommandUsage("migrate apply <identity>", "Stage reviewed managed targets UNLINKED"),
+                buildCommandUsage("migrate validate <identity> <source-poller-uid>",
+                        "Report fresh validation; unavailable blocks cutover"),
+                buildCommandUsage("migrate cutover <identity> <source-poller-uid>",
+                        "Explicitly replace eligible links after fresh MATCH"),
+                buildCommandUsage("migrate rollback <identity>",
+                        "Restore switched legacy links and remove owned candidates"));
     }
 }

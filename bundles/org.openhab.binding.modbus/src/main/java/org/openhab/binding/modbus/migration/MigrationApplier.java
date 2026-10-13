@@ -21,5 +21,9 @@ public interface MigrationApplier {
 
     void removeTargets(MigrationPreview preview);
 
+    default void cutover(MigrationPreview preview, MigrationGroup group) {
+        throw new UnsupportedOperationException("cutover unavailable");
+    }
+
     void removeLegacy(MigrationPreview preview);
 }

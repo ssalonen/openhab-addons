@@ -16,7 +16,7 @@ import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
-/** Source Item-channel link and the compatible replacement link that can be created during apply. */
+/** Source Item-channel link and the compatible replacement link eligible for explicit cutover. */
 @NonNullByDefault
 public record MigrationLink(String itemName, String sourceChannelUid, String targetChannelUid,
         Map<String, Object> configuration) {
