@@ -44,6 +44,29 @@ public class Poller2BitChannelTest {
         assertEquals(expectedState, channel.acceptBits(bits, 100));
     }
 
+    static Stream<Arguments> failedResponsePolicies() {
+        return Stream.of(PollerReadFailurePolicy.values())
+                .flatMap(policy -> Stream.of("Switch", "Contact").flatMap(itemType -> Stream
+                        .of(101, 99, Integer.MIN_VALUE).map(pollStart -> Arguments.of(policy, itemType, pollStart))));
+    }
+
+    @ParameterizedTest
+    @MethodSource("failedResponsePolicies")
+    public void appliesFailurePolicyToShortOrOutOfWindowResponses(PollerReadFailurePolicy policy, String itemType,
+            int pollStart) {
+        Poller2BitChannel channel = new Poller2BitChannel(100, policy, itemType);
+        Object successfulState = "Contact".equals(itemType) ? org.openhab.core.library.types.OpenClosedType.OPEN
+                : OnOffType.ON;
+        Object failedState = policy == PollerReadFailurePolicy.KEEP_LAST ? successfulState : UnDefType.UNDEF;
+
+        assertEquals(UnDefType.UNDEF, channel.acceptBits(new BitArray(false), pollStart));
+        assertEquals(successfulState, channel.acceptBits(new BitArray(true), 100));
+        assertEquals(failedState, channel.acceptBits(new BitArray(false), pollStart));
+        assertEquals(failedState, channel.acceptReadFailure());
+        assertEquals("Contact".equals(itemType) ? org.openhab.core.library.types.OpenClosedType.CLOSED : OnOffType.OFF,
+                channel.acceptBits(new BitArray(false), 100));
+    }
+
     static Stream<Arguments> malformedResponses() {
         return Stream.of(Arguments.of(99, new BitArray(true), UnDefType.UNDEF),
                 Arguments.of(101, new BitArray(true), UnDefType.UNDEF));

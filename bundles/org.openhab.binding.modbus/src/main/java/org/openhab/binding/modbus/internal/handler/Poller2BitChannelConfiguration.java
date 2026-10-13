@@ -54,6 +54,17 @@ public final class Poller2BitChannelConfiguration {
                     .formatted(channelId, valueType));
         }
 
+        Object errorPolicy = configuration.getOrDefault("errorPolicy", "undef");
+        final PollerReadFailurePolicy parsedErrorPolicy;
+        if ("undef".equals(errorPolicy)) {
+            parsedErrorPolicy = PollerReadFailurePolicy.UNDEF;
+        } else if ("keepLast".equals(errorPolicy)) {
+            parsedErrorPolicy = PollerReadFailurePolicy.KEEP_LAST;
+        } else {
+            return error("Channel '%s' has invalid errorPolicy '%s'; expected 'undef' or 'keepLast'"
+                    .formatted(channelId, errorPolicy));
+        }
+
         final int parsedAddress;
         try {
             parsedAddress = Integer.parseInt(addressText);
@@ -69,8 +80,8 @@ public final class Poller2BitChannelConfiguration {
             return error("Channel '%s': Address %d is outside poll window %d..%d".formatted(channelId, parsedAddress,
                     pollStart, pollEnd));
         }
-        return new Poller2BitChannelConfiguration(
-                new Poller2BitChannel(parsedAddress, PollerReadFailurePolicy.UNDEF, itemType), null);
+        return new Poller2BitChannelConfiguration(new Poller2BitChannel(parsedAddress, parsedErrorPolicy, itemType),
+                null);
     }
 
     private static Poller2BitChannelConfiguration error(String message) {

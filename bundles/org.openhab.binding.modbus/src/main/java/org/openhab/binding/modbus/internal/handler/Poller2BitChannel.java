@@ -17,7 +17,6 @@ import org.openhab.core.io.transport.modbus.BitArray;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.OpenClosedType;
 import org.openhab.core.types.State;
-import org.openhab.core.types.UnDefType;
 
 /**
  * Decodes one coil or discrete-input poller-owned Modbus channel.
@@ -44,7 +43,7 @@ public final class Poller2BitChannel {
     public synchronized State acceptBits(BitArray bits, int pollStart) {
         long index = (long) address - pollStart;
         if (index < 0 || index > Integer.MAX_VALUE) {
-            state.acceptSuccessfulState(UnDefType.UNDEF);
+            state.acceptReadFailure();
             return state.currentState();
         }
         try {
@@ -52,7 +51,7 @@ public final class Poller2BitChannel {
             state.acceptSuccessfulState(
                     contact ? (value ? OpenClosedType.OPEN : OpenClosedType.CLOSED) : OnOffType.from(value));
         } catch (IndexOutOfBoundsException e) {
-            state.acceptSuccessfulState(UnDefType.UNDEF);
+            state.acceptReadFailure();
         }
         return state.currentState();
     }

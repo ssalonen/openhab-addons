@@ -38,6 +38,37 @@ public class Poller2BitChannelConfigurationTest {
                 channel.acceptBits(new org.openhab.core.io.transport.modbus.BitArray(false), 100));
     }
 
+    @org.junit.jupiter.api.Test
+    public void honorsKeepLastAfterReadFailure() {
+        Poller2BitChannel channel = Poller2BitChannelConfiguration
+                .create("coil", Map.of("address", "100", "errorPolicy", "keepLast"), 100, 4).channel().orElseThrow();
+        assertEquals(org.openhab.core.library.types.OnOffType.ON,
+                channel.acceptBits(new org.openhab.core.io.transport.modbus.BitArray(true), 100));
+        assertEquals(org.openhab.core.library.types.OnOffType.ON, channel.acceptReadFailure());
+    }
+
+    @ParameterizedTest
+    @MethodSource("undefConfigurations")
+    public void defaultsToUndefAfterReadFailure(Map<String, Object> configuration) {
+        Poller2BitChannel channel = Poller2BitChannelConfiguration.create("coil", configuration, 100, 4).channel()
+                .orElseThrow();
+        assertEquals(org.openhab.core.library.types.OnOffType.ON,
+                channel.acceptBits(new org.openhab.core.io.transport.modbus.BitArray(true), 100));
+        assertEquals(org.openhab.core.types.UnDefType.UNDEF, channel.acceptReadFailure());
+    }
+
+    static Stream<Arguments> undefConfigurations() {
+        return Stream.of(Arguments.of(Map.of("address", "100")),
+                Arguments.of(Map.of("address", "100", "errorPolicy", "undef")));
+    }
+
+    @org.junit.jupiter.api.Test
+    public void rejectsUnknownErrorPolicy() {
+        assertEquals("Channel 'coil' has invalid errorPolicy 'unknown'; expected 'undef' or 'keepLast'",
+                Poller2BitChannelConfiguration
+                        .create("coil", Map.of("address", "100", "errorPolicy", "unknown"), 100, 4).error().orElse(""));
+    }
+
     static Stream<Arguments> invalidConfigurations() {
         return Stream.of(Arguments.of(Map.of(), "Channel 'coil' is missing required configuration 'address'"),
                 Arguments.of(Map.of("address", "100.1"), "Channel 'coil' has invalid bit address '100.1'; expected X"),
