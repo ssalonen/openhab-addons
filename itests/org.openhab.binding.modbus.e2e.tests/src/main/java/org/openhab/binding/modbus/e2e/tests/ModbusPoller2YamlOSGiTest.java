@@ -433,6 +433,145 @@ public class ModbusPoller2YamlOSGiTest extends JavaOSGiTest {
         }
     }
 
+    @Test
+    public void nativeYamlModifyReplacesLinkedChannelStateRoute() throws Exception {
+        ItemRegistry items = getService(ItemRegistry.class);
+        ItemChannelLinkRegistry links = getService(ItemChannelLinkRegistry.class);
+        EventPublisher events = getService(EventPublisher.class);
+        assertNotNull(items);
+        assertNotNull(links);
+        assertNotNull(events);
+        links.waitForCompletedAsyncActivationTasks();
+
+        try (WireFixture wire = new WireFixture()) {
+            useEndpoint(wire.server.getLocalPort());
+            wire.registers.set(new int[] { 41, 73 });
+            loadYaml(routingYaml("original", 100));
+            awaitLink(items, links, "YamlLive", "original");
+            events.post(ItemEventFactory.createCommandEvent("YamlLive", RefreshType.REFRESH));
+            waitForAssert(() -> assertEquals(new DecimalType(41), requireNonNull(items.get("YamlLive")).getState()));
+
+            Files.writeString(yamlFile, routingYaml("replacement", 101));
+            yamlRepository.processWatchEvent(WatchService.Kind.MODIFY, yamlFile);
+            awaitLink(items, links, "YamlLive", "replacement");
+            waitForAssert(() -> {
+                assertNull(requireNonNull(thingRegistry.get(POLLER_UID)).getChannel("original"));
+                assertNull(links.get(new ItemChannelLink("YamlLive", new ChannelUID(POLLER_UID, "original")).getUID()));
+            });
+            // Distinct values after MODIFY rule out the pre-modification state or cached read.
+            wire.registers.set(new int[] { 52, 89 });
+            wire.reads.clear();
+            events.post(ItemEventFactory.createCommandEvent("YamlLive", RefreshType.REFRESH));
+            assertNotNull(wire.reads.poll(10, TimeUnit.SECONDS), "MODIFY must retain an actual FC3 wire read route");
+            waitForAssert(() -> assertEquals(new DecimalType(89), requireNonNull(items.get("YamlLive")).getState(),
+                    "MODIFY must route the replacement register state to the linked Item"));
+        }
+    }
+
+    private void useEndpoint(int port) {
+        thingProvider.update(BridgeBuilder.create(new ThingTypeUID("modbus", "tcp"), ENDPOINT_UID)
+                .withConfiguration(new Configuration(Map.of("host", "127.0.0.1", "port", port))).build());
+    }
+
+    private void awaitLink(ItemRegistry items, ItemChannelLinkRegistry links, String item, String channel) {
+        waitForAssert(() -> {
+            Thing poller = requireNonNull(thingRegistry.get(POLLER_UID));
+            assertEquals(ThingStatus.ONLINE, poller.getStatus());
+            assertNotNull(poller.getHandler());
+            assertNotNull(poller.getChannel(channel));
+            assertNotNull(items.get(item));
+            assertNotNull(links.get(new ItemChannelLink(item, new ChannelUID(POLLER_UID, channel)).getUID()));
+        });
+    }
+
+    private String routingYaml(String channel, int address) {
+        return """
+                version: 1
+                things:
+                  modbus:poller2:yaml-endpoint:holding:
+                    bridge: modbus:tcp:yaml-endpoint
+                    config:
+                      start: 100
+                      length: 2
+                      type: holding
+                      refresh: 0
+                      cacheMillis: 0
+                      maxTries: 1
+                    channels:
+                      %s:
+                        itemType: Number
+                        config:
+                          address: "%d"
+                          valueType: int16
+                items:
+                  YamlLive:
+                    type: Number
+                    channel: modbus:poller2:yaml-endpoint:holding:%s
+                """.formatted(channel, address, channel);
+    }
+
+    private static class WireFixture implements AutoCloseable {
+        private final ServerSocket server;
+        private final ExecutorService executor = Executors.newSingleThreadExecutor();
+        private final AtomicReference<@Nullable Socket> connection = new AtomicReference<>();
+        private final AtomicReference<int[]> registers = new AtomicReference<>(new int[] { 0, 0 });
+        private final java.util.concurrent.BlockingQueue<Integer> reads = new java.util.concurrent.LinkedBlockingQueue<>();
+        private final Future<?> replies;
+        private volatile boolean closed;
+
+        private WireFixture() throws IOException {
+            server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+            server.setSoTimeout(10000);
+            replies = executor.submit(() -> {
+                while (!closed) {
+                    try (Socket socket = server.accept()) {
+                        connection.set(socket);
+                        socket.setSoTimeout(10000);
+                        byte[] request = socket.getInputStream().readNBytes(12);
+                        assertEquals(12, request.length);
+                        assertEquals(0, request[2]);
+                        assertEquals(0, request[3]);
+                        assertEquals(0, request[4]);
+                        assertEquals(6, request[5]);
+                        assertEquals(1, request[6]);
+                        int address = (Byte.toUnsignedInt(request[8]) << 8) | Byte.toUnsignedInt(request[9]);
+                        int value = (Byte.toUnsignedInt(request[10]) << 8) | Byte.toUnsignedInt(request[11]);
+                        assertEquals(3, request[7]);
+                        assertEquals(100, address);
+                        assertEquals(2, value);
+                        int[] data = registers.get();
+                        byte[] response = { request[0], request[1], 0, 0, 0, 7, request[6], 3, 4, (byte) (data[0] >> 8),
+                                (byte) data[0], (byte) (data[1] >> 8), (byte) data[1] };
+                        socket.getOutputStream().write(response);
+                        reads.add(data[1]);
+                        socket.getOutputStream().flush();
+                    } catch (IOException e) {
+                        if (!closed) {
+                            throw e;
+                        }
+                    }
+                }
+                return null;
+            });
+        }
+
+        @Override
+        public void close() throws Exception {
+            closed = true;
+            try {
+                server.close();
+                Socket socket = connection.get();
+                if (socket != null) {
+                    socket.close();
+                }
+                replies.get(10, TimeUnit.SECONDS);
+            } finally {
+                executor.shutdownNow();
+                assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
+            }
+        }
+    }
+
     private void loadYaml(String yaml) throws IOException {
         Files.writeString(yamlFile, yaml);
         yamlRepository.processWatchEvent(WatchService.Kind.CREATE, yamlFile);
