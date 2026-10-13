@@ -120,6 +120,23 @@ public class ModbusPoller2ThingHandlerTest {
     }
 
     @Test
+    public void reconcilesWriteResponsesOutsideTheLifecycleMonitor() throws EndpointNotInitializedException {
+        LifecycleFixture fixture = new LifecycleFixture();
+        fixture.handler.initialize();
+        fixture.handler.handleCommand(fixture.channelUID, new org.openhab.core.library.types.DecimalType(7));
+        var writes = ArgumentCaptor.forClass(org.openhab.core.io.transport.modbus.ModbusWriteCallback.class);
+        verify(fixture.communication).submitOneTimeWrite(any(), writes.capture(), any());
+        org.mockito.Mockito.doAnswer(invocation -> {
+            org.junit.jupiter.api.Assertions.assertFalse(Thread.holdsLock(fixture.handler),
+                    "write reconciliation must not submit transport work under the lifecycle monitor");
+            return null;
+        }).when(fixture.communication).submitOneTimePoll(any(), any(), any());
+        writes.getValue().handle(mock(org.openhab.core.io.transport.modbus.AsyncModbusWriteResult.class));
+        verify(fixture.communication).submitOneTimePoll(any(), any(), any());
+        fixture.handler.dispose();
+    }
+
+    @Test
     public void ignoresWriteCallbacksAfterReinitialization() throws EndpointNotInitializedException {
         LifecycleFixture fixture = new LifecycleFixture();
         fixture.handler.initialize();

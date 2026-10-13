@@ -515,8 +515,18 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
      * Schedules a poll that bypasses the read response cache.
      */
     protected void reconcileAfterWrite() {
+        prepareWriteReconciliation().run();
+    }
+
+    /** Captures a generation-bound reconciliation; callers must run it outside the lifecycle monitor. */
+    protected synchronized Runnable prepareWriteReconciliation() {
         callbackDelegator.resetCache();
-        refresh();
+        RefreshContext context = prepareRefresh();
+        return () -> {
+            if (context != null) {
+                context.communication().submitOneTimePoll(context.request(), context.callbacks(), context.callbacks());
+            }
+        };
     }
 
     public AtomicReference<@Nullable ModbusRegisterArray> getLastPolledDataCache() {

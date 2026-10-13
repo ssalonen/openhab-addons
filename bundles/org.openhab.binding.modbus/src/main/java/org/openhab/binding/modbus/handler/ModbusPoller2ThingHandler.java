@@ -254,12 +254,16 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
         return Poller2WriteResult.ACCEPTED;
     }
 
-    private synchronized void onWriteResponse(long generation, AsyncModbusWriteResult result) {
-        if (generation != writeGeneration) {
-            return;
+    private void onWriteResponse(long generation, AsyncModbusWriteResult result) {
+        Runnable reconciliation;
+        synchronized (this) {
+            if (generation != writeGeneration) {
+                return;
+            }
+            updateStatus(ThingStatus.ONLINE);
+            reconciliation = prepareWriteReconciliation();
         }
-        updateStatus(ThingStatus.ONLINE);
-        reconcileAfterWrite();
+        reconciliation.run();
     }
 
     private synchronized void onWriteFailure(long generation, AsyncModbusFailure<ModbusWriteRequestBlueprint> failure) {
