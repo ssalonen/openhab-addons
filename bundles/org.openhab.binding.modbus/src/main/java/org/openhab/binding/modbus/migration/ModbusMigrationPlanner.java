@@ -100,7 +100,9 @@ public final class ModbusMigrationPlanner {
             return Optional.of("writes require manual migration");
         }
         Object readTransform = configuration.get("readTransform");
-        if (readTransform instanceof String value && !value.isBlank() && !"default".equals(value)) {
+        if (readTransform instanceof String value && !value.isBlank() && !"default".equals(value)
+                || readTransform instanceof List<?> values && (values.size() != 1
+                        || !(values.getFirst() instanceof String text) || !"default".equalsIgnoreCase(text.trim()))) {
             return Optional.of("custom readTransform requires manual migration");
         }
         if (!configuration.containsKey("readStart") || !configuration.containsKey("readValueType")) {

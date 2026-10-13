@@ -26,6 +26,49 @@ class ModbusMigrationPlannerTest {
     private final ModbusMigrationPlanner planner = new ModbusMigrationPlanner();
 
     @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.MethodSource("customReadTransforms")
+    void previewRefusesCustomListReadTransforms(List<?> transforms) {
+        LegacyPoller poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        LegacyData data = new LegacyData("modbus:data:tcp:plant:value", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "int16", "readTransform", transforms),
+                List.of(new LegacyLink("Value", "modbus:data:tcp:plant:value:number", "Number")));
+
+        MigrationPreview preview = planner.preview(List.of(poller), List.of(data));
+
+        assertTrue(preview.groups().isEmpty());
+        assertTrue(preview.impacts().isEmpty());
+        assertEquals(List.of(new ManualMigrationWork(data.uid(), "custom readTransform requires manual migration")),
+                preview.manualWork());
+        assertEquals(transforms, data.configuration().get("readTransform"));
+    }
+
+    private static java.util.stream.Stream<List<?>> customReadTransforms() {
+        return java.util.stream.Stream.of(List.of("JS(scale.js)"), List.of("default", "JS(scale.js)"),
+                List.of("JS(scale.js)", "default"), List.of("17"), List.of(17), List.of(), List.of("", " "),
+                List.of("default", "default"), List.of("", " ", "default"));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.MethodSource("defaultReadTransforms")
+    void previewAcceptsNoOpListReadTransforms(List<String> transforms) {
+        LegacyPoller poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        LegacyData data = new LegacyData("modbus:data:tcp:plant:value", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "int16", "readTransform", transforms), List.of());
+
+        MigrationPreview preview = planner.preview(List.of(poller), List.of(data));
+
+        assertEquals(1, preview.groups().size());
+        assertEquals(Map.of("address", "100", "valueType", "int16"),
+                preview.groups().getFirst().channels().getFirst().configuration());
+        assertTrue(preview.manualWork().isEmpty());
+        assertEquals(transforms, data.configuration().get("readTransform"));
+    }
+
+    private static java.util.stream.Stream<List<String>> defaultReadTransforms() {
+        return java.util.stream.Stream.of(List.of("default"), List.of("DEFAULT"), List.of(" default "));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = { "", "Switch", "Contact", "DateTime", "Dimmer", "String",
             "Rollershutter" })
     void previewRefusesUnprovenTypedChannelConversions(String itemType) {
