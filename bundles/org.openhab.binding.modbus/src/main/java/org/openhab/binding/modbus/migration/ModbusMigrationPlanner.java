@@ -24,8 +24,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 
-/** Builds a deterministic, non-mutating migration plan for legacy poller/data topology. */
+/**
+ * Builds a deterministic, non-mutating migration plan for legacy poller/data topology.
+ *
+ * @author Sami Salonen - Bind preview identity to source and target configuration
+ */
 @NonNullByDefault
 public final class ModbusMigrationPlanner {
 
@@ -77,8 +82,8 @@ public final class ModbusMigrationPlanner {
         impacts.sort(Comparator.comparing(MigrationImpact::sourceChannelUid).thenComparing(MigrationImpact::itemName));
         String yaml = yaml(groups, manualWork);
         String manifestJson = manifest(groups, manualWork, impacts);
-        return new MigrationPreview(identity(manifestJson), groups, manualWork, impacts, yaml, manifestJson,
-                impactReport(impacts));
+        return new MigrationPreview(previewIdentity(sortedPollers, dataThings, groups, manualWork), groups, manualWork,
+                impacts, yaml, manifestJson, impactReport(impacts));
     }
 
     private static Optional<String> unsupportedReason(LegacyData data) {
@@ -205,6 +210,60 @@ public final class ModbusMigrationPlanner {
         return values.entrySet().stream().sorted(Map.Entry.comparingByKey())
                 .map(entry -> "\"" + json(entry.getKey()) + "\":\"" + json(entry.getValue().toString()) + "\"")
                 .collect(java.util.stream.Collectors.joining(",", "{", "}"));
+    }
+
+    private static String previewIdentity(List<LegacyPoller> pollers, List<LegacyData> dataThings,
+            List<MigrationGroup> groups, List<ManualMigrationWork> manualWork) {
+        List<?> sources = pollers.stream().map(poller -> List.of(poller.uid(), poller.bridgeUid(),
+                poller.configuration(), poller.endpointConfigurationIdentity())).toList();
+        List<?> data = dataThings.stream().sorted(Comparator.comparing(LegacyData::uid))
+                .map(thing -> List.of(thing.uid(), thing.pollerUid(), thing.configuration(),
+                        thing.links().stream().map(link -> canonical(
+                                List.of(link.itemName(), link.channelUid(), link.itemType(), link.configuration())))
+                                .sorted().toList()))
+                .toList();
+        List<?> targets = groups.stream().map(group -> {
+            List<?> channels = group.channels().stream().map(channel -> List.of(channel.sourceDataUid(), channel.id(),
+                    channel.itemType(), channel.configuration())).toList();
+            List<?> links = group.links().stream().map(link -> List.of(link.itemName(), link.sourceChannelUid(),
+                    link.targetChannelUid(), link.configuration())).toList();
+            return List.of(group.targetPollerUid(), group.targetBridgeUid(), group.configuration(), channels, links);
+        }).toList();
+        List<?> manual = manualWork.stream().map(work -> List.of(work.sourceUid(), work.reason())).toList();
+        return configurationIdentity(List.of("modbus-migration-preview-v2", sources, data, targets, manual));
+    }
+
+    static String configurationIdentity(Object value) {
+        return identity(canonical(value));
+    }
+
+    // Type tags and length prefixes avoid collisions between strings, scalars, and nested containers.
+    // Only the digest is exposed; endpoint credentials never enter the review artifacts or DTOs.
+    private static String canonical(@Nullable Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof Map<?, ?> map) {
+            return "map" + canonical(map.entrySet().stream()
+                    .map(entry -> List.of(canonical(entry.getKey()), canonical(entry.getValue())))
+                    .sorted(Comparator.comparing(entry -> entry.getFirst())).toList());
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(ModbusMigrationPlanner::canonical)
+                    .collect(java.util.stream.Collectors.joining("", "list" + list.size() + ":", ";"));
+        }
+        String type;
+        if (value instanceof String) {
+            type = "string";
+        } else if (value instanceof Number) {
+            type = "number";
+        } else if (value instanceof Boolean) {
+            type = "boolean";
+        } else {
+            throw new IllegalArgumentException("unsupported migration configuration value type");
+        }
+        String text = value.toString();
+        return type + text.length() + ":" + text;
     }
 
     private static String identity(String manifest) {

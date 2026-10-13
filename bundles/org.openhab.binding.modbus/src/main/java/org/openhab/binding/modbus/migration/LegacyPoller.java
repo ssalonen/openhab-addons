@@ -16,9 +16,14 @@ import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
-/** A legacy Modbus poller and its configuration, captured without mutation. */
+/** A legacy Modbus poller with a digest of its endpoint configuration, never plaintext endpoint credentials. */
 @NonNullByDefault
-public record LegacyPoller(String uid, String bridgeUid, Map<String, Object> configuration) {
+public record LegacyPoller(String uid, String bridgeUid, Map<String, Object> configuration,
+        String endpointConfigurationIdentity) {
+    public LegacyPoller(String uid, String bridgeUid, Map<String, Object> configuration) {
+        this(uid, bridgeUid, configuration, "");
+    }
+
     public LegacyPoller {
         configuration = Map.copyOf(configuration);
     }

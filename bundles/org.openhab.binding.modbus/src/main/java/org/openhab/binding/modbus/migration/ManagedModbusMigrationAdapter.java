@@ -17,6 +17,7 @@ import static org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.thing.ManagedThingProvider;
@@ -26,7 +27,11 @@ import org.openhab.core.thing.ThingUID;
 import org.openhab.core.thing.link.ItemChannelLink;
 import org.openhab.core.thing.link.ItemChannelLinkRegistry;
 
-/** Reads only managed, unprofiled legacy topology from the registries. */
+/**
+ * Reads managed legacy topology and current link profiles from the registries.
+ *
+ * @author Sami Salonen - Capture endpoint configuration identity
+ */
 @NonNullByDefault
 public final class ManagedModbusMigrationAdapter {
     private final ThingRegistry thingRegistry;
@@ -45,29 +50,34 @@ public final class ManagedModbusMigrationAdapter {
         List<LegacyData> data = new ArrayList<>();
         List<ManualMigrationWork> manual = new ArrayList<>();
         for (Thing thing : thingRegistry.getAll()) {
+            ThingUID bridgeUid = thing.getBridgeUID();
             if (THING_TYPE_MODBUS_POLLER.equals(thing.getThingTypeUID())) {
                 if (!managed(thing)) {
                     manual.add(new ManualMigrationWork(thing.getUID().toString(), "legacy Thing is not managed"));
                 } else if (targetExists(thing.getUID())) {
                     manual.add(
                             new ManualMigrationWork(thing.getUID().toString(), "target poller2 Thing already exists"));
-                } else if (thing.getBridgeUID() == null) {
+                } else if (bridgeUid == null) {
                     manual.add(new ManualMigrationWork(thing.getUID().toString(), "legacy poller has no bridge"));
                 } else {
-                    pollers.add(new LegacyPoller(thing.getUID().toString(), thing.getBridgeUID().toString(),
-                            thing.getConfiguration().getProperties()));
+                    Thing endpoint = thingRegistry.get(bridgeUid);
+                    String endpointIdentity = ModbusMigrationPlanner.configurationIdentity(endpoint == null ? Map.of()
+                            : Map.of("type", endpoint.getThingTypeUID().toString(), "configuration",
+                                    endpoint.getConfiguration().getProperties()));
+                    pollers.add(new LegacyPoller(thing.getUID().toString(), bridgeUid.toString(),
+                            thing.getConfiguration().getProperties(), endpointIdentity));
                 }
             } else if (THING_TYPE_MODBUS_DATA.equals(thing.getThingTypeUID())) {
                 if (!managed(thing)) {
                     manual.add(new ManualMigrationWork(thing.getUID().toString(), "legacy Thing is not managed"));
-                } else if (thing.getBridgeUID() == null) {
+                } else if (bridgeUid == null) {
                     manual.add(new ManualMigrationWork(thing.getUID().toString(), "legacy data Thing has no poller"));
-                } else if (!thing.getBridgeUID().toString().startsWith("modbus:poller:")) {
+                } else if (!bridgeUid.toString().startsWith("modbus:poller:")) {
                     manual.add(new ManualMigrationWork(thing.getUID().toString(),
                             "legacy data parent is not a poller; writes require manual migration"));
                 } else {
                     List<LegacyLink> links = links(thing);
-                    data.add(new LegacyData(thing.getUID().toString(), thing.getBridgeUID().toString(),
+                    data.add(new LegacyData(thing.getUID().toString(), bridgeUid.toString(),
                             thing.getConfiguration().getProperties(), links));
                 }
             }

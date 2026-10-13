@@ -21,6 +21,9 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+/**
+ * @author Sami Salonen - Preview identity regression coverage
+ */
 class ModbusMigrationPlannerTest {
 
     private final ModbusMigrationPlanner planner = new ModbusMigrationPlanner();
@@ -66,6 +69,94 @@ class ModbusMigrationPlannerTest {
 
     private static java.util.stream.Stream<List<String>> defaultReadTransforms() {
         return java.util.stream.Stream.of(List.of("default"), List.of("DEFAULT"), List.of(" default "));
+    }
+
+    @Test
+    void identityBindsSourceAndTargetConfiguration() {
+        LegacyPoller poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        LegacyData first = new LegacyData("modbus:data:tcp:plant:value", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "int16"), List.of());
+        LegacyData changed = new LegacyData(first.uid(), poller.uid(),
+                Map.of("readStart", "101", "readValueType", "int16"), List.of());
+        assertFalse(planner.preview(List.of(poller), List.of(first)).identity()
+                .equals(planner.preview(List.of(poller), List.of(changed)).identity()));
+    }
+
+    @Test
+    void identityBindsPollerConfigurationEvenWithoutTargets() {
+        LegacyPoller first = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        LegacyPoller changed = new LegacyPoller(first.uid(), first.bridgeUid(), Map.of("start", 101));
+        assertFalse(planner.preview(List.of(first), List.of()).identity()
+                .equals(planner.preview(List.of(changed), List.of()).identity()));
+    }
+
+    @Test
+    void identityBindsIgnoredSourceConfigurationAndValueTypes() {
+        LegacyPoller poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        LegacyData first = new LegacyData("modbus:data:tcp:plant:value", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "int16", "extra", List.of("a", "b")), List.of());
+        for (Object value : List.of("[a, b]", List.of("b", "a"), List.of("a, b"), 100, "100")) {
+            LegacyData changed = new LegacyData(first.uid(), first.pollerUid(),
+                    Map.of("readStart", "100", "readValueType", "int16", "extra", value), List.of());
+            assertFalse(planner.preview(List.of(poller), List.of(first)).identity()
+                    .equals(planner.preview(List.of(poller), List.of(changed)).identity()));
+        }
+        LegacyData numeric = new LegacyData(first.uid(), first.pollerUid(), Map.of("extra", 100), List.of());
+        LegacyData text = new LegacyData(first.uid(), first.pollerUid(), Map.of("extra", "100"), List.of());
+        assertFalse(planner.preview(List.of(poller), List.of(numeric)).identity()
+                .equals(planner.preview(List.of(poller), List.of(text)).identity()));
+    }
+
+    @Test
+    void identityBindsProfileValueTypesForManualLinks() {
+        LegacyPoller poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        LegacyData numeric = new LegacyData("modbus:data:tcp:plant:value", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "int16"),
+                List.of(new LegacyLink("Value", "modbus:data:tcp:plant:value:number", "Number",
+                        Map.of("profile", "modbus:gain-offset", "gain", 2))));
+        LegacyData text = new LegacyData(numeric.uid(), numeric.pollerUid(), numeric.configuration(),
+                List.of(new LegacyLink("Value", "modbus:data:tcp:plant:value:number", "Number",
+                        Map.of("profile", "modbus:gain-offset", "gain", "2"))));
+        assertFalse(planner.preview(List.of(poller), List.of(numeric)).identity()
+                .equals(planner.preview(List.of(poller), List.of(text)).identity()));
+    }
+
+    @Test
+    void identityIsIndependentOfNestedProfileAndLinkOrder() {
+        LegacyPoller poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        java.util.LinkedHashMap<String, Object> firstOptions = new java.util.LinkedHashMap<>();
+        firstOptions.put("a", 1);
+        firstOptions.put("b", List.of(true, "x"));
+        java.util.LinkedHashMap<String, Object> secondOptions = new java.util.LinkedHashMap<>();
+        secondOptions.put("b", List.of(true, "x"));
+        secondOptions.put("a", 1);
+        LegacyLink first = new LegacyLink("Value", "modbus:data:tcp:plant:value:number", "Number",
+                Map.of("profile", "custom:profile", "options", firstOptions));
+        LegacyLink reordered = new LegacyLink(first.itemName(), first.channelUid(), first.itemType(),
+                Map.of("profile", "custom:profile", "options", secondOptions));
+        LegacyLink second = new LegacyLink("Other", first.channelUid(), "Number");
+        LegacyData data = new LegacyData("modbus:data:tcp:plant:value", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "int16"), List.of(first, second));
+        LegacyData changed = new LegacyData(data.uid(), data.pollerUid(), data.configuration(),
+                List.of(second, reordered));
+        assertEquals(planner.preview(List.of(poller), List.of(data)).identity(),
+                planner.preview(List.of(poller), List.of(changed)).identity());
+    }
+
+    @Test
+    void identityIsIndependentOfSourceAndConfigurationOrder() {
+        LegacyPoller poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        LegacyData first = new LegacyData("modbus:data:tcp:plant:a", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "int16", "extra", Map.of("a", 1, "b", 2)), List.of());
+        LegacyData second = new LegacyData("modbus:data:tcp:plant:b", poller.uid(),
+                Map.of("readStart", "101", "readValueType", "int16"), List.of());
+        java.util.LinkedHashMap<String, Object> configuration = new java.util.LinkedHashMap<>();
+        configuration.put("extra", Map.of("b", 2, "a", 1));
+        configuration.put("readValueType", "int16");
+        configuration.put("readStart", "100");
+        LegacyData reordered = new LegacyData(first.uid(), first.pollerUid(), configuration, List.of());
+        assertEquals(planner.preview(List.of(poller), List.of(first, second)).identity(),
+                planner.preview(List.of(poller), List.of(second, reordered)).identity());
     }
 
     @org.junit.jupiter.params.ParameterizedTest
