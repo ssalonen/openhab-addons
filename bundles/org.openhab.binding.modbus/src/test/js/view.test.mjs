@@ -30,6 +30,59 @@ test('load uses the identity typed by the user rather than the previous review',
   assert.equal(ids.get('identity').value, 'new-review');
 });
 
+test('storage logout clears controls and late requests cannot unlock a new session operation', async () => {
+  for (const operation of ['refresh', 'preview', 'stage']) {
+    class Element {
+      constructor() { this.value = ''; this.handlers = {}; this.children = []; }
+      addEventListener(name, fn) { this.handlers[name] = fn; }
+      append(...children) { this.children.push(...children); }
+      replaceChildren(...children) { this.children = children; }
+    }
+    const ids = new Map();
+    const handlers = {};
+    let session = 'first';
+    let delay = false;
+    const pending = [];
+    globalThis.document = {cookie:'', getElementById: id => { if (!ids.has(id)) ids.set(id,new Element()); return ids.get(id); }, createElement: () => new Element()};
+    globalThis.window = {addEventListener: (name, fn) => { handlers[name] = fn; }};
+    globalThis.location = {origin:'https://openhab.test'};
+    globalThis.localStorage = {getItem: () => session};
+    globalThis.confirm = () => true;
+    const review = {preview:{identity:'review',groups:[],impacts:[],manualWork:[],yaml:'privileged yaml'},status:'PREVIEW'};
+    const result = url => new Response(JSON.stringify(url.endsWith('previews') ? {plan:review.preview,manualWork:[{sourceUid:'private',reason:'secret'}]} : review));
+    globalThis.fetch = async url => {
+      if (url === '/rest/auth/token') return new Response(JSON.stringify({access_token:session,expires_in:60}));
+      if (!delay) return result(url);
+      return new Promise(resolve => pending.push({url, resolve}));
+    };
+    await import(new URL(`app.mjs?logout-${operation}`,base));
+    await ids.get('preview').handlers.click();
+    delay = true;
+    const old = ids.get(operation).handlers.click();
+    for (let i = 0; i < 30 && pending.length < 1; i++) await Promise.resolve();
+    assert.equal(pending.length, 1);
+    session = null; handlers.storage({key:'openhab.ui:refreshToken'});
+    assert.equal(ids.get('stage').disabled, true);
+    assert.equal(ids.get('summary').children.length, 0);
+    assert.equal(ids.get('manual').children.length, 1);
+    assert.equal(ids.get('preview').disabled, false);
+    session = 'second'; handlers.storage({key:'openhab.ui:refreshToken'});
+    const newer = ids.get('preview').handlers.click();
+    for (let i = 0; i < 30 && pending.length < 2; i++) await Promise.resolve();
+    assert.equal(pending.length, 2);
+    pending[0].resolve(result(pending[0].url)); await old;
+    assert.equal(ids.get('preview').disabled, true, 'old finally must not clear new busy state');
+    assert.equal(ids.get('summary').children.length, 0);
+    assert.equal(ids.get('stage').disabled, true);
+    session = null; handlers.storage({key:null});
+    pending[1].resolve(result(pending[1].url)); await newer;
+    assert.equal(pending.length, 2, 'no stale follow-up GET or POST replay');
+    assert.equal(ids.get('stage').disabled, true);
+    assert.equal(ids.get('yaml').textContent, 'No reviewed plan loaded.');
+    assert.match(ids.get('status').textContent, /session changed/);
+  }
+});
+
 test('view provides labelled review, group and recovery controls without inline scripts', async () => {
   const html = await readFile(new URL('index.html', base), 'utf8');
   for (const id of ['preview','identity','refresh','stage','groups','impacts','yaml','manual','rollback','status','error'])

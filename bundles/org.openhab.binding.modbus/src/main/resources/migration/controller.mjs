@@ -6,38 +6,67 @@ export function cutoverBlockReason(report) {
 }
 export function createController({ auth, fetch = globalThis.fetch }) {
   const state = { identity: '', report: null, manualWork: [], busy: false, uncertain: false };
-  async function request(path, method = 'GET', body) {
+  let generation = 0;
+  let session = auth.sessionVersion?.();
+  function invalidateSession() {
+    generation++;
+    session = auth.sessionVersion?.();
+    Object.assign(state, { identity: '', report: null, manualWork: [], busy: false, uncertain: false });
+  }
+  function context() {
+    if (auth.sessionVersion?.() !== session) invalidateSession();
+    return { generation, session };
+  }
+  function current(capture) {
+    if (auth.sessionVersion?.() !== session) invalidateSession();
+    return capture.generation === generation && capture.session === session;
+  }
+  function check(capture) {
+    if (!current(capture)) throw new Error('Main UI session changed. Refetch the workflow before making changes.');
+  }
+  async function request(capture, path, method = 'GET', body) {
     const headers = await auth.headers();
+    check(capture);
     let response;
     try {
       response = await fetch(`/rest/modbus/migration/${path}`, {method,
         headers: { ...headers, ...(body === undefined ? {} : {'Content-Type':'application/json'}) },
         ...(body === undefined ? {} : {body: JSON.stringify(body)}), credentials:'same-origin', cache:'no-store'});
-    } catch { throw new Error('Network request failed.'); }
+    } catch { check(capture); throw new Error('Network request failed.'); }
+    check(capture);
     if (response.status === 401) { auth.invalidate(); throw new Error('Session expired. Sign in again in Main UI.'); }
     if (response.status === 403) throw new Error('Forbidden: administrator access is required.');
     if (!response.ok) throw new Error(`Operation refused (HTTP ${response.status}).`);
-    try { return await response.json(); } catch { throw new Error('Invalid backend response.'); }
+    let data;
+    try { data = await response.json(); } catch { check(capture); throw new Error('Invalid backend response.'); }
+    check(capture);
+    return data;
   }
-  async function refresh() {
+  async function refresh(capture = context()) {
+    check(capture);
     if (!state.identity) throw new Error('Select a reviewed identity first.');
     state.report = null;
-    state.report = await request(`workflows/${encodeURIComponent(state.identity)}`);
+    const report = await request(capture, `workflows/${encodeURIComponent(state.identity)}`);
+    check(capture);
+    state.report = report;
     state.uncertain = false;
     return state.report;
   }
   async function preview() {
+    const capture = context();
     if (state.busy) throw new Error('An operation is already in progress.');
     state.busy = true;
     try {
-      const capture = await request('previews', 'POST');
-      state.identity = capture.plan.identity;
-      state.manualWork = capture.manualWork || [];
+      const review = await request(capture, 'previews', 'POST');
+      check(capture);
+      state.identity = review.plan.identity;
+      state.manualWork = review.manualWork || [];
       state.report = null;
-      await refresh();
-    } finally { state.busy = false; }
+      await refresh(capture);
+    } finally { if (current(capture)) state.busy = false; }
   }
   async function mutate(operation, body = {}, confirmed = false) {
+    const capture = context();
     if (!confirmed) throw new Error('Explicit confirmation is required.');
     if (!state.identity || !state.report || state.uncertain) throw new Error('Refetch the workflow before making changes.');
     if (state.busy) throw new Error('An operation is already in progress.');
@@ -47,14 +76,18 @@ export function createController({ auth, fetch = globalThis.fetch }) {
       throw new Error('Select an explicit reviewed poller group.');
     state.busy = true;
     try {
-      state.report = await request(`workflows/${encodeURIComponent(state.identity)}/${operation}`, 'POST', body);
-      await refresh();
+      const report = await request(capture, `workflows/${encodeURIComponent(state.identity)}/${operation}`, 'POST', body);
+      check(capture);
+      state.report = report;
+      await refresh(capture);
     } catch (error) {
-      state.uncertain = true;
-      // GET reconciliation is safe; never replay the POST, even after obtaining a new token.
-      try { await refresh(); } catch { state.report = null; }
+      if (current(capture)) {
+        state.uncertain = true;
+        // GET reconciliation is safe; never replay the POST, even after obtaining a new token.
+        try { await refresh(capture); } catch { if (current(capture)) state.report = null; }
+      }
       throw new Error(`${error.message} The operation outcome is uncertain. Refetch and review workflow state before retrying.`);
-    } finally { state.busy = false; }
+    } finally { if (current(capture)) state.busy = false; }
   }
-  return { state, preview, refresh, mutate };
+  return { state, preview, refresh, mutate, invalidateSession };
 }

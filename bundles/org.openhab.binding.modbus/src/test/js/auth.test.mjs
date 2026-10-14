@@ -11,7 +11,7 @@ function fixture(options = {}) {
     origin: 'https://openhab.test', cookie: () => options.cookie || '', now: () => time,
     fetch: async (url, init) => { calls.push({ url, init }); return options.fetch ? options.fetch(url, init) : new Response(JSON.stringify({ access_token: 'access', expires_in: 60 }), { status: 200 }); }
   });
-  return { client, calls, logout: () => { session = null; }, advance: () => { time = 61000; } };
+  return { client, calls, logout: () => { session = null; }, change: value => { session = value; }, advance: () => { time = 61000; } };
 }
 
 test('exchange uses form body and memory-only bearer token with expiry', async () => {
@@ -54,6 +54,33 @@ test('exchange failure and malformed response fail without credential diagnostic
 test('logout invalidates previously cached access', async () => {
   const f = fixture(); await f.client.headers(); f.logout();
   await assert.rejects(f.client.headers(), /Sign in/);
+});
+
+test('token replacement exchanges credentials for the current user', async () => {
+  const f = fixture({fetch: async (url, init) => new Response(JSON.stringify({
+    access_token: new URLSearchParams(init.body).get('refresh_token'), expires_in: 60
+  }))});
+  await f.client.headers(); f.change('second-user');
+  assert.deepEqual(await f.client.headers(), {Authorization: 'Bearer second-user'});
+  assert.equal(f.calls.length, 2);
+});
+
+test('superseded token exchanges cannot invalidate the current user session', async () => {
+  for (const status of [200, 401]) {
+    const waiting = [];
+    const f = fixture({fetch: () => new Promise(resolve => waiting.push(resolve))});
+    const old = f.client.headers();
+    f.change('second-user'); f.client.invalidate();
+    const current = f.client.headers();
+    waiting[1](new Response(JSON.stringify({access_token:'second-access',expires_in:60})));
+    assert.deepEqual(await current, {Authorization:'Bearer second-access'});
+    const version = f.client.sessionVersion();
+    waiting[0](new Response(JSON.stringify({access_token:'old-access',expires_in:60}), {status}));
+    await assert.rejects(old);
+    assert.equal(f.client.sessionVersion(), version);
+    assert.deepEqual(await f.client.headers(), {Authorization:'Bearer second-access'});
+    assert.equal(f.calls.length, 2);
+  }
 });
 
 test('missing Main UI session fails without a request', async () => {

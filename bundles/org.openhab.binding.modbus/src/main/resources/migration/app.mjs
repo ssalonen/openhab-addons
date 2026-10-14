@@ -4,6 +4,16 @@ const auth = createAuthClient();
 const controller = createController({ auth });
 const $ = id => document.getElementById(id);
 let working = false;
+let generation = 0;
+function sessionChanged() {
+  generation++;
+  controller.invalidateSession();
+  working = false;
+  $('identity').value = '';
+  $('error').hidden = true;
+  render();
+  $('status').textContent = 'Main UI session changed. Sign in and refetch the workflow before making changes.';
+}
 function node(tag, text, className) {
   const element = document.createElement(tag);
   if (text !== undefined) element.textContent = String(text);
@@ -18,11 +28,18 @@ function button(text, action, disabled = false) {
 }
 async function run(action) {
   if (working) return;
+  const version = generation;
+  const session = auth.sessionVersion();
+  function current() {
+    if (version !== generation) return false;
+    if (session !== auth.sessionVersion()) { sessionChanged(); return false; }
+    return true;
+  }
   working = true; $('error').hidden = true;
   render(); $('status').textContent = 'Waiting for openHAB…';
-  try { await action(); $('status').textContent = 'Workflow refetched from openHAB. Review the current state below.'; }
-  catch (error) { $('error').textContent = error.message; $('error').hidden = false; $('status').textContent = 'Operation stopped. No mutation was automatically replayed.'; }
-  finally { working = false; render(); }
+  try { await action(); if (current()) $('status').textContent = 'Workflow refetched from openHAB. Review the current state below.'; }
+  catch (error) { if (current()) { $('error').textContent = error.message; $('error').hidden = false; $('status').textContent = 'Operation stopped. No mutation was automatically replayed.'; } }
+  finally { if (current()) { working = false; render(); } }
 }
 function mutate(operation, body, message) {
   if (confirm(message)) return run(() => controller.mutate(operation, body, true));
@@ -80,8 +97,7 @@ $('stage').addEventListener('click', () => mutate('apply', {}, `Stage reviewed i
 $('rollback').addEventListener('click', () => mutate('rollback', {}, `Rollback reviewed identity ${controller.state.identity}? Candidate removal is subject to backend safety checks.`));
 window.addEventListener('storage', event => {
   if (event.key === 'openhab.ui:refreshToken' || event.key === null) {
-    auth.invalidate(); controller.state.report = null; render();
-    $('status').textContent = 'Main UI session changed. Sign in and refetch the workflow before making changes.';
+    auth.invalidate(); sessionChanged();
   }
 });
 render();
