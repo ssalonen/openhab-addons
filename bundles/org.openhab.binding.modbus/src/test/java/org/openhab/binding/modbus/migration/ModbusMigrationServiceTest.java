@@ -107,6 +107,62 @@ class ModbusMigrationServiceTest {
         assertEquals(MigrationWorkflowReport.Status.ROLLED_BACK, restarted.report(identity).status());
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = { false, true })
+    void staleSourceCannotValidateOrCutoverAndValidationDoesNotJournal(boolean endpointDrift) {
+        service();
+        var endpoint = BridgeBuilder.create(new ThingTypeUID("modbus", "tcp"), new ThingUID("modbus:tcp:plant"))
+                .withConfiguration(new Configuration(Map.of("host", "before"))).build();
+        when(things.get(endpoint.getUID())).thenReturn(endpoint);
+        MigrationValidation validation = (preview, group, stagedAt) -> new MigrationValidation.Observation(
+                preview.identity(), group.sourcePollerUid(), java.time.Instant.now(),
+                MigrationValidation.Outcome.MATCH);
+        var service = new ModbusMigrationService(things, links, provider, storage, validation);
+        String identity = service.preview().plan().identity();
+        service.apply(identity);
+        assertEquals(MigrationValidation.Outcome.MATCH,
+                service.validate(identity, "modbus:poller:tcp:plant").outcome());
+        var before = Map.copyOf(persisted);
+        if (endpointDrift) {
+            endpoint.getConfiguration().put("host", "after");
+        } else {
+            things.getAll().stream().filter(thing -> thing.getThingTypeUID().getId().equals("data")).findFirst()
+                    .orElseThrow().getConfiguration().put("readTransform", List.of("JS:private-source"));
+        }
+        assertThrows(IllegalArgumentException.class, () -> service.validate(identity, "modbus:poller:tcp:plant"));
+        assertThrows(IllegalArgumentException.class, () -> service.cutover(identity, "modbus:poller:tcp:plant"));
+        assertEquals(before, persisted);
+        assertFalse(persisted.toString().contains("private-source"));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = { false, true })
+    void sourceDriftDuringTypedObservationRefusesValidationAndCutover(boolean cutover) {
+        service();
+        var endpoint = BridgeBuilder.create(new ThingTypeUID("modbus", "tcp"), new ThingUID("modbus:tcp:plant"))
+                .withConfiguration(new Configuration(Map.of("host", "before"))).build();
+        when(things.get(endpoint.getUID())).thenReturn(endpoint);
+        MigrationValidation validation = (preview, group, stagedAt) -> {
+            endpoint.getConfiguration().put("host", "after");
+            return new MigrationValidation.Observation(preview.identity(), group.sourcePollerUid(),
+                    java.time.Instant.now(), MigrationValidation.Outcome.MATCH);
+        };
+        var service = new ModbusMigrationService(things, links, provider, storage, validation);
+        String identity = service.preview().plan().identity();
+        service.apply(identity);
+        var before = Map.copyOf(persisted);
+        assertThrows(IllegalArgumentException.class, () -> {
+            if (cutover) {
+                service.cutover(identity, "modbus:poller:tcp:plant");
+            } else {
+                service.validate(identity, "modbus:poller:tcp:plant");
+            }
+        });
+        assertEquals(before, persisted);
+        verify(links, never()).add(any());
+        verify(links, never()).remove(anyString());
+    }
+
     @Test
     void endpointCredentialsAreNotReportedAndDriftStillRefusesApply() {
         var service = service();

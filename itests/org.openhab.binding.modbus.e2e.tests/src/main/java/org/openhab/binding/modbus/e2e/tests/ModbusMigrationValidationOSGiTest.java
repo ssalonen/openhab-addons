@@ -117,6 +117,8 @@ public class ModbusMigrationValidationOSGiTest extends JavaOSGiTest {
                 readOnlyConfiguration.getProperties().keySet().stream()
                         .filter(key -> !java.util.Set.of("readStart", "readValueType", "readTransform").contains(key))
                         .toList().forEach(readOnlyConfiguration::remove);
+                // The fixture changed source configuration; responses may not open a replacement lifecycle themselves.
+                java.util.Objects.requireNonNull(registry.get(data).getHandler()).initialize();
                 var plan = service.preview().plan();
                 assertEquals(1, plan.groups().size(), plan.yaml());
                 String identity = plan.identity();
@@ -147,6 +149,26 @@ public class ModbusMigrationValidationOSGiTest extends JavaOSGiTest {
                 });
                 changingValues.set(false);
                 failReads.set(false);
+                waitForAssert(() -> assertEquals(MigrationValidation.Outcome.MATCH,
+                        service.validate(identity, poller.toString()).outcome()));
+                var reviewed = service.report(identity);
+                var endpointConfiguration = java.util.Objects.requireNonNull(registry.get(endpoint)).getConfiguration();
+                Object host = endpointConfiguration.get("host");
+                endpointConfiguration.put("host", "192.0.2.123");
+                assertThrows(IllegalArgumentException.class, () -> service.validate(identity, poller.toString()));
+                assertThrows(IllegalArgumentException.class, () -> service.cutover(identity, poller.toString()));
+                assertEquals(reviewed, service.report(identity));
+                endpointConfiguration.put("host", host);
+                Object transform = readOnlyConfiguration.get("readTransform");
+                readOnlyConfiguration.put("readTransform", java.util.List.of("JS:private-transform"));
+                assertThrows(IllegalArgumentException.class, () -> service.validate(identity, poller.toString()));
+                assertThrows(IllegalArgumentException.class, () -> service.cutover(identity, poller.toString()));
+                assertEquals(reviewed, service.report(identity));
+                if (transform == null) {
+                    readOnlyConfiguration.remove("readTransform");
+                } else {
+                    readOnlyConfiguration.put("readTransform", transform);
+                }
                 waitForAssert(() -> assertEquals(MigrationValidation.Outcome.MATCH,
                         service.validate(identity, poller.toString()).outcome()));
             } finally {

@@ -46,6 +46,10 @@ public final class ManagedModbusMigrationAdapter {
     }
 
     public Snapshot snapshot() {
+        return snapshot(java.util.Set.of());
+    }
+
+    Snapshot snapshot(java.util.Set<String> stagedTargets) {
         List<LegacyPoller> pollers = new ArrayList<>();
         List<LegacyData> data = new ArrayList<>();
         List<ManualMigrationWork> manual = new ArrayList<>();
@@ -54,7 +58,8 @@ public final class ManagedModbusMigrationAdapter {
             if (THING_TYPE_MODBUS_POLLER.equals(thing.getThingTypeUID())) {
                 if (!managed(thing)) {
                     manual.add(manualWork(thing, "legacy Thing is not managed"));
-                } else if (targetExists(thing.getUID())) {
+                } else if (targetExists(thing.getUID())
+                        && !stagedTargets.contains(thing.getUID().toString().replace(":poller:", ":poller2:"))) {
                     manual.add(manualWork(thing, "target poller2 Thing already exists"));
                 } else if (bridgeUid == null) {
                     manual.add(manualWork(thing, "legacy poller has no bridge"));

@@ -151,13 +151,17 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
             AsyncModbusReadResult result = pollResult.result;
             @Nullable
             AsyncModbusFailure<ModbusReadRequestBlueprint> failure = pollResult.failure;
-            childCallbacks.forEach(handler -> {
+            // Capture every child's lifecycle before any child monitor can block this dispatch.
+            List<Runnable> dispatches = childCallbacks.stream().map(handler -> {
                 if (result != null) {
-                    handler.onReadResult(result, cached);
+                    return handler.prepareReadResult(ModbusPollerThingHandler.this, result, cached);
                 } else if (failure != null) {
-                    handler.handleReadError(failure);
+                    return handler.prepareReadError(ModbusPollerThingHandler.this, failure);
                 }
-            });
+                return (Runnable) () -> {
+                };
+            }).toList();
+            dispatches.forEach(Runnable::run);
             if (generation != callbackGeneration || disposed) {
                 return;
             }
@@ -228,6 +232,32 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
     private @NonNullByDefault({}) ModbusPollerConfiguration config;
     private long cacheMillis;
     private volatile @Nullable PollTask pollTask;
+    private volatile @Nullable ReadConfiguration readConfiguration;
+
+    private record ReadConfiguration(ModbusReadRequestBlueprint request, ModbusCommunicationInterface communication,
+            ModbusEndpointThingHandler endpoint, String signature) {
+    }
+
+    private String readConfigurationSignature() {
+        Bridge endpoint = getBridge();
+        return org.openhab.binding.modbus.migration.Poller2ObservationCollector.signature(thing) + ":"
+                + (endpoint == null || endpoint.getConfiguration() == null ? ""
+                        : org.openhab.binding.modbus.migration.Poller2ObservationCollector.signature(endpoint));
+    }
+
+    /** Whether the registered transport still represents the current endpoint and poll window configuration. */
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Equal contents cannot authorize a replaced transport instance.
+    public boolean hasCurrentReadConfiguration() {
+        ReadConfiguration context = readConfiguration;
+        Bridge endpoint = getBridge();
+        if (context == null || disposed || endpoint == null || endpoint.getHandler() != context.endpoint()
+                || request != context.request() || comms != context.communication()
+                || !context.signature().equals(readConfigurationSignature())) {
+            return false;
+        }
+        return context.endpoint().getCommunicationInterface() == context.communication();
+    }
+
     private volatile @Nullable ModbusReadRequestBlueprint request;
     private volatile boolean disposed;
     private volatile List<ModbusDataThingHandler> childCallbacks = new CopyOnWriteArrayList<>();
@@ -398,6 +428,8 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
         ModbusReadRequestBlueprint localRequest = new ModbusReadRequestBlueprint(slaveEndpointThingHandler.getSlaveId(),
                 localFunctionCode, config.getStart(), config.getLength(), config.getMaxTries());
         this.request = localRequest;
+        readConfiguration = new ReadConfiguration(localRequest, localComms, slaveEndpointThingHandler,
+                readConfigurationSignature());
 
         if (config.getRefresh() <= 0L) {
             logger.debug("Not registering polling with ModbusManager since refresh disabled");

@@ -51,8 +51,13 @@ public final class ModbusMigrationService {
         providerAdapter = new ProviderOwnedMigrationAdapter(thingRegistry, linkRegistry);
         MigrationJournal journal = new MigrationJournal(storageService.getStorage("modbus-migration-journal"));
         workflow = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
-                new ManagedModbusMigrationApplier(thingProvider, linkRegistry, journal, thingRegistry), validation,
-                journal);
+                new ManagedModbusMigrationApplier(thingProvider, linkRegistry, journal, thingRegistry),
+                (preview, group, stagedAt) -> {
+                    requireCurrentSources(preview.identity());
+                    var observation = validation.observe(preview, group, stagedAt);
+                    requireCurrentSources(preview.identity());
+                    return observation;
+                }, journal);
     }
 
     /**
@@ -82,8 +87,13 @@ public final class ModbusMigrationService {
         return workflow.validate(identity, sourcePollerUid);
     }
 
+    private void requireCurrentSources(String identity) {
+        var snapshot = adapter.snapshot(workflow.stagedTargets(identity));
+        workflow.requireCurrentSources(identity, snapshot.pollers(), snapshot.data(), snapshot.manualWork());
+    }
+
     public synchronized void cutover(String identity, String sourcePollerUid) {
-        var snapshot = adapter.snapshot();
+        var snapshot = adapter.snapshot(workflow.stagedTargets(identity));
         workflow.cutover(identity, sourcePollerUid, snapshot.pollers(), snapshot.data(), snapshot.manualWork());
     }
 

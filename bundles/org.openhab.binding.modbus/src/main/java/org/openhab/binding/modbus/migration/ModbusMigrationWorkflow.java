@@ -192,6 +192,30 @@ public final class ModbusMigrationWorkflow {
             List<LegacyData> dataThings, List<ManualMigrationWork> providerWork) {
         requireSafeReview(previewIdentity);
         MigrationPreview preview = appliedPreview(previewIdentity);
+        requireCurrentSources(previewIdentity, pollers, dataThings, providerWork);
+        MigrationGroup selected = group(preview, sourcePollerUid);
+        if (!selected.links().isEmpty()
+                && selected.links().stream().allMatch(link -> switched.contains(linkKey(previewIdentity, link)))) {
+            return;
+        }
+        if (validate(previewIdentity, sourcePollerUid).outcome() != MigrationValidation.Outcome.MATCH) {
+            throw new IllegalStateException("Fresh candidate validation is not MATCH; cutover unavailable");
+        }
+        applier.cutover(preview, selected);
+        selected.links().forEach(link -> switched.add(linkKey(previewIdentity, link)));
+        save(previewIdentity, "STAGED");
+    }
+
+    synchronized Set<String> stagedTargets(String identity) {
+        requireSafeReview(identity);
+        return appliedPreview(identity).groups().stream().map(MigrationGroup::targetPollerUid)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    synchronized void requireCurrentSources(String previewIdentity, List<LegacyPoller> pollers,
+            List<LegacyData> dataThings, List<ManualMigrationWork> providerWork) {
+        requireSafeReview(previewIdentity);
+        MigrationPreview preview = appliedPreview(previewIdentity);
         Sources reviewedSources = java.util.Objects.requireNonNull(sources.get(previewIdentity));
         Set<String> removedLinks = new HashSet<>();
         preview.groups().stream().flatMap(candidate -> candidate.links().stream())
@@ -205,19 +229,8 @@ public final class ModbusMigrationWorkflow {
         String expectedIdentity = planner
                 .preview(reviewedSources.pollers(), expectedData, reviewedSources.providerWork()).identity();
         if (!expectedIdentity.equals(planner.preview(pollers, dataThings, providerWork).identity())) {
-            throw new IllegalArgumentException("cutover requires the exact, current reviewed source configuration");
+            throw new IllegalArgumentException("operation requires the exact, current reviewed source configuration");
         }
-        MigrationGroup selected = group(preview, sourcePollerUid);
-        if (!selected.links().isEmpty()
-                && selected.links().stream().allMatch(link -> switched.contains(linkKey(previewIdentity, link)))) {
-            return;
-        }
-        if (validate(previewIdentity, sourcePollerUid).outcome() != MigrationValidation.Outcome.MATCH) {
-            throw new IllegalStateException("Fresh candidate validation is not MATCH; cutover unavailable");
-        }
-        applier.cutover(preview, selected);
-        selected.links().forEach(link -> switched.add(linkKey(previewIdentity, link)));
-        save(previewIdentity, "STAGED");
     }
 
     private MigrationGroup group(MigrationPreview preview, String sourcePollerUid) {

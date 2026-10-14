@@ -392,6 +392,7 @@ public class ModbusDataThingHandler extends BaseThingHandler
 
     @Override
     public synchronized void initialize() {
+        readContext = null;
         observations.invalidate();
         // Initialize the thing. If done set status to ONLINE to indicate proper working.
         // Long running initialization should be done asynchronously in background.
@@ -446,6 +447,13 @@ public class ModbusDataThingHandler extends BaseThingHandler
             validateAndParseWriteParameters(localConfig);
             validateMustReadOrWrite();
 
+            observationGeneration = observations.beginLifecycle(getThing());
+            ModbusPollerThingHandler parent = pollerHandler;
+            ModbusReadRequestBlueprint request = readRequest;
+            if (parent != null && request != null) {
+                readContext = new ReadContext(parent, request, parent.getCommunicationInterface(),
+                        org.openhab.binding.modbus.migration.Poller2ObservationCollector.signature(getThing()));
+            }
             updateStatusIfChanged(ThingStatus.ONLINE);
         } catch (ModbusConfigurationException | EndpointNotInitializedException e) {
             logger.debug("Thing {} '{}' initialization error: {}", getThing().getUID(), getThing().getLabel(),
@@ -458,6 +466,7 @@ public class ModbusDataThingHandler extends BaseThingHandler
 
     @Override
     public synchronized void dispose() {
+        readContext = null;
         observations.invalidate();
         config = null;
         readValueType = null;
@@ -796,29 +805,94 @@ public class ModbusDataThingHandler extends BaseThingHandler
 
     private final org.openhab.binding.modbus.migration.Poller2ObservationCollector observations = new org.openhab.binding.modbus.migration.Poller2ObservationCollector();
     private boolean cachedObservation;
+    private long observationGeneration;
+    private volatile @Nullable ReadContext readContext;
+
+    private record ReadContext(ModbusPollerThingHandler parent, ModbusReadRequestBlueprint request,
+            @Nullable ModbusCommunicationInterface communication, String signature) {
+    }
+
+    // Equal request contents or bridge UIDs do not establish ownership by the same live transport registration.
+    @SuppressWarnings("PMD.CompareObjectsWithEquals")
+    private boolean isCurrent(@Nullable ReadContext context, ModbusReadRequestBlueprint request) {
+        Bridge bridge = getBridge();
+        return context != null && context == readContext && context.request() == request
+                && context.parent().getRequest() == request
+                && context.parent().getCommunicationInterface() == context.communication()
+                && context.parent().hasCurrentReadConfiguration() && bridge != null
+                && bridge.getHandler() == context.parent() && bridge.getUID().equals(getThing().getBridgeUID())
+                && context.signature()
+                        .equals(org.openhab.binding.modbus.migration.Poller2ObservationCollector.signature(getThing()));
+    }
+
+    /** Captures child provenance without waiting for its lifecycle monitor. Run the returned dispatch once. */
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Parent handler instance owns this registration.
+    public Runnable prepareReadResult(ModbusPollerThingHandler parent, AsyncModbusReadResult result, boolean cached) {
+        ReadContext context = readContext;
+        return () -> {
+            synchronized (this) {
+                if (context != null && context.parent() == parent && isCurrent(context, result.getRequest())) {
+                    publishReadResult(result, cached);
+                }
+            }
+        };
+    }
+
+    /** Captures failure provenance before dispatch can block behind a child lifecycle transition. */
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Parent handler instance owns this registration.
+    public Runnable prepareReadError(ModbusPollerThingHandler parent,
+            AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+        ReadContext context = readContext;
+        return () -> {
+            synchronized (this) {
+                if (context != null && context.parent() == parent && isCurrent(context, failure.getRequest())) {
+                    publishReadError(failure);
+                }
+            }
+        };
+    }
 
     @Override
     public synchronized Optional<org.openhab.binding.modbus.migration.Poller2Observation> getObservation() {
-        return observations.getObservation().filter(observation -> observation.configurationSignature()
-                .equals(org.openhab.binding.modbus.migration.Poller2ObservationCollector.signature(getThing())));
+        ReadContext context = readContext;
+        return context != null && isCurrent(context, context.request()) ? observations.getObservation()
+                : Optional.empty();
     }
 
-    public synchronized void onReadResult(AsyncModbusReadResult result, boolean cached) {
+    public void onReadResult(AsyncModbusReadResult result, boolean cached) {
+        ReadContext context = readContext;
+        synchronized (this) {
+            if (isCurrent(context, result.getRequest())) {
+                publishReadResult(result, cached);
+            }
+        }
+    }
+
+    private void publishReadResult(AsyncModbusReadResult result, boolean cached) {
         cachedObservation = cached;
         try {
-            onReadResult(result);
+            result.getRegisters().ifPresent(registers -> onRegisters(result.getRequest(), registers));
+            result.getBits().ifPresent(bits -> onBits(result.getRequest(), bits));
         } finally {
             cachedObservation = false;
         }
     }
 
-    public synchronized void onReadResult(AsyncModbusReadResult result) {
-        result.getRegisters().ifPresent(registers -> onRegisters(result.getRequest(), registers));
-        result.getBits().ifPresent(bits -> onBits(result.getRequest(), bits));
+    public void onReadResult(AsyncModbusReadResult result) {
+        onReadResult(result, false);
     }
 
-    public synchronized void handleReadError(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
-        observations.invalidate();
+    public void handleReadError(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+        ReadContext context = readContext;
+        synchronized (this) {
+            if (isCurrent(context, failure.getRequest())) {
+                publishReadError(failure);
+            }
+        }
+    }
+
+    private void publishReadError(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+        observationGeneration = observations.beginLifecycle(getThing());
         onError(failure.getRequest(), failure.getCause());
     }
 
@@ -1038,7 +1112,7 @@ public class ModbusDataThingHandler extends BaseThingHandler
             states.put(lastReadSuccessUID, new DateTimeType());
         }
         if (!cachedObservation) {
-            long generation = observations.beginLifecycle(getThing());
+            long generation = observationGeneration;
             Map<ChannelUID, org.openhab.binding.modbus.migration.ModbusReadEvidence> evidence = new HashMap<>();
             states.forEach((uid, value) -> evidence.put(uid,
                     new org.openhab.binding.modbus.migration.ModbusReadEvidence(value, numericState,
