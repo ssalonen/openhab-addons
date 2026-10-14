@@ -53,6 +53,50 @@ public final class ProviderOwnedMigrationAdapter {
         var allLinks = links.getAll().stream().sorted(Comparator.comparing(ItemChannelLink::getUID)).toList();
         List<ProviderOwnedMigrationPreview.FileChange> changes = new ArrayList<>();
         List<ManualMigrationWork> manual = new ArrayList<>();
+        // Capture the complete inventory before eligibility checks: refused work is still reviewed state.
+        var inventory = new java.util.TreeMap<String, ProviderOwnedMigrationPreview.SourceRevision>();
+        for (Thing thing : allThings) {
+            if (THING_TYPE_MODBUS_POLLER.equals(thing.getThingTypeUID())
+                    || THING_TYPE_MODBUS_DATA.equals(thing.getThingTypeUID())) {
+                inventory.put(thing.getUID().toString(), source(thing));
+                if (THING_TYPE_MODBUS_POLLER.equals(thing.getThingTypeUID())) {
+                    Thing target = things.get(new ThingUID(thing.getUID().toString().replace(":poller:", ":poller2:")));
+                    if (target != null) {
+                        inventory.put(target.getUID().toString(), source(target));
+                    }
+                }
+                ThingUID parentUid = thing.getBridgeUID();
+                Thing parent = null;
+                if (parentUid != null) {
+                    for (Thing candidate : allThings) {
+                        if (candidate.getUID().equals(parentUid)) {
+                            parent = candidate;
+                            break;
+                        }
+                    }
+                    if (parent == null) {
+                        parent = things.get(parentUid);
+                    }
+                }
+                if (parent != null) {
+                    inventory.put(parent.getUID().toString(), source(parent));
+                }
+                if (THING_TYPE_MODBUS_DATA.equals(thing.getThingTypeUID())
+                        && !(provider(thing) instanceof ManagedProvider)
+                        && (parent == null || !THING_TYPE_MODBUS_POLLER.equals(parent.getThingTypeUID())
+                                || provider(parent) instanceof ManagedProvider)) {
+                    manual.add(new ManualMigrationWork(thing.getUID().toString(),
+                            "file-owned or unknown data parent is managed, missing or not a legacy poller; manual migration required",
+                            source(thing).revisionDigest()));
+                }
+            }
+        }
+        var inventoryLinks = allLinks.stream()
+                .filter(link -> inventory.containsKey(link.getLinkedUID().getThingUID().toString()))
+                .map(link -> List.of(link.getUID(), identity(links.getProvider(link)), linkDigest(link))).toList();
+        String inventoryDigest = ModbusMigrationPlanner.configurationIdentity(List.of(inventory.values().stream()
+                .map(source -> List.of(source.sourceUid(), source.providerIdentity(), source.revisionDigest()))
+                .toList(), inventoryLinks));
         for (Thing poller : allThings) {
             if (!THING_TYPE_MODBUS_POLLER.equals(poller.getThingTypeUID())) {
                 continue;
@@ -98,7 +142,8 @@ public final class ProviderOwnedMigrationAdapter {
                     .map(source -> List.of(source.sourceUid(), source.providerIdentity(), source.revisionDigest()))
                     .toList());
             String targetUid = poller.getUID().toString().replace(":poller:", ":poller2:");
-            if (owner == null || endpoint == null || things.get(new ThingUID(targetUid)) != null) {
+            if (owner == null || endpoint == null || provider(endpoint) == null
+                    || things.get(new ThingUID(targetUid)) != null) {
                 manual.add(new ManualMigrationWork(poller.getUID().toString(),
                         "provider or endpoint unknown, or target exists; no file candidate generated", sourceDigest));
                 continue;
@@ -117,9 +162,10 @@ public final class ProviderOwnedMigrationAdapter {
                                     && mapping.sourceChannelUid().equals(link.getLinkedUID().toString()))
                             .findFirst().orElseThrow();
                     Provider<ItemChannelLink> linkProvider = links.getProvider(original);
-                    if (linkProvider == null) {
+                    if (linkProvider == null || linkProvider instanceof ManagedProvider) {
                         manual.add(new ManualMigrationWork(mapping.sourceChannelUid(),
-                                "link provider unknown; no source-link patch generated", linkDigest(original)));
+                                "link provider unknown or managed; independent manual link work required; no source-link patch generated",
+                                linkDigest(original)));
                     } else {
                         patches.add(new ProviderOwnedMigrationPreview.LinkPatch(mapping.itemName(),
                                 mapping.sourceChannelUid(), mapping.targetChannelUid(), identity(linkProvider),
@@ -129,22 +175,37 @@ public final class ProviderOwnedMigrationAdapter {
                 // Include refused/nondefault links and provider ownership in revision identity, without exposing
                 // values.
                 var linkRevisions = allLinks.stream()
-                        .filter(link -> children.stream()
-                                .anyMatch(data -> data.uid().equals(link.getLinkedUID().getThingUID().toString())))
+                        .filter(link -> sources.stream().anyMatch(
+                                data -> data.sourceUid().equals(link.getLinkedUID().getThingUID().toString())))
                         .map(link -> List.of(link.getUID(), identity(links.getProvider(link)), linkDigest(link)))
                         .toList();
-                String revision = ModbusMigrationPlanner.configurationIdentity(
-                        List.of("provider-owned-review-v1", sourceDigest, plan.identity(), linkRevisions));
+                String revision = ModbusMigrationPlanner.configurationIdentity(List.of("provider-owned-review-v2",
+                        inventoryDigest, sourceDigest, plan.identity(), linkRevisions));
+                var residual = new java.util.TreeSet<String>();
+                for (Thing data : allThings) {
+                    if (THING_TYPE_MODBUS_DATA.equals(data.getThingTypeUID())
+                            && poller.getUID().equals(data.getBridgeUID())) {
+                        if (group.channels().stream()
+                                .noneMatch(channel -> channel.sourceDataUid().equals(data.getUID().toString()))) {
+                            residual.add(data.getUID().toString());
+                        }
+                        allLinks.stream().filter(link -> data.getUID().equals(link.getLinkedUID().getThingUID()))
+                                .filter(link -> patches.stream()
+                                        .noneMatch(patch -> patch.itemName().equals(link.getItemName())
+                                                && patch.sourceChannelUid().equals(link.getLinkedUID().toString())))
+                                .forEach(link -> residual.add(link.getItemName() + " -> " + link.getLinkedUID()));
+                    }
+                }
                 changes.add(new ProviderOwnedMigrationPreview.FileChange(group.sourcePollerUid(),
-                        group.targetPollerUid(), revision, sources, plan.yaml(), patches, instructions()));
+                        group.targetPollerUid(), revision, sources, plan.yaml(), patches, instructions(residual)));
             }
         }
         manual.sort(Comparator.comparing(ManualMigrationWork::sourceUid).thenComparing(ManualMigrationWork::reason));
-        String revision = ModbusMigrationPlanner.configurationIdentity(List
-                .of(changes.stream().map(change -> List.of(change.sourcePollerUid(), change.revisionDigest())).toList(),
-                        manual.stream()
-                                .map(work -> List.of(work.sourceUid(), work.reason(), work.configurationIdentity()))
-                                .toList()));
+        String revision = ModbusMigrationPlanner.configurationIdentity(List.of("provider-owned-review-v2",
+                inventoryDigest,
+                changes.stream().map(change -> List.of(change.sourcePollerUid(), change.revisionDigest())).toList(),
+                manual.stream().map(work -> List.of(work.sourceUid(), work.reason(), work.configurationIdentity()))
+                        .toList()));
         return new ProviderOwnedMigrationPreview(revision, changes, manual);
     }
 
@@ -180,7 +241,7 @@ public final class ProviderOwnedMigrationAdapter {
                 List.of(link.getItemName(), link.getLinkedUID().toString(), link.getConfiguration().getProperties()));
     }
 
-    private static String instructions() {
+    private static String instructions(java.util.Set<String> residual) {
         return """
                 MANUAL PROVIDER-OWNED REVIEW ONLY; never pass this artifact to managed apply/cutover/revert or REST writes.
                 Confirm the provider is file-backed and locate/back up its authoritative Thing and Item link sources manually.
@@ -194,9 +255,15 @@ public final class ProviderOwnedMigrationAdapter {
                 Reload and verify one link per Item, no simultaneous old/new delivery. Do not use managed-provider or REST mutations.
                 Revert: remove the target link and restore the source channel link and listed profile from linkPatches;
                 reload and verify source delivery before removing an unlinked candidate. Retain legacy Things for rollback.
-                Disable legacy polling only after successful cutover; deletion is a separate backed-up cleanup action.
+                Keep legacy polling online until ALL remaining legacy consumers are independently resolved and verified.
+                Cutover of the eligible subset does not authorize disabling the whole legacy poller.
+                Deletion is a separate backed-up cleanup action.
                 Review Item/source/target identifiers in rules, scripts, widgets, groups, tags, dynamic and external references.
                 No scripts, widgets, rules or nondefault profiles are rewritten. Refused work requires independent review.
-                """;
+                """
+                + "Residual legacy consumers requiring independent resolution: "
+                + (residual.isEmpty() ? "none identified in the registry; verify external consumers manually"
+                        : String.join(", ", residual))
+                + "\n";
     }
 }

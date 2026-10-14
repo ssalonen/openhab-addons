@@ -32,7 +32,6 @@ import org.openhab.core.config.core.Configuration;
 import org.openhab.core.io.rest.core.internal.MediaTypeExtension;
 import org.openhab.core.storage.StorageService;
 import org.openhab.core.thing.ManagedThingProvider;
-import org.openhab.core.thing.ThingRegistry;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.ThingUID;
 import org.openhab.core.thing.binding.builder.BridgeBuilder;
@@ -49,7 +48,8 @@ import com.sun.net.httpserver.HttpServer;
  * @author Sami Salonen - Initial contribution
  */
 class ModbusMigrationResourceTest {
-    private final ThingRegistry things = mock(ThingRegistry.class);
+    private final ProviderOwnedMigrationPreviewTest.OwnedThingRegistry things = mock(
+            ProviderOwnedMigrationPreviewTest.OwnedThingRegistry.class);
     private final ItemChannelLinkRegistry links = mock(ItemChannelLinkRegistry.class);
     private final ManagedThingProvider provider = mock(ManagedThingProvider.class);
     private final StorageService storage = mock(StorageService.class);
@@ -127,6 +127,69 @@ class ModbusMigrationResourceTest {
         assertEquals(before, persisted);
         verify(provider, never()).add(any());
         verify(links, never()).add(any());
+    }
+
+    @Test
+    void coreJsonSerializesNonemptyProviderFileChangeAndLinkPatchWithoutMutation() throws Exception {
+        var sourceThings = things.getAll();
+        var poller = sourceThings.stream().filter(thing -> thing.getThingTypeUID().getId().equals("poller")).findFirst()
+                .orElseThrow();
+        var data = sourceThings.stream().filter(thing -> thing.getThingTypeUID().getId().equals("data")).findFirst()
+                .orElseThrow();
+        var endpoint = BridgeBuilder.create(new ThingTypeUID("modbus", "tcp"), new ThingUID("modbus:tcp:plant"))
+                .withConfiguration(
+                        new Configuration(Map.of("host", "SENTINEL-endpoint", "password", "SENTINEL-secret")))
+                .build();
+        var owner = mock(org.openhab.core.thing.ThingProvider.class);
+        var linkOwner = mock(org.openhab.core.common.registry.Provider.class);
+        var link = new org.openhab.core.thing.link.ItemChannelLink("Value",
+                new org.openhab.core.thing.ChannelUID(data.getUID(), "number"),
+                new Configuration(Map.of("profile", "system:default")));
+        when(things.getAll()).thenReturn(List.of(data, endpoint, poller));
+        when(things.get(endpoint.getUID())).thenReturn(endpoint);
+        when(things.getProvider(endpoint)).thenReturn(owner);
+        when(things.getProvider(poller)).thenReturn(owner);
+        when(things.getProvider(data)).thenReturn(owner);
+        when(links.getAll()).thenReturn(List.of(link));
+        when(links.getProvider(link)).thenReturn(linkOwner);
+        var before = Map.copyOf(persisted);
+        var response = request("GET", "provider-previews", "");
+        var preview = json(response);
+        var changes = preview.getAsJsonArray("fileChanges");
+        assertEquals(1, changes.size());
+        var change = changes.get(0).getAsJsonObject();
+        assertEquals(poller.getUID().toString(), change.get("sourcePollerUid").getAsString());
+        assertEquals("modbus:poller2:tcp:plant", change.get("targetPollerUid").getAsString());
+        assertTrue(change.get("revisionDigest").getAsString().matches("[0-9a-f]{64}"));
+        assertTrue(change.get("candidateYaml").getAsString().contains("itemType: Number"));
+        assertFalse(change.get("candidateYaml").getAsString().contains("items:"));
+        assertTrue(change.get("instructions").getAsString().contains("Revert"));
+        assertEquals(3, change.getAsJsonArray("sources").size());
+        for (var entry : change.getAsJsonArray("sources")) {
+            var source = entry.getAsJsonObject();
+            assertEquals("UNKNOWN_MANUAL_LOCATION", source.get("sourceLocation").getAsString());
+            assertEquals(owner.getClass().getName(), source.get("providerIdentity").getAsString());
+            assertTrue(source.get("revisionDigest").getAsString().matches("[0-9a-f]{64}"));
+        }
+        var patches = change.getAsJsonArray("linkPatches");
+        assertEquals(1, patches.size());
+        var patch = patches.get(0).getAsJsonObject();
+        assertEquals("Value", patch.get("itemName").getAsString());
+        assertEquals(link.getLinkedUID().toString(), patch.get("sourceChannelUid").getAsString());
+        assertEquals("modbus:poller2:tcp:plant:value", patch.get("targetChannelUid").getAsString());
+        assertEquals("UNKNOWN_MANUAL_LOCATION", patch.get("sourceLocation").getAsString());
+        assertEquals(linkOwner.getClass().getName(), patch.get("providerIdentity").getAsString());
+        assertTrue(patch.get("revisionDigest").getAsString().matches("[0-9a-f]{64}"));
+        assertEquals("system:default", patch.getAsJsonObject("profileConfiguration").get("profile").getAsString());
+        assertFalse(response.body().contains("SENTINEL"));
+        assertEquals(response.body(), request("GET", "provider-previews", "").body());
+        assertEquals(before, persisted);
+        verify(provider, never()).add(any());
+        verify(provider, never()).update(any());
+        verify(provider, never()).remove(any());
+        verify(links, never()).add(any());
+        verify(links, never()).remove(anyString());
+        verifyNoInteractions(owner, linkOwner);
     }
 
     @Test
