@@ -26,7 +26,7 @@ function button(text, action, disabled = false) {
   element.addEventListener('click', action);
   return element;
 }
-async function run(action) {
+async function run(action, success = 'Workflow refetched from openHAB. Review the current state below.') {
   if (working) return;
   const version = generation;
   const session = auth.sessionVersion();
@@ -37,14 +37,67 @@ async function run(action) {
   }
   working = true; $('error').hidden = true;
   render(); $('status').textContent = 'Waiting for openHAB…';
-  try { await action(); if (current()) $('status').textContent = 'Workflow refetched from openHAB. Review the current state below.'; }
+  try { await action(); if (current()) $('status').textContent = success; }
   catch (error) { if (current()) { $('error').textContent = error.message; $('error').hidden = false; $('status').textContent = 'Operation stopped. No mutation was automatically replayed.'; } }
   finally { if (current()) { working = false; render(); } }
 }
 function mutate(operation, body, message) {
   if (confirm(message)) return run(() => controller.mutate(operation, body, true));
 }
+function renderProviders() {
+  const { providerPreview, providerError } = controller.state;
+  $('provider-refresh').disabled = working;
+  $('provider-status').textContent = providerError ? `Provider proposals unavailable: ${providerError}`
+    : providerPreview ? 'Detached proposals loaded for manual review only.' : 'No provider proposals loaded.';
+  const root = $('provider-proposals');
+  root.replaceChildren();
+  if (!providerPreview) return;
+  const version = generation;
+  const session = auth.sessionVersion();
+  function exportCandidate(action, message) {
+    if (version !== generation) return;
+    if (session !== auth.sessionVersion()) { sessionChanged(); return; }
+    return run(action, message);
+  }
+  root.append(node('p', `Review revision: ${providerPreview.revisionDigest}`));
+  if (!providerPreview.fileChanges.length) root.append(node('p', 'No eligible candidate YAML reported. Review any manual work below.'));
+  for (const change of providerPreview.fileChanges) {
+    const section = node('div', undefined, 'group');
+    section.append(node('h3', change.sourcePollerUid), node('p', `Unlinked candidate: ${change.targetPollerUid}`),
+      node('p', `Proposal revision: ${change.revisionDigest}`));
+    for (const source of change.sources || []) section.append(node('p',
+      `Source: ${source.sourceUid} · Provider: ${source.providerIdentity} · Location: ${source.sourceLocation} · Configuration digest: ${source.configurationDigest ?? source.revisionDigest}`));
+    section.append(node('pre', change.candidateYaml));
+    const actions = node('div', undefined, 'actions');
+    actions.append(button('Copy candidate YAML', () => exportCandidate(async () => {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable. Select the displayed YAML or download the candidate instead.');
+      await navigator.clipboard.writeText(change.candidateYaml);
+    }, 'Candidate YAML copied. No configuration was changed.'), working),
+    button('Download candidate YAML', () => exportCandidate(() => {
+      const url = URL.createObjectURL(new Blob([change.candidateYaml], {type:'application/yaml;charset=utf-8'}));
+      try {
+        const link = node('a');
+        link.href = url; link.download = 'modbus-poller2-candidate.yaml';
+        link.click();
+      } finally { URL.revokeObjectURL(url); }
+    }, 'Candidate YAML download requested. This is not the source filename; no configuration was changed.'), working));
+    section.append(actions, node('p', change.instructions));
+    for (const patch of change.linkPatches || []) {
+      const profile = patch.sourceProfileConfiguration ?? patch.profileConfiguration;
+      const keys = profile && typeof profile === 'object' && !Array.isArray(profile) ? Object.keys(profile) : null;
+      const safeProfile = keys && (keys.length === 0 || (keys.length === 1 && profile.profile === 'system:default'));
+      section.append(node('p',
+        `Manual link patch: ${patch.itemName} · Remove ${patch.sourceChannelUid}, then add ${patch.targetChannelUid} · Provider: ${patch.sourceLinkProviderIdentity ?? patch.providerIdentity} · Source link digest: ${patch.sourceLinkDigest ?? patch.revisionDigest} · Source profile: ${safeProfile ? JSON.stringify(profile) : 'profile configuration omitted; review and restore the owning configuration manually'}`));
+    }
+    root.append(section);
+  }
+  const manual = node('ul');
+  for (const work of providerPreview.manualWork) manual.append(node('li',
+    `${work.sourceUid}: ${work.reason} · Configuration digest: ${work.configurationIdentity}`));
+  root.append(node('h3', 'Provider manual work'), manual);
+}
 function render() {
+  renderProviders();
   const { report, identity, uncertain } = controller.state;
   const plan = report?.preview;
   const locked = working || uncertain || !report;
@@ -84,6 +137,7 @@ function render() {
     row.append(recovery); $('impacts').append(row);
   }
 }
+$('provider-refresh').addEventListener('click', () => run(() => controller.providerPreviews(), 'Provider proposals refetched for manual review. No configuration was changed.'));
 $('preview').addEventListener('click', () => run(() => controller.preview()));
 $('refresh').addEventListener('click', () => {
   const identity = $('identity').value.trim();

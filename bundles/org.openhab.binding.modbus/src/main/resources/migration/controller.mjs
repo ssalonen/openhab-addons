@@ -5,13 +5,13 @@ export function cutoverBlockReason(report) {
   return '';
 }
 export function createController({ auth, fetch = globalThis.fetch }) {
-  const state = { identity: '', report: null, manualWork: [], busy: false, uncertain: false };
+  const state = { identity: '', report: null, manualWork: [], providerPreview: null, providerError: '', busy: false, uncertain: false };
   let generation = 0;
   let session = auth.sessionVersion?.();
   function invalidateSession() {
     generation++;
     session = auth.sessionVersion?.();
-    Object.assign(state, { identity: '', report: null, manualWork: [], busy: false, uncertain: false });
+    Object.assign(state, { identity: '', report: null, manualWork: [], providerPreview: null, providerError: '', busy: false, uncertain: false });
   }
   function context() {
     if (auth.sessionVersion?.() !== session) invalidateSession();
@@ -89,5 +89,24 @@ export function createController({ auth, fetch = globalThis.fetch }) {
       throw new Error(`${error.message} The operation outcome is uncertain. Refetch and review workflow state before retrying.`);
     } finally { if (current(capture)) state.busy = false; }
   }
-  return { state, preview, refresh, mutate, invalidateSession };
+  async function providerPreviews() {
+    const capture = context();
+    state.providerPreview = null;
+    state.providerError = '';
+    try {
+      const proposal = await request(capture, 'provider-previews');
+      check(capture);
+      if (!proposal || typeof proposal.revisionDigest !== 'string' || !Array.isArray(proposal.fileChanges)
+          || !Array.isArray(proposal.manualWork)
+          || proposal.fileChanges.some(change => !change
+            || ['sourcePollerUid','targetPollerUid','revisionDigest','candidateYaml','instructions'].some(key => typeof change[key] !== 'string')
+            || !Array.isArray(change.sources) || !Array.isArray(change.linkPatches))) throw new Error('Invalid backend response.');
+      state.providerPreview = proposal;
+      return proposal;
+    } catch (error) {
+      if (current(capture)) state.providerError = error.message;
+      throw error;
+    }
+  }
+  return { state, preview, refresh, mutate, providerPreviews, invalidateSession };
 }

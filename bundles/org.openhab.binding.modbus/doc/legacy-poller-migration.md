@@ -38,7 +38,13 @@ Unknown ownership, unsupported conversions, transformations, and non-default pro
 These proposals are not managed workflow groups and cannot be applied or cut over through the managed migration operations.
 Review and edit the owning configuration yourself; retain its original contents for exact restoration.
 The preview is not a backup or proof that generated files have been loaded by the native YAML provider.
-The hosted view does not yet display these file proposals.
+The add-on-hosted view at `/modbus/migration/` displays these proposals in a separate **Read-only provider-owned file proposals · manual review** section.
+Use **Load / refetch file proposals** with your existing Main UI administrator session.
+It displays candidate YAML as plain text, with copy and download controls, provider ownership, configuration/revision digests, manual link instructions, safe source profiles, and omitted/manual work.
+The download uses a generic candidate filename, not an inferred source filename.
+It offers no staging or cutover controls for file proposals and never writes the owning configuration.
+A failed provider read is shown separately and does not make managed workflow operations depend on provider proposal availability.
+Logout or session replacement clears provider review data and discards late responses.
 
 ## Stage unlinked candidates
 
@@ -128,5 +134,6 @@ The journal writes and reads back each record before mutation; physical durabili
 The standard JSON backend defers disk commits, so abrupt process termination or power loss before its commit may lose recent records.
 Normal component/runtime restart recovery is supported, but a crash-consistent transactional migration is **not** claimed.
 Retain the independent configuration backup and saved preview identity for that failure boundary.
-Full candidate configuration validation and provider-owned file patches are not implemented.
-Generated preview YAML describes the eventual linked configuration; importing it directly is not the unlinked console staging operation.
+Full candidate configuration validation and automatic provider-owned file mutation are not implemented.
+Managed preview YAML describes the eventual linked configuration; importing it directly is not the unlinked console staging operation.
+Provider-owned proposal YAML instead describes unlinked candidates for manual review and editing.

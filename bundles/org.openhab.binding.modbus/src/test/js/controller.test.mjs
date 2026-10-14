@@ -199,3 +199,17 @@ test('preview captures using POST then reads authoritative workflow', async () =
   assert.equal(f.calls[1].url, '/rest/modbus/migration/workflows/review%2F1');
   assert.deepEqual(f.controller.state.report, report);
 });
+
+test('provider proposals use a detached read-only GET without changing managed review', async () => {
+  const proposal = {revisionDigest:'provider-revision',fileChanges:[],manualWork:[{sourceUid:'file-source',reason:'Unsupported conversion'}]};
+  const f = fixture(() => new Response(JSON.stringify(proposal)));
+  f.controller.state.identity = plan.identity; f.controller.state.report = report;
+  await f.controller.providerPreviews();
+  assert.deepEqual(f.controller.state.providerPreview, proposal);
+  assert.equal(f.controller.state.report, report);
+  assert.equal(f.controller.state.identity, plan.identity);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].url, '/rest/modbus/migration/provider-previews');
+  assert.equal(f.calls[0].init.method, 'GET');
+  assert.equal(f.calls[0].init.body, undefined);
+});
