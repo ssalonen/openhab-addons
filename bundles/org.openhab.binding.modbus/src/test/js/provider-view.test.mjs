@@ -41,8 +41,58 @@ test('provider profile rendering omits non-default configuration wholesale', asy
   for (const value of ['new-config-digest','new-link-digest','NewProvider','profile configuration omitted']) assert.ok(rendered.includes(value),value);
   assert.ok(!rendered.includes('secret-profile-value'));
 });
+test('profile aliases preserve explicit safe maps and omit nested custom values', async () => {
+  const profiles = [
+    {value:{},expected:'Source profile: {}'},
+    {value:{profile:'system:default'},expected:'Source profile: {"profile":"system:default"}'},
+    ...[{profile:{secret:'private detail'}},{profile:['private detail']},{profile:null},
+      {profile:'custom',nested:{values:[null,'private detail']}}].map(value => ({value,expected:'profile configuration omitted'}))
+  ];
+  let index = 0;
+  for (const {value,expected} of profiles) {
+    const body = structuredClone(proposal);
+    const patch = body.fileChanges[0].linkPatches[0];
+    patch.sourceProfileConfiguration = value;
+    patch.profileConfiguration = {profile:'custom',secret:'private detail'};
+    const f = await fixture(`profile-map-${index++}`,body);
+    await f.ids.get('provider-refresh').handlers.click();
+    const rendered = text(f.ids.get('provider-proposals'));
+    assert.ok(rendered.includes(expected));
+    assert.ok(!rendered.includes('private detail'));
+    assert.equal(f.ids.get('provider-refresh').disabled,false);
+    assert.equal(f.calls.filter(c => c.url !== '/rest/auth/token').length,1);
+  }
+});
 function text(element) { return descendants(element).map(e => e.textContent || '').join('\n'); }
-async function fixture(name, result = proposal) {
+test('malformed nested proposals cannot break rendering or disable the next managed capture', async () => {
+  const malformed = [];
+  for (const field of ['sources','linkPatches']) {
+    for (const entry of [null,{},[],42,'private detail']) {
+      const body = structuredClone(proposal);
+      body.fileChanges[0][field].push(entry);
+      malformed.push(body);
+    }
+  }
+  for (const entry of [null,{},[],42,'private detail']) malformed.push({...proposal,manualWork:[entry]});
+  let index = 0;
+  for (const body of malformed) {
+    const f = await fixture(`nested-${index++}`,body,true);
+    await assert.doesNotReject(f.ids.get('provider-refresh').handlers.click());
+    assert.equal(f.ids.get('provider-proposals').children.length,0);
+    assert.equal(f.ids.get('provider-status').textContent,'Provider proposals unavailable: Invalid backend response.');
+    assert.equal(f.ids.get('preview').disabled,false);
+    await assert.doesNotReject(f.ids.get('preview').handlers.click());
+    assert.equal(f.ids.get('preview').disabled,false);
+    assert.equal(f.ids.get('stage').disabled,false);
+    assert.equal(f.ids.get('identity').value,'managed');
+    const posts = f.calls.filter(c => c.url !== '/rest/auth/token' && c.init.method === 'POST');
+    assert.equal(posts.length,1);
+    assert.equal(posts[0].url,'/rest/modbus/migration/previews');
+    assert.ok(!text(f.ids.get('provider-proposals')).includes('private detail'));
+  }
+});
+
+async function fixture(name, result = proposal, managed = false) {
   const ids = new Map(); const events = {}; const calls = []; let session = 'refresh';
   globalThis.document = {cookie:'',getElementById:id => { if (!ids.has(id)) ids.set(id,new Element()); return ids.get(id); },createElement:tag => new Element(tag)};
   globalThis.window = {addEventListener:(name,fn) => { events[name] = fn; }};
@@ -53,6 +103,8 @@ async function fixture(name, result = proposal) {
     calls.push({url,init});
     if (url === '/rest/auth/token') return new Response(JSON.stringify({access_token:'access',expires_in:60}));
     if (url.endsWith('provider-previews')) return typeof result === 'function' ? result() : new Response(JSON.stringify(result));
+    if (managed && url.endsWith('/previews')) return new Response(JSON.stringify({plan:{identity:'managed'},manualWork:[]}));
+    if (managed && url.endsWith('/workflows/managed')) return new Response(JSON.stringify({preview:{identity:'managed',groups:[],impacts:[]},status:'PREVIEW'}));
     throw new Error('Unexpected managed mutation');
   };
   await import(new URL(`app.mjs?provider-${name}`,base));

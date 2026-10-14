@@ -4,6 +4,27 @@ export function cutoverBlockReason(report) {
     return report.readinessReason || 'Fresh binding-owned validation is unavailable; cutover is blocked.';
   return '';
 }
+function record(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+function stringFields(value, keys) {
+  return record(value) && keys.every(key => typeof value[key] === 'string');
+}
+function providerProposalValid(proposal) {
+  return stringFields(proposal, ['revisionDigest'])
+    && Array.isArray(proposal.fileChanges) && proposal.fileChanges.every(change =>
+      stringFields(change, ['sourcePollerUid','targetPollerUid','revisionDigest','candidateYaml','instructions'])
+      && Array.isArray(change.sources) && change.sources.every(source =>
+        stringFields(source, ['sourceUid','providerIdentity','sourceLocation'])
+        && typeof (source.configurationDigest ?? source.revisionDigest) === 'string')
+      && Array.isArray(change.linkPatches) && change.linkPatches.every(patch =>
+        stringFields(patch, ['itemName','sourceChannelUid','targetChannelUid','sourceLocation'])
+        && typeof (patch.sourceLinkProviderIdentity ?? patch.providerIdentity) === 'string'
+        && typeof (patch.sourceLinkDigest ?? patch.revisionDigest) === 'string'
+        && record(patch.sourceProfileConfiguration ?? patch.profileConfiguration)))
+    && Array.isArray(proposal.manualWork) && proposal.manualWork.every(work =>
+      stringFields(work, ['sourceUid','reason','configurationIdentity']));
+}
 export function createController({ auth, fetch = globalThis.fetch }) {
   const state = { identity: '', report: null, manualWork: [], providerPreview: null, providerError: '', busy: false, uncertain: false };
   let generation = 0;
@@ -102,11 +123,7 @@ export function createController({ auth, fetch = globalThis.fetch }) {
     try {
       const proposal = await request(capture, 'provider-previews');
       check(capture);
-      if (!proposal || typeof proposal.revisionDigest !== 'string' || !Array.isArray(proposal.fileChanges)
-          || !Array.isArray(proposal.manualWork)
-          || proposal.fileChanges.some(change => !change
-            || ['sourcePollerUid','targetPollerUid','revisionDigest','candidateYaml','instructions'].some(key => typeof change[key] !== 'string')
-            || !Array.isArray(change.sources) || !Array.isArray(change.linkPatches))) throw new Error('Invalid backend response.');
+      if (!providerProposalValid(proposal)) throw new Error('Invalid backend response.');
       state.providerPreview = proposal;
       return proposal;
     } catch (error) {

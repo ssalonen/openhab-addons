@@ -201,7 +201,7 @@ test('preview captures using POST then reads authoritative workflow', async () =
 });
 
 test('provider proposals use a detached read-only GET without changing managed review', async () => {
-  const proposal = {revisionDigest:'provider-revision',fileChanges:[],manualWork:[{sourceUid:'file-source',reason:'Unsupported conversion'}]};
+  const proposal = {revisionDigest:'provider-revision',fileChanges:[],manualWork:[{sourceUid:'file-source',reason:'Unsupported conversion',configurationIdentity:''}]};
   const f = fixture(() => new Response(JSON.stringify(proposal)));
   f.controller.state.identity = plan.identity; f.controller.state.report = report;
   await f.controller.providerPreviews();
