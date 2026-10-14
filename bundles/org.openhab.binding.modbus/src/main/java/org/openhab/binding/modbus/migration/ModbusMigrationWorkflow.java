@@ -28,6 +28,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
  * 
  * @author Sami Salonen - Staged migration and fail-closed validation
  * @author Sami Salonen - Durable workflow restart recovery and independent revert
+ * @author Sami Salonen - Read-only shared service workflow reports
  */
 @NonNullByDefault
 public final class ModbusMigrationWorkflow {
@@ -90,6 +91,22 @@ public final class ModbusMigrationWorkflow {
             save(preview.identity(), "PREVIEW");
         }
         return preview;
+    }
+
+    /** Returns a detached journal view without capturing sources or changing workflow ownership. */
+    public synchronized MigrationWorkflowReport report(String identity) {
+        MigrationJournal.Workflow entry = journal.workflows().stream()
+                .filter(candidate -> candidate.preview().identity().equals(identity)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("unknown preview identity"));
+        MigrationWorkflowReport.Status status = switch (entry.outcome()) {
+            case "STAGED" -> MigrationWorkflowReport.Status.STAGED;
+            case "STAGING", "RECOVERY" -> MigrationWorkflowReport.Status.RECOVERY;
+            case "ROLLED_BACK" -> MigrationWorkflowReport.Status.ROLLED_BACK;
+            default -> MigrationWorkflowReport.Status.PREVIEW;
+        };
+        return new MigrationWorkflowReport(entry.preview(), status, Instant.parse(entry.stagedAt()), entry.switched(),
+                MigrationValidation.Outcome.UNAVAILABLE, false,
+                "No fresh binding-owned comparison is available; cutover is blocked (no override).");
     }
 
     private void save(String identity, String outcome) {

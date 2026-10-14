@@ -19,10 +19,6 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.io.console.Console;
 import org.openhab.core.io.console.extensions.AbstractConsoleCommandExtension;
 import org.openhab.core.io.console.extensions.ConsoleCommandExtension;
-import org.openhab.core.storage.StorageService;
-import org.openhab.core.thing.ManagedThingProvider;
-import org.openhab.core.thing.ThingRegistry;
-import org.openhab.core.thing.link.ItemChannelLinkRegistry;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -32,22 +28,17 @@ import org.osgi.service.component.annotations.Reference;
  * 
  * @author Sami Salonen - Unlinked staging and fail-closed cutover commands
  * @author Sami Salonen - Core storage journal and explicit link revert
+ * @author Sami Salonen - Shared migration service consumer
  */
 @Component(service = ConsoleCommandExtension.class)
 @NonNullByDefault
 public final class ModbusMigrationConsoleCommandExtension extends AbstractConsoleCommandExtension {
-    private final ManagedModbusMigrationAdapter adapter;
-    private final ModbusMigrationWorkflow workflow;
+    private final ModbusMigrationService service;
 
     @Activate
-    public ModbusMigrationConsoleCommandExtension(@Reference ThingRegistry thingRegistry,
-            @Reference ItemChannelLinkRegistry linkRegistry, @Reference ManagedThingProvider thingProvider,
-            @Reference StorageService storageService) {
+    public ModbusMigrationConsoleCommandExtension(@Reference ModbusMigrationService service) {
         super("modbus", "Safe Modbus migration commands.");
-        adapter = new ManagedModbusMigrationAdapter(thingRegistry, linkRegistry, thingProvider);
-        MigrationJournal journal = new MigrationJournal(storageService.getStorage("modbus-migration-journal"));
-        workflow = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
-                new ManagedModbusMigrationApplier(thingProvider, linkRegistry, journal, thingRegistry), journal);
+        this.service = service;
     }
 
     @Override
@@ -72,12 +63,12 @@ public final class ModbusMigrationConsoleCommandExtension extends AbstractConsol
     }
 
     private void preview(Console console) {
-        ManagedModbusMigrationAdapter.Snapshot snapshot = adapter.snapshot();
-        MigrationPreview preview = workflow.preview(snapshot.pollers(), snapshot.data());
+        ModbusMigrationService.Preview capture = service.preview();
+        MigrationPreview preview = capture.plan();
         console.println("Preview identity: " + preview.identity());
         console.println(preview.yaml());
         console.println(preview.impactReport());
-        snapshot.manualWork().forEach(work -> console.println("MANUAL: " + work.sourceUid() + " — " + work.reason()));
+        capture.manualWork().forEach(work -> console.println("MANUAL: " + work.sourceUid() + " — " + work.reason()));
         preview.manualWork().forEach(work -> console.println("MANUAL: " + work.sourceUid() + " — " + work.reason()));
     }
 
@@ -86,8 +77,7 @@ public final class ModbusMigrationConsoleCommandExtension extends AbstractConsol
             printUsage(console);
             return;
         }
-        ManagedModbusMigrationAdapter.Snapshot snapshot = adapter.snapshot();
-        workflow.apply(args[2], snapshot.pollers(), snapshot.data());
+        service.apply(args[2]);
         console.println("Candidates staged UNLINKED; production links and legacy Things remain unchanged.");
     }
 
@@ -96,7 +86,7 @@ public final class ModbusMigrationConsoleCommandExtension extends AbstractConsol
             printUsage(console);
             return;
         }
-        MigrationValidation.Observation observation = workflow.validate(args[2], args[3]);
+        MigrationValidation.Observation observation = service.validate(args[2], args[3]);
         console.println("Candidate validation: " + observation.outcome() + "; source poller: "
                 + observation.sourcePollerUid() + "; observed at: " + observation.observedAt());
         if (observation.outcome() == MigrationValidation.Outcome.UNAVAILABLE) {
@@ -109,8 +99,7 @@ public final class ModbusMigrationConsoleCommandExtension extends AbstractConsol
             printUsage(console);
             return;
         }
-        ManagedModbusMigrationAdapter.Snapshot snapshot = adapter.snapshot();
-        workflow.cutover(args[2], args[3], snapshot.pollers(), snapshot.data());
+        service.cutover(args[2], args[3]);
         console.println("Eligible reviewed links switched for " + args[3] + "; legacy Things retained.");
     }
 
@@ -119,7 +108,7 @@ public final class ModbusMigrationConsoleCommandExtension extends AbstractConsol
             printUsage(console);
             return;
         }
-        workflow.revert(args[2], args[3], args[4]);
+        service.revert(args[2], args[3], args[4]);
         console.println("Original links and profiles restored for " + args[3] + " -> " + args[4]
                 + "; legacy Things and staged candidates retained.");
     }
@@ -129,7 +118,7 @@ public final class ModbusMigrationConsoleCommandExtension extends AbstractConsol
             printUsage(console);
             return;
         }
-        workflow.rollback(args[2]);
+        service.rollback(args[2]);
         console.println("Migration-owned targets removed and cutover links restored; legacy Things remain untouched.");
     }
 
