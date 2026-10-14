@@ -15,6 +15,7 @@ package org.openhab.binding.modbus.migration;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -59,6 +60,7 @@ import com.google.gson.Strictness;
  * No endpoint provides a validation override or deletes legacy Things.
  *
  * @author Sami Salonen - Initial contribution
+ * @author Sami Salonen - Detailed comparison REST DTOs
  */
 @Component
 @JaxrsResource
@@ -115,7 +117,7 @@ public class ModbusMigrationResource implements RESTResource {
             var report = review(identity);
             String poller = poller(report, body);
             var observation = service.validate(identity, poller);
-            return Report.from(service.report(identity), Observation.from(observation));
+            return Report.from(service.report(identity), Observation.from(observation, report.preview()));
         }));
     }
 
@@ -293,10 +295,41 @@ public class ModbusMigrationResource implements RESTResource {
     }
 
     public record Observation(String previewIdentity, String sourcePollerUid, String observedAt,
-            MigrationValidation.Outcome outcome) {
-        private static Observation from(MigrationValidation.Observation observation) {
+            MigrationValidation.Outcome outcome, List<Comparison> comparisons) {
+        public Observation {
+            comparisons = List.copyOf(comparisons);
+        }
+
+        static Observation from(MigrationValidation.Observation observation, @Nullable MigrationPreview preview) {
+            List<Comparison> comparisons = observation.comparisons().stream().map(Comparison::from).toList();
+            // Workflow freshness refusal can return only an aggregate. These placeholders are not device evidence.
+            if (comparisons.isEmpty() && observation.outcome() == MigrationValidation.Outcome.UNAVAILABLE
+                    && preview != null) {
+                comparisons = preview.groups().stream()
+                        .filter(group -> group.sourcePollerUid().equals(observation.sourcePollerUid()))
+                        .flatMap(group -> group.channels().stream().map(channel -> new Comparison(
+                                channel.sourceDataUid() + ":number", group.targetPollerUid() + ":" + channel.id(),
+                                Objects.requireNonNull(Objects.toString(channel.configuration().get("address"), "")),
+                                Objects.requireNonNull(Objects.toString(channel.configuration().get("valueType"), "")),
+                                "UNAVAILABLE", "UNAVAILABLE", "1970-01-01T00:00:00Z", "1970-01-01T00:00:00Z",
+                                MigrationValidation.Outcome.UNAVAILABLE,
+                                "No fresh binding-owned comparison was returned for this planned channel")))
+                        .toList();
+            }
             return new Observation(observation.previewIdentity(), observation.sourcePollerUid(),
-                    observation.observedAt().toString(), observation.outcome());
+                    observation.observedAt().toString(), observation.outcome(), comparisons);
+        }
+    }
+
+    /** Detached channel evidence; java.time and internal lifecycle identities never cross the REST boundary. */
+    public record Comparison(String sourceChannelUid, String targetChannelUid, String address, String valueType,
+            String sourceValue, String targetValue, String sourceObservedAt, String targetObservedAt,
+            MigrationValidation.Outcome outcome, String reason) {
+        private static Comparison from(MigrationValidation.Comparison comparison) {
+            return new Comparison(comparison.sourceChannelUid(), comparison.targetChannelUid(), comparison.address(),
+                    comparison.valueType(), comparison.sourceValue(), comparison.targetValue(),
+                    comparison.sourceObservedAt().toString(), comparison.targetObservedAt().toString(),
+                    comparison.outcome(), comparison.reason());
         }
     }
 }

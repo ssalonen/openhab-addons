@@ -19,6 +19,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.io.console.Console;
 import org.openhab.core.io.console.extensions.AbstractConsoleCommandExtension;
 import org.openhab.core.io.console.extensions.ConsoleCommandExtension;
+import org.openhab.core.thing.ChannelUID;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -29,6 +30,7 @@ import org.osgi.service.component.annotations.Reference;
  * @author Sami Salonen - Unlinked staging and fail-closed cutover commands
  * @author Sami Salonen - Core storage journal and explicit link revert
  * @author Sami Salonen - Shared migration service consumer
+ * @author Sami Salonen - Detailed channel comparison output
  */
 @Component(service = ConsoleCommandExtension.class)
 @NonNullByDefault
@@ -89,6 +91,22 @@ public final class ModbusMigrationConsoleCommandExtension extends AbstractConsol
         MigrationValidation.Observation observation = service.validate(args[2], args[3]);
         console.println("Candidate validation: " + observation.outcome() + "; source poller: "
                 + observation.sourcePollerUid() + "; observed at: " + observation.observedAt());
+        var details = ModbusMigrationResource.Observation.from(observation,
+                observation.comparisons().isEmpty() && observation.outcome() == MigrationValidation.Outcome.UNAVAILABLE
+                        ? service.report(args[2]).preview()
+                        : null)
+                .comparisons();
+        details.stream().map(comparison -> new ChannelUID(comparison.targetChannelUid()).getThingUID()).distinct()
+                .forEach(thing -> console.println("Thing ID: " + thing));
+        for (var comparison : details) {
+            console.println("Source channel: " + comparison.sourceChannelUid() + "; target channel: "
+                    + comparison.targetChannelUid() + "; address: " + comparison.address() + "; value type: "
+                    + comparison.valueType());
+            console.println("Source value: " + comparison.sourceValue() + "; source observed at: "
+                    + comparison.sourceObservedAt() + "; target value: " + comparison.targetValue()
+                    + "; target observed at: " + comparison.targetObservedAt());
+            console.println("Outcome: " + comparison.outcome() + "; reason: " + comparison.reason());
+        }
         if (observation.outcome() == MigrationValidation.Outcome.UNAVAILABLE) {
             console.println("No fresh binding-owned comparison is available; cutover is blocked (no override).");
         }

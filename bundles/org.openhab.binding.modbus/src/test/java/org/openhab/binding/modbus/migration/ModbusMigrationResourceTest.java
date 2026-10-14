@@ -78,7 +78,7 @@ class ModbusMigrationResourceTest {
         when(links.getAll()).thenReturn(List.of());
         when(storage.<String> getStorage("modbus-migration-journal"))
                 .thenReturn(ManagedModbusMigrationStagingTest.storage(persisted));
-        service = new ModbusMigrationService(things, links, provider, storage);
+        service = spy(new ModbusMigrationService(things, links, provider, storage));
         var resource = new ModbusMigrationResource(service);
         var config = new ResourceConfig().register(ModbusMigrationResource.class)
                 .register(new org.glassfish.jersey.internal.inject.AbstractBinder() {
@@ -316,9 +316,82 @@ class ModbusMigrationResourceTest {
         assertEquals("modbus:poller:tcp:plant", observation.get("sourcePollerUid").getAsString());
         assertEquals("UNAVAILABLE", observation.get("outcome").getAsString());
         assertEquals("1970-01-01T00:00:00Z", observation.get("observedAt").getAsString());
+        var comparisons = observation.getAsJsonArray("comparisons");
+        assertEquals(1, comparisons.size(), "Missing evidence must still identify every planned channel");
+        var comparison = comparisons.get(0).getAsJsonObject();
+        assertEquals("modbus:data:tcp:plant:value:number", comparison.get("sourceChannelUid").getAsString());
+        assertEquals("modbus:poller2:tcp:plant:value", comparison.get("targetChannelUid").getAsString());
+        assertEquals("100", comparison.get("address").getAsString());
+        assertEquals("int16", comparison.get("valueType").getAsString());
+        assertEquals("UNAVAILABLE", comparison.get("outcome").getAsString());
+        assertEquals("UNAVAILABLE", comparison.get("sourceValue").getAsString());
+        assertEquals("UNAVAILABLE", comparison.get("targetValue").getAsString());
+        assertEquals("1970-01-01T00:00:00Z", comparison.get("sourceObservedAt").getAsString());
+        assertEquals("1970-01-01T00:00:00Z", comparison.get("targetObservedAt").getAsString());
+        assertFalse(comparison.get("reason").getAsString().isBlank());
         assertEquals(405, request("GET", "workflows/" + identity + "/validate", "").statusCode());
         java.nio.file.Files.writeString(java.nio.file.Path.of("target/migration-rest-validation-example.json"),
                 response.body());
+    }
+
+    @Test
+    void coreJsonExposesEveryComparisonWithIsoStringTimestampsWithoutLifecycleTokens() throws Exception {
+        String identity = capture();
+        json(request("POST", "workflows/" + identity + "/apply", ""));
+        String poller = "modbus:poller:tcp:plant";
+        var sourceTime = java.time.Instant.parse("2026-10-14T09:00:00.123456789Z");
+        var targetTime = java.time.Instant.parse("2026-10-14T09:00:01.987654321Z");
+        var comparisons = List.of(
+                new MigrationValidation.Comparison("modbus:data:tcp:plant:match:number",
+                        "modbus:poller2:tcp:plant:match", "100.1", "int16", "42", "42", sourceTime, targetTime,
+                        MigrationValidation.Outcome.MATCH, "Fresh decoded readings agree"),
+                new MigrationValidation.Comparison("modbus:data:tcp:plant:mismatch:number",
+                        "modbus:poller2:tcp:plant:mismatch", "101", "uint32", "42", "43", sourceTime, targetTime,
+                        MigrationValidation.Outcome.MISMATCH, "Decoded readings differ"),
+                new MigrationValidation.Comparison("modbus:data:tcp:plant:unavailable:number",
+                        "modbus:poller2:tcp:plant:unavailable", "102.0", "bit", "UNAVAILABLE", "UNAVAILABLE",
+                        java.time.Instant.EPOCH, java.time.Instant.EPOCH, MigrationValidation.Outcome.UNAVAILABLE,
+                        "Candidate has no fresh observation"));
+        // Fixture validation seam: this proves actual HTTP/Core DTO serialization, not device equivalence.
+        doReturn(new MigrationValidation.Observation(identity, poller, targetTime,
+                MigrationValidation.Outcome.UNAVAILABLE, comparisons)).when(service).validate(identity, poller);
+        var response = request("POST", "workflows/" + identity + "/validate",
+                "{\"sourcePollerUid\":\"" + poller + "\"}");
+        var report = json(response);
+        assertFalse(report.get("cutoverReady").getAsBoolean());
+        var observation = report.getAsJsonObject("observation");
+        assertEquals(targetTime.toString(), observation.get("observedAt").getAsString());
+        var actual = observation.getAsJsonArray("comparisons");
+        assertNotNull(actual, "REST must expose per-channel details, not only an aggregate outcome");
+        assertEquals(comparisons.size(), actual.size());
+        for (int i = 0; i < comparisons.size(); i++) {
+            var expected = comparisons.get(i);
+            var comparison = actual.get(i).getAsJsonObject();
+            assertEquals(
+                    java.util.Set.of("sourceChannelUid", "targetChannelUid", "address", "valueType", "sourceValue",
+                            "targetValue", "sourceObservedAt", "targetObservedAt", "outcome", "reason"),
+                    comparison.keySet());
+            assertEquals(expected.sourceChannelUid(), comparison.get("sourceChannelUid").getAsString());
+            assertEquals(expected.targetChannelUid(), comparison.get("targetChannelUid").getAsString());
+            assertEquals(expected.address(), comparison.get("address").getAsString());
+            assertEquals(expected.valueType(), comparison.get("valueType").getAsString());
+            assertEquals(expected.sourceValue(), comparison.get("sourceValue").getAsString());
+            assertEquals(expected.targetValue(), comparison.get("targetValue").getAsString());
+            assertTrue(comparison.get("sourceObservedAt").getAsJsonPrimitive().isString());
+            assertTrue(comparison.get("targetObservedAt").getAsJsonPrimitive().isString());
+            assertEquals(expected.sourceObservedAt().toString(), comparison.get("sourceObservedAt").getAsString());
+            assertEquals(expected.targetObservedAt().toString(), comparison.get("targetObservedAt").getAsString());
+            assertEquals(expected.outcome().name(), comparison.get("outcome").getAsString());
+            assertEquals(expected.reason(), comparison.get("reason").getAsString());
+        }
+        assertFalse(response.body().toLowerCase(java.util.Locale.ROOT).contains("generation"));
+        var before = Map.copyOf(persisted);
+        var readback = json(request("GET", "workflows/" + identity, ""));
+        assertTrue(!readback.has("observation") || readback.get("observation").isJsonNull());
+        assertEquals(before, persisted);
+        verify(service, times(1)).validate(identity, poller);
+        verify(links, never()).add(any());
+        verify(links, never()).remove(anyString());
     }
 
     @Test

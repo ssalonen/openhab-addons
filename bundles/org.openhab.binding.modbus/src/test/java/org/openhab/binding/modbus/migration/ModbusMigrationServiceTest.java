@@ -248,6 +248,43 @@ class ModbusMigrationServiceTest {
         }
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(MigrationValidation.Outcome.class)
+    void consoleValidatePrintsEveryComparisonFieldAndDomainThingId(MigrationValidation.Outcome outcome) {
+        var service = mock(ModbusMigrationService.class);
+        String identity = "a".repeat(64);
+        String poller = "modbus:poller:tcp:plant";
+        var sourceTime = java.time.Instant.parse("2026-10-14T09:00:00.123456789Z");
+        var targetTime = java.time.Instant.parse("2026-10-14T09:00:01.987654321Z");
+        var comparison = new MigrationValidation.Comparison("modbus:data:tcp:plant:value:number",
+                "modbus:poller2:tcp:plant:value", "100.1", "int16", "42",
+                outcome == MigrationValidation.Outcome.UNAVAILABLE ? "UNAVAILABLE"
+                        : outcome == MigrationValidation.Outcome.MATCH ? "42" : "43",
+                sourceTime, targetTime, outcome, "Detailed reason for " + outcome);
+        var second = new MigrationValidation.Comparison("modbus:data:tcp:plant:other:number",
+                "modbus:poller2:tcp:plant:other", "101", "uint16", "7", "7", sourceTime, targetTime,
+                MigrationValidation.Outcome.MATCH, "Second channel agrees");
+        when(service.validate(identity, poller)).thenReturn(new MigrationValidation.Observation(identity, poller,
+                targetTime, outcome, List.of(comparison, second)));
+        var console = mock(Console.class);
+        new ModbusMigrationConsoleCommandExtension(service)
+                .execute(new String[] { "migrate", "validate", identity, poller }, console);
+        var lines = ArgumentCaptor.forClass(String.class);
+        verify(console, atLeastOnce()).println(lines.capture());
+        String output = String.join("\n", lines.getAllValues());
+        assertTrue(output.contains("Thing ID: modbus:poller2:tcp:plant"), output);
+        for (var entry : List.of(comparison, second)) {
+            for (String detail : List.of(entry.sourceChannelUid(), entry.targetChannelUid(), entry.address(),
+                    entry.valueType(), entry.sourceValue(), entry.targetValue(), entry.sourceObservedAt().toString(),
+                    entry.targetObservedAt().toString(), entry.outcome().name(), entry.reason())) {
+                assertTrue(output.contains(detail), "Missing console detail: " + detail + "\n" + output);
+            }
+        }
+        assertFalse(output.toLowerCase(java.util.Locale.ROOT).contains("generation"), output);
+        verify(service).validate(identity, poller);
+        verify(service, never()).cutover(anyString(), anyString());
+    }
+
     @Test
     void consoleCaptureAndServiceOperationsShareOneWorkflow() {
         var service = service();
@@ -263,6 +300,10 @@ class ModbusMigrationServiceTest {
         assertEquals(MigrationWorkflowReport.Status.STAGED, service.report(identity).status());
         command.execute(new String[] { "migrate", "validate", identity, "modbus:poller:tcp:plant" }, console);
         verify(console).println(contains("Candidate validation: UNAVAILABLE"));
+        verify(console).println("Thing ID: modbus:poller2:tcp:plant");
+        verify(console).println(contains("Source channel: modbus:data:tcp:plant:value:number"));
+        verify(console).println(contains("Source value: UNAVAILABLE"));
+        verify(console).println(contains("Outcome: UNAVAILABLE; reason:"));
         assertFalse(service.report(identity).cutoverReady());
         assertThrows(IllegalStateException.class, () -> service.cutover(identity, "modbus:poller:tcp:plant"));
         command.execute(new String[] { "migrate", "rollback", identity }, console);

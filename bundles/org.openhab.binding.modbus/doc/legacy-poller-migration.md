@@ -67,19 +67,27 @@ openhab> modbus migrate validate <preview-identity> <legacy-poller-uid>
 openhab> modbus migrate cutover <preview-identity> <legacy-poller-uid>
 ```
 
-Validation is a separate dependency seam, not a comparison of Item caches.
-In this slice the console has no binding-owned observation provider, so validation reports `UNAVAILABLE` and cutover is blocked.
+Validation uses binding-owned observations from fresh device polls, not Item caches or cached `REFRESH` delivery.
+The candidate is the proposed unlinked `poller2` Thing running alongside the legacy topology.
+The console identifies it as **Thing ID** and prints every planned channel comparison: source/target channel, address, value type, source/target value, source/target observation timestamp, outcome and reason.
+Missing, failed, stale or invalidated evidence is `UNAVAILABLE` with a reason; it does not establish a match and blocks cutover.
 There is no force flag, acknowledgement bypass, or automatic link switch in apply.
-An observation integration must compare all planned channels from fresh post-create device polls, verify candidate configuration/lifecycle, and report `MATCH`, `MISMATCH`, or `UNAVAILABLE` with the reviewed identity, poller UID, and timestamp.
-No live-device validation or boundary-coverage claim is made here.
 Comparisons assess read-equivalence, not device write behavior; writes require separate controlled verification.
+Automated fixture coverage is not a claim that your live device or every address boundary has been validated.
 
-The hosted view includes a **Detailed channel comparisons** section, rendering source/target channels, address, value type, values, timestamps, outcome and reason when the validation response supplies them.
-At this revision REST observation DTOs and console output still expose aggregate validation only; the hosted renderer is tested with proposed DTO fixtures, not captured REST details.
-Until backend exposure is implemented and verified, the section reports that no detailed evidence was returned.
+`POST /rest/modbus/migration/workflows/<preview-identity>/validate` with `{"sourcePollerUid":"<legacy-poller-uid>"}` returns the detailed evidence in `observation.comparisons`.
+Each comparison contains `sourceChannelUid`, `targetChannelUid`, `address`, `valueType`, `sourceValue`, `targetValue`, `sourceObservedAt`, `targetObservedAt`, `outcome` and `reason`.
+REST timestamps are ISO-8601 strings; internal lifecycle tokens are not exposed.
+If freshness checks return aggregate-only `UNAVAILABLE`, both adapters list the reviewed planned channels with unavailable values and an explicit no-evidence reason.
+The epoch timestamp `1970-01-01T00:00:00Z` marks absent evidence, not a device reading; these presentation placeholders never authorize cutover.
+`GET /rest/modbus/migration/workflows/<preview-identity>` is read-only: it neither collects observations nor persists validation evidence and does not return the POST-only details.
+
+The hosted view includes a **Detailed channel comparisons** section rendering those fields from the validation response.
+The REST schema is exercised through Core's actual JSON media provider, and console tests execute the typed validation command for all three outcomes.
+Hosted renderer tests use DTO fixtures; they are not proof of a live browser session against this backend.
 Validation details are transient: explicit workflow refetch and logout clear them, and they do not override backend cutover readiness.
 
-When that integration is available, explicit cutover removes each eligible legacy Item-channel link **before** adding its reviewed replacement.
+Explicit cutover removes each eligible legacy Item-channel link **before** adding its reviewed replacement.
 Only empty or exactly `system:default` profile configurations are eligible; other profiles and rule/widget rewrites remain manual.
 The switch is per poller, and legacy Things remain online.
 Source configuration drift or an existing target link refuses the operation.
