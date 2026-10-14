@@ -51,7 +51,7 @@ public final class ModbusMigrationService {
      */
     public synchronized Preview preview() {
         var snapshot = adapter.snapshot();
-        return new Preview(workflow.preview(snapshot.pollers(), snapshot.data()), snapshot.manualWork());
+        return new Preview(workflow.preview(snapshot.pollers(), snapshot.data(), snapshot.manualWork()), List.of());
     }
 
     /** Reads an existing review and workflow status only; never captures, stages, validates or writes the journal. */
@@ -61,7 +61,7 @@ public final class ModbusMigrationService {
 
     public synchronized void apply(String identity) {
         var snapshot = adapter.snapshot();
-        workflow.apply(identity, snapshot.pollers(), snapshot.data());
+        workflow.apply(identity, snapshot.pollers(), snapshot.data(), snapshot.manualWork());
     }
 
     public synchronized MigrationValidation.Observation validate(String identity, String sourcePollerUid) {
@@ -70,7 +70,7 @@ public final class ModbusMigrationService {
 
     public synchronized void cutover(String identity, String sourcePollerUid) {
         var snapshot = adapter.snapshot();
-        workflow.cutover(identity, sourcePollerUid, snapshot.pollers(), snapshot.data());
+        workflow.cutover(identity, sourcePollerUid, snapshot.pollers(), snapshot.data(), snapshot.manualWork());
     }
 
     public synchronized void revert(String identity, String itemName, String sourceChannelUid) {
@@ -81,7 +81,7 @@ public final class ModbusMigrationService {
         workflow.rollback(identity);
     }
 
-    /** Safe plan and provider-refused work; no raw endpoint configuration is exposed. */
+    /** Safe plan with all manual work. The legacy outer manualWork field stays empty to avoid duplicate rendering. */
     public record Preview(MigrationPreview plan, List<ManualMigrationWork> manualWork) {
         public Preview {
             manualWork = List.copyOf(manualWork);

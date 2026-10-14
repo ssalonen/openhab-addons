@@ -57,6 +57,43 @@ class ModbusMigrationServiceTest {
     }
 
     @Test
+    void providerRefusedWorkSurvivesReadOnlyReportAndRestart() {
+        var first = service();
+        var unmanaged = BridgeBuilder
+                .create(new ThingTypeUID("modbus", "poller"), new ThingUID("modbus:poller:tcp:unmanaged")).build();
+        var original = things.getAll();
+        var all = new java.util.ArrayList<>(original);
+        all.add(unmanaged);
+        when(things.getAll()).thenReturn(all);
+        var capture = first.preview();
+        assertTrue(capture.manualWork().isEmpty());
+        assertEquals(1, capture.plan().manualWork().size());
+        assertEquals(capture.plan().manualWork(), first.report(capture.plan().identity()).preview().manualWork());
+        var before = Map.copyOf(persisted);
+        var restarted = service();
+        clearInvocations(things, links, provider, storage);
+        assertEquals(capture.plan(), restarted.report(capture.plan().identity()).preview());
+        assertEquals(before, persisted);
+        verifyNoInteractions(things, links, provider, storage);
+    }
+
+    @Test
+    void refusedProviderConfigurationDriftChangesReviewWithoutExposingValues() {
+        var service = service();
+        var refused = BridgeBuilder
+                .create(new ThingTypeUID("modbus", "poller"), new ThingUID("modbus:poller:tcp:unmanaged"))
+                .withConfiguration(new Configuration(Map.of("innocuous", "SENTINEL-before"))).build();
+        when(things.getAll()).thenReturn(List.of(refused));
+        var before = service.preview().plan();
+        refused.getConfiguration().put("innocuous", "SENTINEL-after");
+        var after = service.preview().plan();
+        assertNotEquals(before.identity(), after.identity());
+        assertFalse(persisted.toString().contains("SENTINEL"));
+        assertFalse(after.toString().contains("SENTINEL"));
+        assertEquals(before.manualWork(), service.report(before.identity()).preview().manualWork());
+    }
+
+    @Test
     void serviceReactivationRetainsReviewAndStagingStatus() {
         var first = service();
         String identity = first.preview().plan().identity();

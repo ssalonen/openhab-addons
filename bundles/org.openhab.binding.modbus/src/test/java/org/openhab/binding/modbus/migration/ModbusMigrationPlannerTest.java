@@ -40,9 +40,11 @@ class ModbusMigrationPlannerTest {
 
         assertTrue(preview.groups().isEmpty());
         assertTrue(preview.impacts().isEmpty());
-        assertEquals(List.of(new ManualMigrationWork(data.uid(), "custom readTransform requires manual migration")),
+        assertEquals(
+                List.of(new ManualMigrationWork(data.uid(),
+                        "custom readTransform requires manual migration; configuration omitted")),
                 preview.manualWork());
-        assertEquals(transforms, data.configuration().get("readTransform"));
+        assertFalse(data.configuration().containsKey("readTransform"));
     }
 
     private static java.util.stream.Stream<List<?>> customReadTransforms() {
@@ -69,6 +71,36 @@ class ModbusMigrationPlannerTest {
 
     private static java.util.stream.Stream<List<String>> defaultReadTransforms() {
         return java.util.stream.Stream.of(List.of("default"), List.of("DEFAULT"), List.of(" default "));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = { "readStart", "readValueType", "readTransform",
+            "unknown" })
+    void arbitraryStringsCannotBypassTheDataReviewSchema(String key) {
+        var poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        var values = new java.util.HashMap<String, Object>(Map.of("readStart", "100", "readValueType", "int16"));
+        values.put(key, "JS(https://user:SENTINEL@example.test)");
+        var data = new LegacyData("modbus:data:tcp:plant:value", poller.uid(), values, List.of());
+        var preview = planner.preview(List.of(poller), List.of(data));
+        assertTrue(preview.groups().isEmpty());
+        assertFalse(preview.manualWork().isEmpty());
+        assertFalse(preview.toString().contains("SENTINEL"));
+        assertFalse(new com.google.gson.Gson().toJson(data).contains("SENTINEL"));
+    }
+
+    @Test
+    void schemaPreservesDocumentedPollerValuesAndIndexedAddresses() {
+        var values = Map.<String, Object> of("start", 100, "length", 2, "type", "holding", "refresh", 500, "maxTries",
+                3, "cacheMillis", 50);
+        var poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", values);
+        var data = new LegacyData("modbus:data:tcp:plant:value", poller.uid(),
+                Map.of("readStart", "100.1", "readValueType", "bit", "readTransform", List.of(" default ")), List.of());
+        var preview = planner.preview(List.of(poller), List.of(data));
+        assertTrue(preview.manualWork().isEmpty());
+        assertEquals(values, preview.groups().getFirst().configuration());
+        assertEquals(Map.of("address", "100.1", "valueType", "bit"),
+                preview.groups().getFirst().channels().getFirst().configuration());
+        assertEquals(List.of(" default "), data.configuration().get("readTransform"));
     }
 
     @Test
@@ -283,8 +315,8 @@ class ModbusMigrationPlannerTest {
                 List.of(new ManualMigrationWork("modbus:data:tcp:plant:temperature:number",
                         "Item link profile configuration is not proven compatible; target link was not planned")),
                 preview.manualWork());
-        assertTrue(preview.impactReport()
-                .contains("Profile configuration: {\"gain\":\"2\",\"profile\":\"modbus:gain-offset\"}"));
+        assertTrue(preview.impactReport().contains("configuration omitted; manual restoration required"));
+        assertFalse(preview.impactReport().contains("modbus:gain-offset"));
         assertTrue(preview.impactReport().contains("Target link action: MANUAL"));
     }
 

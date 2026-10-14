@@ -19,7 +19,14 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /** A legacy Modbus data Thing and links that originate from it. */
 @NonNullByDefault
-public record LegacyData(String uid, String pollerUid, Map<String, Object> configuration, List<LegacyLink> links) {
+public record LegacyData(String uid, String pollerUid, Map<String, Object> configuration, List<LegacyLink> links,
+        String configurationIdentity, String omissionReason) {
+    public LegacyData(String uid, String pollerUid, Map<String, Object> configuration, List<LegacyLink> links) {
+        this(uid, pollerUid, MigrationReviewConfiguration.data(configuration), links,
+                ModbusMigrationPlanner.configurationIdentity(configuration),
+                MigrationReviewConfiguration.dataReason(configuration));
+    }
+
     public LegacyData {
         configuration = Map.copyOf(configuration);
         links = List.copyOf(links);

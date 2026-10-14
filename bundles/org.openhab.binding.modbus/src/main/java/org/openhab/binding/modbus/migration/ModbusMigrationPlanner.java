@@ -35,11 +35,21 @@ import org.eclipse.jdt.annotation.Nullable;
 public final class ModbusMigrationPlanner {
 
     public MigrationPreview preview(List<LegacyPoller> pollers, List<LegacyData> dataThings) {
+        return preview(pollers, dataThings, List.of());
+    }
+
+    MigrationPreview preview(List<LegacyPoller> pollers, List<LegacyData> dataThings,
+            List<ManualMigrationWork> providerWork) {
         List<LegacyPoller> sortedPollers = pollers.stream().sorted(Comparator.comparing(LegacyPoller::uid)).toList();
-        List<ManualMigrationWork> manualWork = new ArrayList<>();
+        List<ManualMigrationWork> manualWork = new ArrayList<>(providerWork);
         List<MigrationGroup> groups = new ArrayList<>();
         List<MigrationImpact> impacts = new ArrayList<>();
         for (LegacyPoller poller : sortedPollers) {
+            if (poller.configurationOmitted()) {
+                manualWork.add(new ManualMigrationWork(poller.uid(),
+                        "unknown or invalid poller configuration requires manual migration; configuration omitted"));
+                continue;
+            }
             List<LegacyData> children = dataThings.stream().filter(data -> poller.uid().equals(data.pollerUid()))
                     .sorted(Comparator.comparing(LegacyData::uid)).toList();
             List<MigrationChannel> channels = new ArrayList<>();
@@ -61,7 +71,7 @@ public final class ModbusMigrationPlanner {
                 data.links().stream()
                         .sorted(Comparator.comparing(LegacyLink::channelUid).thenComparing(LegacyLink::itemName))
                         .forEach(link -> {
-                            boolean compatible = compatibleProfileConfiguration(link.configuration());
+                            boolean compatible = link.compatible();
                             impacts.add(new MigrationImpact(link.itemName(), link.channelUid(), targetChannelUid,
                                     link.configuration(), compatible));
                             if (compatible) {
@@ -78,7 +88,8 @@ public final class ModbusMigrationPlanner {
                         poller.configuration(), channels, links));
             }
         }
-        manualWork.sort(Comparator.comparing(ManualMigrationWork::sourceUid));
+        manualWork.sort(Comparator.comparing(ManualMigrationWork::sourceUid).thenComparing(ManualMigrationWork::reason)
+                .thenComparing(ManualMigrationWork::configurationIdentity));
         impacts.sort(Comparator.comparing(MigrationImpact::sourceChannelUid).thenComparing(MigrationImpact::itemName));
         String yaml = yaml(groups, manualWork);
         String manifestJson = manifest(groups, manualWork, impacts);
@@ -95,29 +106,14 @@ public final class ModbusMigrationPlanner {
             return Optional.of(
                     "source channel type is unknown or its conversion is not proven compatible; requires manual migration");
         }
+        if (!data.omissionReason().isEmpty()) {
+            return Optional.of(data.omissionReason());
+        }
         Map<String, Object> configuration = data.configuration();
-        Object writeTransform = configuration.get("writeTransform");
-        if (writeTransform instanceof String value && value.contains("JSON")) {
-            return Optional.of("JSON write transform requires manual migration");
-        }
-        if (configuration.containsKey("writeStart") || configuration.containsKey("writeType")
-                || configuration.containsKey("writeValueType") || configuration.containsKey("writeTransform")) {
-            return Optional.of("writes require manual migration");
-        }
-        Object readTransform = configuration.get("readTransform");
-        if (readTransform instanceof String value && !value.isBlank() && !"default".equals(value)
-                || readTransform instanceof List<?> values && (values.size() != 1
-                        || !(values.getFirst() instanceof String text) || !"default".equalsIgnoreCase(text.trim()))) {
-            return Optional.of("custom readTransform requires manual migration");
-        }
         if (!configuration.containsKey("readStart") || !configuration.containsKey("readValueType")) {
             return Optional.of("readStart and readValueType are required for migration");
         }
         return Optional.empty();
-    }
-
-    private static boolean compatibleProfileConfiguration(Map<String, Object> configuration) {
-        return configuration.isEmpty() || Map.of("profile", "system:default").equals(configuration);
     }
 
     private static String targetPollerUid(String sourceUid) {
@@ -185,8 +181,10 @@ public final class ModbusMigrationPlanner {
                         + "\",\"profileConfiguration\":" + jsonObject(link.configuration()) + "}");
             }
         }
-        List<String> manual = manualWork.stream().map(work -> "{\"sourceThing\":\"" + json(work.sourceUid())
-                + "\",\"reason\":\"" + json(work.reason()) + "\"}").toList();
+        List<String> manual = manualWork.stream()
+                .map(work -> "{\"sourceThing\":\"" + json(work.sourceUid()) + "\",\"reason\":\"" + json(work.reason())
+                        + "\",\"configurationIdentity\":\"" + json(work.configurationIdentity()) + "\"}")
+                .toList();
         List<String> impactMappings = impacts.stream()
                 .map(impact -> "{\"item\":\"" + json(impact.itemName()) + "\",\"sourceChannel\":\""
                         + json(impact.sourceChannelUid()) + "\",\"targetChannel\":\"" + json(impact.targetChannelUid())
@@ -215,12 +213,14 @@ public final class ModbusMigrationPlanner {
     private static String previewIdentity(List<LegacyPoller> pollers, List<LegacyData> dataThings,
             List<MigrationGroup> groups, List<ManualMigrationWork> manualWork) {
         List<?> sources = pollers.stream().map(poller -> List.of(poller.uid(), poller.bridgeUid(),
-                poller.configuration(), poller.endpointConfigurationIdentity())).toList();
-        List<?> data = dataThings.stream().sorted(Comparator.comparing(LegacyData::uid))
-                .map(thing -> List.of(thing.uid(), thing.pollerUid(), thing.configuration(),
-                        thing.links().stream().map(link -> canonical(
-                                List.of(link.itemName(), link.channelUid(), link.itemType(), link.configuration())))
-                                .sorted().toList()))
+                poller.configurationIdentity(), poller.endpointConfigurationIdentity())).toList();
+        List<?> data = dataThings
+                .stream().sorted(Comparator.comparing(LegacyData::uid)).map(
+                        thing -> List.of(thing.uid(), thing.pollerUid(), thing.configurationIdentity(),
+                                thing.links().stream()
+                                        .map(link -> canonical(List.of(link.itemName(), link.channelUid(),
+                                                link.itemType(), link.configurationIdentity())))
+                                        .sorted().toList()))
                 .toList();
         List<?> targets = groups.stream().map(group -> {
             List<?> channels = group.channels().stream().map(channel -> List.of(channel.sourceDataUid(), channel.id(),
@@ -229,8 +229,9 @@ public final class ModbusMigrationPlanner {
                     link.targetChannelUid(), link.configuration())).toList();
             return List.of(group.targetPollerUid(), group.targetBridgeUid(), group.configuration(), channels, links);
         }).toList();
-        List<?> manual = manualWork.stream().map(work -> List.of(work.sourceUid(), work.reason())).toList();
-        return configurationIdentity(List.of("modbus-migration-preview-v2", sources, data, targets, manual));
+        List<?> manual = manualWork.stream()
+                .map(work -> List.of(work.sourceUid(), work.reason(), work.configurationIdentity())).toList();
+        return configurationIdentity(List.of("modbus-migration-preview-v3", sources, data, targets, manual));
     }
 
     static String configurationIdentity(Object value) {

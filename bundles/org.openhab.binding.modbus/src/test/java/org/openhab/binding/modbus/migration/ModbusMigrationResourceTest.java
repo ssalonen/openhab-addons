@@ -116,6 +116,39 @@ class ModbusMigrationResourceTest {
     }
 
     @Test
+    void coreJsonAndSavedReviewsOmitUnknownAndCustomConfigurationValues() throws Exception {
+        var sourceThings = things.getAll();
+        var data = sourceThings.stream().filter(thing -> thing.getThingTypeUID().getId().equals("data")).findFirst()
+                .orElseThrow();
+        var link = new org.openhab.core.thing.link.ItemChannelLink("Value",
+                new org.openhab.core.thing.ChannelUID("modbus:data:tcp:plant:value:number"),
+                new Configuration(Map.of("profile", "system:default", "innocuous", "SENTINEL-profile")));
+        when(links.getAll()).thenReturn(List.of(link));
+        var response = request("POST", "previews", "");
+        var plan = json(response).getAsJsonObject("plan");
+        String identity = plan.get("identity").getAsString();
+        assertFalse(response.body().contains("SENTINEL"));
+        assertTrue(plan.get("impactReport").getAsString().contains("omitted"));
+        var saved = json(request("GET", "workflows/" + identity, ""));
+        assertEquals(plan, saved.getAsJsonObject("preview"));
+        var restarted = new ModbusMigrationService(things, links, provider, storage);
+        assertEquals(plan, new com.google.gson.Gson().toJsonTree(restarted.report(identity).preview()));
+        var poller = sourceThings.stream().filter(thing -> thing.getThingTypeUID().getId().equals("poller")).findFirst()
+                .orElseThrow();
+        poller.getConfiguration().put("innocuous", "SENTINEL-poller");
+        data.getConfiguration().put("readTransform", "JS(https://user:SENTINEL-transform@example.test)");
+        response = request("POST", "previews", "");
+        plan = json(response).getAsJsonObject("plan");
+        assertTrue(plan.getAsJsonArray("groups").isEmpty());
+        assertFalse(plan.getAsJsonArray("manualWork").isEmpty());
+        assertFalse(response.body().contains("SENTINEL"));
+        assertFalse(persisted.toString().contains("SENTINEL"));
+        assertFalse(plan.get("yaml").getAsString().contains("SENTINEL"));
+        assertFalse(plan.get("manifestJson").getAsString().contains("SENTINEL"));
+        assertFalse(plan.get("impactReport").getAsString().contains("SENTINEL"));
+    }
+
+    @Test
     void previewUsesPostAndCoreSerializesTheServiceRecord() throws Exception {
         var response = request("POST", "previews", "");
         var json = json(response);

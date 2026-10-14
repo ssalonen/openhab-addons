@@ -32,7 +32,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
  */
 @NonNullByDefault
 public final class ModbusMigrationWorkflow {
-    private record Sources(List<LegacyPoller> pollers, List<LegacyData> data) {
+    private record Sources(List<LegacyPoller> pollers, List<LegacyData> data, List<ManualMigrationWork> providerWork) {
     }
 
     private final MigrationJournal journal;
@@ -67,7 +67,7 @@ public final class ModbusMigrationWorkflow {
         for (MigrationJournal.Workflow entry : journal.workflows()) {
             String identity = entry.preview().identity();
             previews.put(identity, entry.preview());
-            sources.put(identity, new Sources(entry.pollers(), entry.data()));
+            sources.put(identity, new Sources(entry.pollers(), entry.data(), entry.providerWork()));
             if (entry.outcome().equals("STAGED")) {
                 applied.add(identity);
                 stagedAt.put(identity, Instant.parse(entry.stagedAt()));
@@ -82,11 +82,17 @@ public final class ModbusMigrationWorkflow {
     }
 
     public synchronized MigrationPreview preview(List<LegacyPoller> pollers, List<LegacyData> dataThings) {
-        MigrationPreview preview = planner.preview(pollers, dataThings);
+        return preview(pollers, dataThings, List.of());
+    }
+
+    synchronized MigrationPreview preview(List<LegacyPoller> pollers, List<LegacyData> dataThings,
+            List<ManualMigrationWork> providerWork) {
+        MigrationPreview preview = planner.preview(pollers, dataThings, providerWork);
         MigrationJournal.Workflow snapshot = journal.snapshot(new MigrationJournal.Workflow(preview, pollers,
-                dataThings, "PREVIEW", Instant.EPOCH.toString(), List.of()));
+                dataThings, "PREVIEW", Instant.EPOCH.toString(), List.of(), providerWork));
         previews.putIfAbsent(preview.identity(), snapshot.preview());
-        sources.putIfAbsent(preview.identity(), new Sources(snapshot.pollers(), snapshot.data()));
+        sources.putIfAbsent(preview.identity(),
+                new Sources(snapshot.pollers(), snapshot.data(), snapshot.providerWork()));
         if (!applied.contains(preview.identity()) && !recovery.contains(preview.identity())) {
             save(preview.identity(), "PREVIEW");
         }
@@ -113,11 +119,17 @@ public final class ModbusMigrationWorkflow {
         Sources source = java.util.Objects.requireNonNull(sources.get(identity));
         journal.workflow(new MigrationJournal.Workflow(java.util.Objects.requireNonNull(previews.get(identity)),
                 source.pollers(), source.data(), outcome, stagedAt.getOrDefault(identity, Instant.EPOCH).toString(),
-                switched.stream().filter(key -> key.startsWith(identity + ":")).sorted().toList()));
+                switched.stream().filter(key -> key.startsWith(identity + ":")).sorted().toList(),
+                source.providerWork()));
     }
 
     public synchronized void apply(String previewIdentity, List<LegacyPoller> pollers, List<LegacyData> dataThings) {
-        MigrationPreview currentPreview = planner.preview(pollers, dataThings);
+        apply(previewIdentity, pollers, dataThings, List.of());
+    }
+
+    synchronized void apply(String previewIdentity, List<LegacyPoller> pollers, List<LegacyData> dataThings,
+            List<ManualMigrationWork> providerWork) {
+        MigrationPreview currentPreview = planner.preview(pollers, dataThings, providerWork);
         if (!previewIdentity.equals(currentPreview.identity()) || !previews.containsKey(previewIdentity)) {
             throw new IllegalArgumentException("apply requires the exact, current preview identity");
         }
@@ -161,6 +173,11 @@ public final class ModbusMigrationWorkflow {
 
     public synchronized void cutover(String previewIdentity, String sourcePollerUid, List<LegacyPoller> pollers,
             List<LegacyData> dataThings) {
+        cutover(previewIdentity, sourcePollerUid, pollers, dataThings, List.of());
+    }
+
+    synchronized void cutover(String previewIdentity, String sourcePollerUid, List<LegacyPoller> pollers,
+            List<LegacyData> dataThings, List<ManualMigrationWork> providerWork) {
         MigrationPreview preview = appliedPreview(previewIdentity);
         Sources reviewedSources = java.util.Objects.requireNonNull(sources.get(previewIdentity));
         Set<String> removedLinks = new HashSet<>();
@@ -169,10 +186,12 @@ public final class ModbusMigrationWorkflow {
                 .forEach(link -> removedLinks.add(link.itemName() + " -> " + link.sourceChannelUid()));
         List<LegacyData> expectedData = reviewedSources.data().stream()
                 .map(data -> new LegacyData(data.uid(), data.pollerUid(), data.configuration(), data.links().stream()
-                        .filter(link -> !removedLinks.contains(link.itemName() + " -> " + link.channelUid())).toList()))
+                        .filter(link -> !removedLinks.contains(link.itemName() + " -> " + link.channelUid())).toList(),
+                        data.configurationIdentity(), data.omissionReason()))
                 .toList();
-        String expectedIdentity = planner.preview(reviewedSources.pollers(), expectedData).identity();
-        if (!expectedIdentity.equals(planner.preview(pollers, dataThings).identity())) {
+        String expectedIdentity = planner
+                .preview(reviewedSources.pollers(), expectedData, reviewedSources.providerWork()).identity();
+        if (!expectedIdentity.equals(planner.preview(pollers, dataThings, providerWork).identity())) {
             throw new IllegalArgumentException("cutover requires the exact, current reviewed source configuration");
         }
         MigrationGroup selected = group(preview, sourcePollerUid);

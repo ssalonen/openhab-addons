@@ -19,7 +19,14 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 /** A legacy Modbus poller with a digest of its endpoint configuration, never plaintext endpoint credentials. */
 @NonNullByDefault
 public record LegacyPoller(String uid, String bridgeUid, Map<String, Object> configuration,
-        String endpointConfigurationIdentity) {
+        String endpointConfigurationIdentity, String configurationIdentity, boolean configurationOmitted) {
+    public LegacyPoller(String uid, String bridgeUid, Map<String, Object> configuration,
+            String endpointConfigurationIdentity) {
+        this(uid, bridgeUid, MigrationReviewConfiguration.poller(configuration), endpointConfigurationIdentity,
+                ModbusMigrationPlanner.configurationIdentity(configuration),
+                !MigrationReviewConfiguration.poller(configuration).equals(configuration));
+    }
+
     public LegacyPoller(String uid, String bridgeUid, Map<String, Object> configuration) {
         this(uid, bridgeUid, configuration, "");
     }

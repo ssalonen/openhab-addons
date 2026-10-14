@@ -13,12 +13,15 @@
 package org.openhab.binding.modbus.migration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.openhab.core.config.core.Configuration;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingRegistry;
 import org.openhab.core.thing.ThingTypeUID;
@@ -81,8 +84,10 @@ class ManagedModbusMigrationAdapterTest {
                 .snapshot();
 
         assertEquals(List.of(), snapshot.data());
-        assertEquals(List.of(new ManualMigrationWork(data.getUID().toString(),
-                "legacy data parent is not a poller; writes require manual migration")), snapshot.manualWork());
+        assertEquals(data.getUID().toString(), snapshot.manualWork().getFirst().sourceUid());
+        assertEquals("legacy data parent is not a poller; writes require manual migration",
+                snapshot.manualWork().getFirst().reason());
+        assertFalse(snapshot.manualWork().getFirst().configurationIdentity().isBlank());
     }
 
     @org.junit.jupiter.params.ParameterizedTest
@@ -132,14 +137,16 @@ class ManagedModbusMigrationAdapterTest {
         ThingUID pollerUid = new ThingUID("modbus:poller:tcp:plant");
         when(legacyPoller.getUID()).thenReturn(pollerUid);
         when(legacyPoller.getThingTypeUID()).thenReturn(new ThingTypeUID("modbus", "poller"));
+        when(legacyPoller.getConfiguration()).thenReturn(new Configuration(Map.of("start", 100)));
         ThingRegistry registry = mock(ThingRegistry.class);
         when(registry.getAll()).thenReturn(List.of(legacyPoller));
 
         ManagedModbusMigrationAdapter adapter = new ManagedModbusMigrationAdapter(registry,
                 mock(ItemChannelLinkRegistry.class), mock(org.openhab.core.thing.ManagedThingProvider.class));
 
-        assertEquals(List.of(new ManualMigrationWork(pollerUid.toString(), "legacy Thing is not managed")),
-                adapter.snapshot().manualWork());
+        assertEquals(pollerUid.toString(), adapter.snapshot().manualWork().getFirst().sourceUid());
+        assertEquals("legacy Thing is not managed", adapter.snapshot().manualWork().getFirst().reason());
+        assertFalse(adapter.snapshot().manualWork().getFirst().configurationIdentity().isBlank());
         assertEquals(List.of(), adapter.snapshot().pollers());
     }
 }

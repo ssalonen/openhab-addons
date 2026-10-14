@@ -53,12 +53,11 @@ public final class ManagedModbusMigrationAdapter {
             ThingUID bridgeUid = thing.getBridgeUID();
             if (THING_TYPE_MODBUS_POLLER.equals(thing.getThingTypeUID())) {
                 if (!managed(thing)) {
-                    manual.add(new ManualMigrationWork(thing.getUID().toString(), "legacy Thing is not managed"));
+                    manual.add(manualWork(thing, "legacy Thing is not managed"));
                 } else if (targetExists(thing.getUID())) {
-                    manual.add(
-                            new ManualMigrationWork(thing.getUID().toString(), "target poller2 Thing already exists"));
+                    manual.add(manualWork(thing, "target poller2 Thing already exists"));
                 } else if (bridgeUid == null) {
-                    manual.add(new ManualMigrationWork(thing.getUID().toString(), "legacy poller has no bridge"));
+                    manual.add(manualWork(thing, "legacy poller has no bridge"));
                 } else {
                     Thing endpoint = thingRegistry.get(bridgeUid);
                     String endpointIdentity = ModbusMigrationPlanner.configurationIdentity(endpoint == null ? Map.of()
@@ -69,12 +68,12 @@ public final class ManagedModbusMigrationAdapter {
                 }
             } else if (THING_TYPE_MODBUS_DATA.equals(thing.getThingTypeUID())) {
                 if (!managed(thing)) {
-                    manual.add(new ManualMigrationWork(thing.getUID().toString(), "legacy Thing is not managed"));
+                    manual.add(manualWork(thing, "legacy Thing is not managed"));
                 } else if (bridgeUid == null) {
-                    manual.add(new ManualMigrationWork(thing.getUID().toString(), "legacy data Thing has no poller"));
+                    manual.add(manualWork(thing, "legacy data Thing has no poller"));
                 } else if (!bridgeUid.toString().startsWith("modbus:poller:")) {
-                    manual.add(new ManualMigrationWork(thing.getUID().toString(),
-                            "legacy data parent is not a poller; writes require manual migration"));
+                    manual.add(
+                            manualWork(thing, "legacy data parent is not a poller; writes require manual migration"));
                 } else {
                     List<LegacyLink> links = links(thing);
                     data.add(new LegacyData(thing.getUID().toString(), bridgeUid.toString(),
@@ -83,6 +82,19 @@ public final class ManagedModbusMigrationAdapter {
             }
         }
         return new Snapshot(pollers, data, manual);
+    }
+
+    private ManualMigrationWork manualWork(Thing thing, String reason) {
+        ThingUID bridgeUid = thing.getBridgeUID();
+        Thing parent = bridgeUid == null ? null : thingRegistry.get(bridgeUid);
+        var linkIdentities = links(thing).stream()
+                .map(link -> ModbusMigrationPlanner.configurationIdentity(
+                        List.of(link.itemName(), link.channelUid(), link.itemType(), link.configurationIdentity())))
+                .sorted().toList();
+        String identity = ModbusMigrationPlanner.configurationIdentity(List.of(thing.getThingTypeUID().toString(),
+                thing.getConfiguration().getProperties(), bridgeUid == null ? "" : bridgeUid.toString(),
+                parent == null ? Map.of() : parent.getConfiguration().getProperties(), linkIdentities));
+        return new ManualMigrationWork(thing.getUID().toString(), reason, identity);
     }
 
     private boolean managed(Thing thing) {

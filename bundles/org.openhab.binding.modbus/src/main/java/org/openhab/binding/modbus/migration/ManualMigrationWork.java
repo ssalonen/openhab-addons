@@ -16,5 +16,8 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /** A source configuration that requires a deliberate manual migration. */
 @NonNullByDefault
-public record ManualMigrationWork(String sourceUid, String reason) {
+public record ManualMigrationWork(String sourceUid, String reason, String configurationIdentity) {
+    public ManualMigrationWork(String sourceUid, String reason) {
+        this(sourceUid, reason, "");
+    }
 }
