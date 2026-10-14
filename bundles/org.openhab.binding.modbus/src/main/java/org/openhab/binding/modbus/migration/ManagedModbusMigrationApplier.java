@@ -127,7 +127,9 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
             try {
                 ThingUID uid = new ThingUID(thing);
                 var current = thingProvider.get(uid);
-                if (current != null && !identity.equals(current.getProperties().get(OWNER))) {
+                ThingRegistry registry = thingRegistry;
+                if ((current != null || (registry != null && registry.get(uid) != null)) && (registry == null
+                        || !ManagedModbusMigrationAdapter.ownsTarget(registry, thingProvider, uid, identity))) {
                     throw new IllegalStateException("Refusing removal of target with unknown ownership " + uid);
                 }
                 thingProvider.remove(uid);
@@ -147,6 +149,7 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
 
     @Override
     public void cutover(MigrationPreview preview, MigrationGroup group) {
+        requireOwnedTarget(preview, group);
         String key = preview.identity() + ":" + group.sourcePollerUid();
         if (!journal.links(key).isEmpty()) {
             throw new IllegalStateException("Existing cutover journal; rollback before retry");
@@ -171,10 +174,15 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
         this.journal.manifest(preview);
         try {
             for (MigrationLink link : group.links()) {
+                requireOwnedTarget(preview, group);
                 journal.add(link);
                 this.journal.links(key, journal);
+                requireOwnedTarget(preview, group);
                 linkRegistry.remove(sourceLink(link).getUID());
+                // Provider callbacks can replace a Thing during either link mutation.
+                requireOwnedTarget(preview, group);
                 linkRegistry.add(targetLink(link));
+                requireOwnedTarget(preview, group);
             }
         } catch (RuntimeException failure) {
             try {
@@ -183,6 +191,15 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
                 failure.addSuppressed(compensationFailure);
             }
             throw failure;
+        }
+    }
+
+    private void requireOwnedTarget(MigrationPreview preview, MigrationGroup group) {
+        ThingRegistry registry = thingRegistry;
+        if (!journal.targets(preview.identity()).contains(group.targetPollerUid()) || registry == null
+                || !ManagedModbusMigrationAdapter.ownsTarget(registry, thingProvider,
+                        new ThingUID(group.targetPollerUid()), preview.identity())) {
+            throw new IllegalStateException("Staged target ownership changed since review");
         }
     }
 

@@ -23,6 +23,27 @@ import org.openhab.core.thing.link.ItemChannelLinkRegistry;
 
 /** @author Sami Salonen - Unlinked staging coverage */
 class ManagedModbusMigrationStagingTest {
+    static ProviderOwnedMigrationPreviewTest.OwnedThingRegistry managedRegistry(ManagedThingProvider provider) {
+        var registry = mock(ProviderOwnedMigrationPreviewTest.OwnedThingRegistry.class);
+        trackManagedTargets(registry, provider);
+        return registry;
+    }
+
+    static void trackManagedTargets(ProviderOwnedMigrationPreviewTest.OwnedThingRegistry registry,
+            ManagedThingProvider provider) {
+        var targets = new java.util.HashMap<org.openhab.core.thing.ThingUID, org.openhab.core.thing.Thing>();
+        when(provider.get(any(org.openhab.core.thing.ThingUID.class)))
+                .thenAnswer(call -> targets.get(call.getArgument(0)));
+        when(registry.get(any(org.openhab.core.thing.ThingUID.class)))
+                .thenAnswer(call -> provider.get(call.getArgument(0)));
+        when(registry.getProvider(any(org.openhab.core.thing.Thing.class))).thenReturn(provider);
+        doAnswer(call -> {
+            var target = call.getArgument(0, org.openhab.core.thing.Thing.class);
+            targets.put(target.getUID(), target);
+            return null;
+        }).when(provider).add(any());
+    }
+
     @Test
     void stagingNeverCreatesProductionLinks() {
         ManagedThingProvider provider = mock(ManagedThingProvider.class);
@@ -74,6 +95,7 @@ class ManagedModbusMigrationStagingTest {
         ItemChannelLinkRegistry links = mock(ItemChannelLinkRegistry.class);
         lenient().when(links.getProvider(any(org.openhab.core.thing.link.ItemChannelLink.class)))
                 .thenReturn(mock(org.openhab.core.thing.link.ManagedItemChannelLinkProvider.class));
+        var things = managedRegistry(provider);
         MigrationPreview preview = preview();
         MigrationGroup group = preview.groups().getFirst();
         MigrationLink mapping = group.links().getFirst();
@@ -81,7 +103,7 @@ class ManagedModbusMigrationStagingTest {
                 mapping.itemName(), new org.openhab.core.thing.ChannelUID(mapping.sourceChannelUid()));
         when(links.get(legacy.getUID())).thenReturn(legacy);
         ModbusMigrationWorkflow workflow = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
-                new ManagedModbusMigrationApplier(provider, links),
+                new ManagedModbusMigrationApplier(provider, links, new MigrationJournal(), things),
                 (reviewed, candidate, stagedAt) -> new MigrationValidation.Observation(reviewed.identity(),
                         candidate.sourcePollerUid(), java.time.Instant.now(), MigrationValidation.Outcome.MATCH));
         var pollers = List.of(new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant",
@@ -109,7 +131,8 @@ class ManagedModbusMigrationStagingTest {
                 .thenReturn(mock(org.openhab.core.thing.link.ManagedItemChannelLinkProvider.class));
         Map<String, String> persisted = new java.util.HashMap<>();
         MigrationJournal journal = new MigrationJournal(storage(persisted));
-        ManagedModbusMigrationApplier applier = new ManagedModbusMigrationApplier(provider, links, journal);
+        var things = managedRegistry(provider);
+        ManagedModbusMigrationApplier applier = new ManagedModbusMigrationApplier(provider, links, journal, things);
         MigrationPreview preview = preview();
         MigrationGroup group = preview.groups().getFirst();
         MigrationLink mapping = group.links().getFirst();
@@ -250,9 +273,10 @@ class ManagedModbusMigrationStagingTest {
                 Map.of("readStart", "100", "readValueType", "int16"),
                 List.of(new LegacyLink("Temperature", "modbus:data:tcp:plant:temperature:number", "Number", profile),
                         new LegacyLink("Second", "modbus:data:tcp:plant:temperature:number", "Number", Map.of()))));
+        var things = managedRegistry(provider);
         MigrationJournal journal = new MigrationJournal(storage(persisted));
         ModbusMigrationWorkflow workflow = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
-                new ManagedModbusMigrationApplier(provider, links, journal),
+                new ManagedModbusMigrationApplier(provider, links, journal, things),
                 (preview, group, time) -> new MigrationValidation.Observation(preview.identity(),
                         group.sourcePollerUid(), java.time.Instant.now(), MigrationValidation.Outcome.MATCH),
                 journal);

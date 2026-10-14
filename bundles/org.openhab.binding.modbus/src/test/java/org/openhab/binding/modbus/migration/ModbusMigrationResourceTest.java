@@ -61,6 +61,7 @@ class ModbusMigrationResourceTest {
 
     @BeforeEach
     void start() {
+        ManagedModbusMigrationStagingTest.trackManagedTargets(things, provider);
         var poller = BridgeBuilder.create(new ThingTypeUID("modbus", "poller"), new ThingUID("modbus:poller:tcp:plant"))
                 .withBridge(new ThingUID("modbus:tcp:plant"))
                 .withConfiguration(new Configuration(Map.of("start", 100, "length", 2, "type", "holding"))).build();

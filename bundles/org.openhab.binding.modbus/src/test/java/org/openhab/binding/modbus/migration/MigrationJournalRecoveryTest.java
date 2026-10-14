@@ -32,6 +32,15 @@ class MigrationJournalRecoveryTest {
     private final Map<String, String> persisted = new HashMap<>();
     private final ManagedThingProvider provider = mock(ManagedThingProvider.class);
     private final ItemChannelLinkRegistry links = mock(ItemChannelLinkRegistry.class);
+    private final ProviderOwnedMigrationPreviewTest.OwnedThingRegistry things = mock(
+            ProviderOwnedMigrationPreviewTest.OwnedThingRegistry.class);
+
+    @org.junit.jupiter.api.BeforeEach
+    void ownership() {
+        when(things.get(any(ThingUID.class))).thenAnswer(call -> provider.get(call.getArgument(0)));
+        when(things.getProvider(any(org.openhab.core.thing.Thing.class))).thenReturn(provider);
+    }
+
     private final List<LegacyData> data = List.of(new LegacyData("modbus:data:tcp:plant:value",
             "modbus:poller:tcp:plant", Map.of("readStart", "100", "readValueType", "int16"), List.of()));
 
@@ -46,7 +55,7 @@ class MigrationJournalRecoveryTest {
 
     private ModbusMigrationWorkflow workflow(MigrationJournal journal) {
         return new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
-                new ManagedModbusMigrationApplier(provider, links, journal), journal);
+                new ManagedModbusMigrationApplier(provider, links, journal, things), journal);
     }
 
     @Test

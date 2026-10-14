@@ -46,10 +46,15 @@ public final class ManagedModbusMigrationAdapter {
     }
 
     public Snapshot snapshot() {
-        return snapshot(java.util.Set.of());
+        return snapshot(Map.of());
     }
 
-    Snapshot snapshot(java.util.Set<String> stagedTargets) {
+    Snapshot snapshot(Map<String, String> stagedTargets) {
+        stagedTargets.forEach((uid, identity) -> {
+            if (!ownsTarget(thingRegistry, managedThingProvider, new ThingUID(uid), identity)) {
+                throw new IllegalArgumentException("Staged target ownership changed since review");
+            }
+        });
         List<LegacyPoller> pollers = new ArrayList<>();
         List<LegacyData> data = new ArrayList<>();
         List<ManualMigrationWork> manual = new ArrayList<>();
@@ -59,7 +64,7 @@ public final class ManagedModbusMigrationAdapter {
                 if (!managed(thing)) {
                     manual.add(manualWork(thing, "legacy Thing is not managed"));
                 } else if (targetExists(thing.getUID())
-                        && !stagedTargets.contains(thing.getUID().toString().replace(":poller:", ":poller2:"))) {
+                        && !stagedTargets.containsKey(thing.getUID().toString().replace(":poller:", ":poller2:"))) {
                     manual.add(manualWork(thing, "target poller2 Thing already exists"));
                 } else if (bridgeUid == null) {
                     manual.add(manualWork(thing, "legacy poller has no bridge"));
@@ -104,6 +109,22 @@ public final class ManagedModbusMigrationAdapter {
 
     private boolean managed(Thing thing) {
         return managedThingProvider.get(thing.getUID()) != null;
+    }
+
+    // ThingRegistry itself does not expose ownership; unsupported registries must fail closed.
+    // Ownership requires the exact injected provider instance, not a provider-defined equality contract.
+    @SuppressWarnings({ "unchecked", "PMD.CompareObjectsWithEquals" })
+    static boolean ownsTarget(ThingRegistry things, ManagedThingProvider provider, ThingUID uid, String identity) {
+        Thing current = things.get(uid);
+        if (current == null || provider.get(uid) == null
+                || !identity.equals(current.getProperties().get("modbusMigrationIdentity"))) {
+            return false;
+        }
+        if (things instanceof org.openhab.core.common.registry.AbstractRegistry<?, ?, ?> registry) {
+            return ((org.openhab.core.common.registry.AbstractRegistry<Thing, ThingUID, ?>) registry)
+                    .getProvider(current) == provider;
+        }
+        return false;
     }
 
     private boolean targetExists(ThingUID sourceUid) {

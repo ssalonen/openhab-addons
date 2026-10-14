@@ -206,10 +206,13 @@ public final class ModbusMigrationWorkflow {
         save(previewIdentity, "STAGED");
     }
 
-    synchronized Set<String> stagedTargets(String identity) {
+    synchronized Map<String, String> stagedTargets(String identity) {
         requireSafeReview(identity);
-        return appliedPreview(identity).groups().stream().map(MigrationGroup::targetPollerUid)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        var targets = appliedPreview(identity).groups().stream().map(MigrationGroup::targetPollerUid).toList();
+        if (!journal.targets(identity).containsAll(targets)) {
+            throw new IllegalArgumentException("Staged target journal ownership is incomplete");
+        }
+        return targets.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(uid -> uid, uid -> identity));
     }
 
     synchronized void requireCurrentSources(String previewIdentity, List<LegacyPoller> pollers,

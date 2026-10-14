@@ -45,6 +45,21 @@ import org.openhab.core.thing.link.ItemChannelLinkRegistry;
  */
 @NonNullByDefault
 public class ModbusMigrationValidationOSGiTest extends JavaOSGiTest {
+    private static final class ReplacementThingProvider
+            extends org.openhab.core.common.registry.AbstractProvider<org.openhab.core.thing.Thing>
+            implements org.openhab.core.thing.ThingProvider {
+        private final org.openhab.core.thing.Thing thing;
+
+        ReplacementThingProvider(org.openhab.core.thing.Thing thing) {
+            this.thing = thing;
+        }
+
+        @Override
+        public java.util.Collection<org.openhab.core.thing.Thing> getAll() {
+            return java.util.List.of(thing);
+        }
+    }
+
     @Test
     public void comparesFreshLegacyAndUnlinkedCandidateDeviceReads() throws Exception {
         registerVolatileStorageService();
@@ -57,6 +72,10 @@ public class ModbusMigrationValidationOSGiTest extends JavaOSGiTest {
         ThingUID endpoint = new ThingUID("modbus:tcp:validation");
         ThingUID poller = new ThingUID("modbus:poller:validation:holding");
         ThingUID data = new ThingUID("modbus:data:validation:holding:value");
+        var production = new org.openhab.core.thing.link.ItemChannelLink("MigrationValue",
+                new ChannelUID(data, "number"));
+        ((org.openhab.core.common.registry.AbstractRegistry<?, ?, ?>) registry).waitForCompletedAsyncActivationTasks();
+        links.waitForCompletedAsyncActivationTasks();
         ExecutorService executor = Executors.newSingleThreadExecutor();
         var changingValues = new java.util.concurrent.atomic.AtomicBoolean();
         var failReads = new java.util.concurrent.atomic.AtomicBoolean();
@@ -119,6 +138,7 @@ public class ModbusMigrationValidationOSGiTest extends JavaOSGiTest {
                         .toList().forEach(readOnlyConfiguration::remove);
                 // The fixture changed source configuration; responses may not open a replacement lifecycle themselves.
                 java.util.Objects.requireNonNull(registry.get(data).getHandler()).initialize();
+                links.add(production);
                 var plan = service.preview().plan();
                 assertEquals(1, plan.groups().size(), plan.yaml());
                 String identity = plan.identity();
@@ -171,7 +191,37 @@ public class ModbusMigrationValidationOSGiTest extends JavaOSGiTest {
                 }
                 waitForAssert(() -> assertEquals(MigrationValidation.Outcome.MATCH,
                         service.validate(identity, poller.toString()).outcome()));
+                service.cutover(identity, poller.toString());
+                service.revert(identity, "MigrationValue", new ChannelUID(data, "number").toString());
+                assertNotNull(links.get(production.getUID()));
+
+                var staged = java.util.Objects.requireNonNull(registry.get(target));
+                var replacement = BridgeBuilder.create(staged.getThingTypeUID(), target).withBridge(endpoint)
+                        .withConfiguration(staged.getConfiguration()).withChannels(staged.getChannels())
+                        .withProperties(staged.getProperties()).build();
+                provider.remove(target);
+                waitForAssert(() -> assertNull(registry.get(target)));
+                var replacementProvider = new ReplacementThingProvider(replacement);
+                var registration = registerService(replacementProvider,
+                        org.openhab.core.thing.ThingProvider.class.getName());
+                try {
+                    waitForAssert(() -> assertNotNull(registry.get(target).getHandler()));
+                    var rawValidation = new org.openhab.binding.modbus.migration.LiveModbusMigrationValidation(
+                            registry);
+                    waitForAssert(() -> assertEquals(MigrationValidation.Outcome.MATCH, rawValidation
+                            .observe(plan, plan.groups().getFirst(), service.report(identity).stagedAt()).outcome()));
+                    assertThrows(IllegalArgumentException.class, () -> service.validate(identity, poller.toString()));
+                    assertThrows(IllegalArgumentException.class, () -> service.cutover(identity, poller.toString()));
+                    assertThrows(IllegalStateException.class, () -> service.rollback(identity));
+                    assertNotNull(registry.get(target));
+                    assertNotNull(links.get(production.getUID()));
+                    assertTrue(links.getLinks(new ChannelUID(target, "value")).isEmpty());
+                } finally {
+                    registration.unregister();
+                    waitForAssert(() -> assertNull(registry.get(target)));
+                }
             } finally {
+                links.remove(production.getUID());
                 provider.remove(new ThingUID("modbus:poller2:validation:holding"));
                 provider.remove(data);
                 provider.remove(poller);

@@ -25,7 +25,6 @@ import org.openhab.core.config.core.Configuration;
 import org.openhab.core.io.console.Console;
 import org.openhab.core.storage.StorageService;
 import org.openhab.core.thing.ManagedThingProvider;
-import org.openhab.core.thing.ThingRegistry;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.ThingUID;
 import org.openhab.core.thing.binding.builder.BridgeBuilder;
@@ -33,11 +32,17 @@ import org.openhab.core.thing.link.ItemChannelLinkRegistry;
 
 /** @author Sami Salonen - Initial contribution */
 class ModbusMigrationServiceTest {
-    private final ThingRegistry things = mock(ThingRegistry.class);
+    private final ProviderOwnedMigrationPreviewTest.OwnedThingRegistry things = mock(
+            ProviderOwnedMigrationPreviewTest.OwnedThingRegistry.class);
     private final ItemChannelLinkRegistry links = mock(ItemChannelLinkRegistry.class);
     private final ManagedThingProvider provider = mock(ManagedThingProvider.class);
     private final StorageService storage = mock(StorageService.class);
     private final Map<String, String> persisted = new HashMap<>();
+
+    @org.junit.jupiter.api.BeforeEach
+    void ownership() {
+        ManagedModbusMigrationStagingTest.trackManagedTargets(things, provider);
+    }
 
     private ModbusMigrationService service() {
         var poller = BridgeBuilder.create(new ThingTypeUID("modbus", "poller"), new ThingUID("modbus:poller:tcp:plant"))
