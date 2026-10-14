@@ -21,8 +21,8 @@ import java.util.Optional;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
+import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingUID;
 import org.openhab.core.types.State;
 
@@ -39,10 +39,15 @@ public class Poller2ObservationCollector {
     private @Nullable Poller2Observation observation;
 
     /** Starts an empty lifecycle and returns its handler-local generation token. */
-    public synchronized long beginLifecycle(Bridge thing) {
+    public synchronized long beginLifecycle(Thing thing) {
         invalidate();
         thingUID = thing.getUID();
-        configurationSignature = ModbusMigrationPlanner.configurationIdentity(List.of(
+        configurationSignature = signature(thing);
+        return generation;
+    }
+
+    public static String signature(Thing thing) {
+        return ModbusMigrationPlanner.configurationIdentity(List.of(
                 Objects.requireNonNullElse(Objects.toString(thing.getBridgeUID()), ""),
                 thing.getConfiguration().getProperties(),
                 thing.getChannels().stream().sorted(Comparator.comparing(channel -> channel.getUID().toString()))
@@ -51,7 +56,6 @@ public class Poller2ObservationCollector {
                                 Objects.requireNonNullElse(Objects.toString(channel.getChannelTypeUID()), ""),
                                 channel.getConfiguration().getProperties()))
                         .toList()));
-        return generation;
     }
 
     /** Clears observations and prevents a previously captured generation from recording new data. */
@@ -65,9 +69,14 @@ public class Poller2ObservationCollector {
      * Records a decoded fresh response only if its lifecycle is still current. Empty responses are not observations.
      */
     public synchronized void record(long expectedGeneration, Instant observedAt, Map<ChannelUID, State> states) {
+        record(expectedGeneration, observedAt, states, Map.of());
+    }
+
+    public synchronized void record(long expectedGeneration, Instant observedAt, Map<ChannelUID, State> states,
+            Map<ChannelUID, ModbusReadEvidence> evidence) {
         ThingUID uid = thingUID;
         if (expectedGeneration == generation && uid != null && !states.isEmpty()) {
-            observation = new Poller2Observation(uid, generation, configurationSignature, observedAt, states);
+            observation = new Poller2Observation(uid, generation, configurationSignature, observedAt, states, evidence);
         }
     }
 

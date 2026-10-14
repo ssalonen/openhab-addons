@@ -93,7 +93,8 @@ import org.slf4j.LoggerFactory;
  * @author Sami Salonen - Initial contribution
  */
 @NonNullByDefault
-public class ModbusDataThingHandler extends BaseThingHandler {
+public class ModbusDataThingHandler extends BaseThingHandler
+        implements org.openhab.binding.modbus.migration.ModbusObservationSource {
 
     private final Logger logger = LoggerFactory.getLogger(ModbusDataThingHandler.class);
 
@@ -391,6 +392,7 @@ public class ModbusDataThingHandler extends BaseThingHandler {
 
     @Override
     public synchronized void initialize() {
+        observations.invalidate();
         // Initialize the thing. If done set status to ONLINE to indicate proper working.
         // Long running initialization should be done asynchronously in background.
         try {
@@ -456,6 +458,7 @@ public class ModbusDataThingHandler extends BaseThingHandler {
 
     @Override
     public synchronized void dispose() {
+        observations.invalidate();
         config = null;
         readValueType = null;
         writeValueType = null;
@@ -791,12 +794,31 @@ public class ModbusDataThingHandler extends BaseThingHandler {
         return acceptedDataTypes.stream().anyMatch(clz -> clz.equals(OpenClosedType.class));
     }
 
+    private final org.openhab.binding.modbus.migration.Poller2ObservationCollector observations = new org.openhab.binding.modbus.migration.Poller2ObservationCollector();
+    private boolean cachedObservation;
+
+    @Override
+    public synchronized Optional<org.openhab.binding.modbus.migration.Poller2Observation> getObservation() {
+        return observations.getObservation().filter(observation -> observation.configurationSignature()
+                .equals(org.openhab.binding.modbus.migration.Poller2ObservationCollector.signature(getThing())));
+    }
+
+    public synchronized void onReadResult(AsyncModbusReadResult result, boolean cached) {
+        cachedObservation = cached;
+        try {
+            onReadResult(result);
+        } finally {
+            cachedObservation = false;
+        }
+    }
+
     public synchronized void onReadResult(AsyncModbusReadResult result) {
         result.getRegisters().ifPresent(registers -> onRegisters(result.getRequest(), registers));
         result.getBits().ifPresent(bits -> onBits(result.getRequest(), bits));
     }
 
     public synchronized void handleReadError(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+        observations.invalidate();
         onError(failure.getRequest(), failure.getCause());
     }
 
@@ -962,9 +984,7 @@ public class ModbusDataThingHandler extends BaseThingHandler {
         Map<ChannelUID, State> states = new HashMap<>();
         CHANNEL_ID_TO_ACCEPTED_TYPES.keySet().stream().forEach(channelId -> {
             ChannelUID channelUID = getChannelUID(channelId);
-            if (!isLinked(channelUID)) {
-                return;
-            }
+
             List<Class<? extends State>> acceptedDataTypes = CHANNEL_ID_TO_ACCEPTED_TYPES.get(channelId);
             if (acceptedDataTypes.isEmpty()) {
                 return;
@@ -1017,6 +1037,18 @@ public class ModbusDataThingHandler extends BaseThingHandler {
         if (isLinked(lastReadSuccessUID)) {
             states.put(lastReadSuccessUID, new DateTimeType());
         }
+        if (!cachedObservation) {
+            long generation = observations.beginLifecycle(getThing());
+            Map<ChannelUID, org.openhab.binding.modbus.migration.ModbusReadEvidence> evidence = new HashMap<>();
+            states.forEach((uid, value) -> evidence.put(uid,
+                    new org.openhab.binding.modbus.migration.ModbusReadEvidence(value, numericState,
+                            numericState instanceof UnDefType
+                                    ? org.openhab.binding.modbus.migration.ModbusReadEvidence.Provenance.DECODE_FAILURE
+                                    : value instanceof UnDefType
+                                            ? org.openhab.binding.modbus.migration.ModbusReadEvidence.Provenance.TRANSFORM_FAILURE
+                                            : org.openhab.binding.modbus.migration.ModbusReadEvidence.Provenance.DECODED)));
+            observations.record(generation, java.time.Instant.now(), states, evidence);
+        }
         updateExpiredChannels(states);
         return states;
     }
@@ -1026,7 +1058,11 @@ public class ModbusDataThingHandler extends BaseThingHandler {
             updateStatusIfChanged(ThingStatus.ONLINE);
             long now = System.currentTimeMillis();
             // Update channels that have not been updated in a while, or when their values has changed
-            states.forEach((uid, state) -> updateExpiredChannel(now, uid, state));
+            states.forEach((uid, state) -> {
+                if (isLinked(uid)) {
+                    updateExpiredChannel(now, uid, state);
+                }
+            });
             channelLastState = states;
         }
     }

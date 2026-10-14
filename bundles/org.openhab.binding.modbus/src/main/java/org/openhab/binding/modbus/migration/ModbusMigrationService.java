@@ -37,15 +37,22 @@ public final class ModbusMigrationService {
     private final ProviderOwnedMigrationAdapter providerAdapter;
     private final ModbusMigrationWorkflow workflow;
 
+    public ModbusMigrationService(ThingRegistry thingRegistry, ItemChannelLinkRegistry linkRegistry,
+            ManagedThingProvider thingProvider, StorageService storageService) {
+        this(thingRegistry, linkRegistry, thingProvider, storageService,
+                new LiveModbusMigrationValidation(thingRegistry));
+    }
+
     @Activate
     public ModbusMigrationService(@Reference ThingRegistry thingRegistry,
             @Reference ItemChannelLinkRegistry linkRegistry, @Reference ManagedThingProvider thingProvider,
-            @Reference StorageService storageService) {
+            @Reference StorageService storageService, @Reference MigrationValidation validation) {
         adapter = new ManagedModbusMigrationAdapter(thingRegistry, linkRegistry, thingProvider);
         providerAdapter = new ProviderOwnedMigrationAdapter(thingRegistry, linkRegistry);
         MigrationJournal journal = new MigrationJournal(storageService.getStorage("modbus-migration-journal"));
         workflow = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
-                new ManagedModbusMigrationApplier(thingProvider, linkRegistry, journal, thingRegistry), journal);
+                new ManagedModbusMigrationApplier(thingProvider, linkRegistry, journal, thingRegistry), validation,
+                journal);
     }
 
     /**

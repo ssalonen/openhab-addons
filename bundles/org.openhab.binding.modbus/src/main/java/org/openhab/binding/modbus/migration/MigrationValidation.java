@@ -13,6 +13,7 @@
 package org.openhab.binding.modbus.migration;
 
 import java.time.Instant;
+import java.util.List;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
@@ -30,7 +31,20 @@ public interface MigrationValidation {
         UNAVAILABLE
     }
 
-    record Observation(String previewIdentity, String sourcePollerUid, Instant observedAt, Outcome outcome) {
+    record Comparison(String sourceChannelUid, String targetChannelUid, String address, String valueType,
+            String sourceValue, String targetValue, Instant sourceObservedAt, Instant targetObservedAt, Outcome outcome,
+            String reason) {
+    }
+
+    record Observation(String previewIdentity, String sourcePollerUid, Instant observedAt, Outcome outcome,
+            List<Comparison> comparisons) {
+        public Observation {
+            comparisons = List.copyOf(comparisons);
+        }
+
+        public Observation(String previewIdentity, String sourcePollerUid, Instant observedAt, Outcome outcome) {
+            this(previewIdentity, sourcePollerUid, observedAt, outcome, List.of());
+        }
     }
 
     Observation observe(MigrationPreview preview, MigrationGroup group, Instant stagedAt);

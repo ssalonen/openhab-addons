@@ -153,7 +153,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
             AsyncModbusFailure<ModbusReadRequestBlueprint> failure = pollResult.failure;
             childCallbacks.forEach(handler -> {
                 if (result != null) {
-                    handler.onReadResult(result);
+                    handler.onReadResult(result, cached);
                 } else if (failure != null) {
                     handler.handleReadError(failure);
                 }

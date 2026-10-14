@@ -67,7 +67,8 @@ import org.slf4j.LoggerFactory;
  * @author Sami Salonen - Initial contribution
  */
 @NonNullByDefault
-public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
+public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler
+        implements org.openhab.binding.modbus.migration.ModbusObservationSource {
     private final Logger logger = LoggerFactory.getLogger(ModbusPoller2ThingHandler.class);
 
     private final ModbusChannelTypeProvider channelTypeProvider;
@@ -300,7 +301,9 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler {
         result.getBits().ifPresent(
                 bits -> bitChannels.forEach((uid, channel) -> states.put(uid, channel.acceptBits(bits, pollStart))));
         if (!cached) {
-            observations.record(generation, observedAt, states);
+            Map<ChannelUID, org.openhab.binding.modbus.migration.ModbusReadEvidence> evidence = new LinkedHashMap<>();
+            channels.forEach((uid, channel) -> evidence.put(uid, channel.getReadEvidence()));
+            observations.record(generation, observedAt, states, evidence);
         }
         states.forEach(this::updateState);
     }

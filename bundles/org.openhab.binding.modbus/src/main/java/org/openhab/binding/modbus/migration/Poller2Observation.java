@@ -27,8 +27,9 @@ import org.openhab.core.types.State;
  */
 @NonNullByDefault
 public record Poller2Observation(ThingUID thingUID, long generation, String configurationSignature, Instant observedAt,
-        Map<ChannelUID, State> states) {
+        Map<ChannelUID, State> states, Map<ChannelUID, ModbusReadEvidence> evidence) {
     public Poller2Observation {
         states = Map.copyOf(states);
+        evidence = Map.copyOf(evidence);
     }
 }

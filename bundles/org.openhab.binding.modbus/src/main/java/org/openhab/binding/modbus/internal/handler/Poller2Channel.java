@@ -37,6 +37,13 @@ public final class Poller2Channel {
     private final ValueType valueType;
     private final ModbusTransformation transformation;
     private final PollerChannelState state;
+    private org.openhab.binding.modbus.migration.ModbusReadEvidence evidence = new org.openhab.binding.modbus.migration.ModbusReadEvidence(
+            UnDefType.UNDEF, UnDefType.UNDEF,
+            org.openhab.binding.modbus.migration.ModbusReadEvidence.Provenance.DECODE_FAILURE);
+
+    public synchronized org.openhab.binding.modbus.migration.ModbusReadEvidence getReadEvidence() {
+        return evidence;
+    }
 
     public Poller2Channel(int address, ValueType valueType, PollerReadFailurePolicy failurePolicy) {
         this.address = address;
@@ -66,6 +73,8 @@ public final class Poller2Channel {
     }
 
     public synchronized State acceptRegisters(ModbusRegisterArray registers, int pollStart) {
+        evidence = new org.openhab.binding.modbus.migration.ModbusReadEvidence(UnDefType.UNDEF, UnDefType.UNDEF,
+                org.openhab.binding.modbus.migration.ModbusReadEvidence.Provenance.DECODE_FAILURE);
         long registerOffset = (long) address - pollStart;
         long index = valueType.getBits() < Short.SIZE ? registerOffset * (Short.SIZE / valueType.getBits()) + subAddress
                 : registerOffset;
@@ -84,6 +93,10 @@ public final class Poller2Channel {
         State decoded = UnDefType.UNDEF;
         if (decodedValue.isPresent()) {
             decoded = transform(decodedValue.get());
+        }
+        if (decodedValue.isPresent() && transformation.isIdentityTransform()) {
+            evidence = new org.openhab.binding.modbus.migration.ModbusReadEvidence(decoded, decodedValue.get(),
+                    org.openhab.binding.modbus.migration.ModbusReadEvidence.Provenance.DECODED);
         }
         state.acceptSuccessfulState(decoded);
         return state.currentState();
