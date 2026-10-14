@@ -36,6 +36,7 @@ import org.openhab.core.thing.link.ManagedItemChannelLinkProvider;
  * 
  * @author Sami Salonen - Unlinked staging and explicit link cutover
  * @author Sami Salonen - Durable ownership and precise link recovery
+ * @author Sami Salonen - Authoritative compensation and registry-aware construction
  */
 @NonNullByDefault
 public final class ManagedModbusMigrationApplier implements MigrationApplier {
@@ -58,8 +59,26 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
     private final ManagedThingProvider thingProvider;
     private final ItemChannelLinkRegistry linkRegistry;
 
+    /**
+     * Creates a runtime-local applier without authoritative Thing ownership checks.
+     * Staging is refused before any journal or provider mutation.
+     *
+     * @deprecated Use the registry-aware constructor, or {@link ModbusMigrationService} for durable production
+     *             recovery.
+     */
+    @Deprecated
     public ManagedModbusMigrationApplier(ManagedThingProvider thingProvider, ItemChannelLinkRegistry linkRegistry) {
         this(thingProvider, linkRegistry, new MigrationJournal());
+    }
+
+    /**
+     * Creates an applier with authoritative Thing ownership checks and a runtime-local journal.
+     * Keep this instance for cutover and rollback; its journal does not survive reconstruction or restart.
+     * Prefer {@link ModbusMigrationService} as the shared, storage-backed production boundary.
+     */
+    public ManagedModbusMigrationApplier(ManagedThingProvider thingProvider, ItemChannelLinkRegistry linkRegistry,
+            ThingRegistry thingRegistry) {
+        this(thingProvider, linkRegistry, new MigrationJournal(), thingRegistry);
     }
 
     ManagedModbusMigrationApplier(ManagedThingProvider thingProvider, ItemChannelLinkRegistry linkRegistry,
@@ -77,6 +96,9 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
 
     @Override
     public void createTargets(MigrationPreview preview) {
+        if (thingRegistry == null) {
+            throw new IllegalStateException("Staging requires an authoritative ThingRegistry");
+        }
         journal.manifest(preview);
         List<String> createdThings = new ArrayList<>(journal.targets(preview.identity()));
         if (!createdThings.isEmpty()) {
@@ -242,13 +264,51 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
             if (target != null && !(linkRegistry.getProvider(target) instanceof ManagedItemChannelLinkProvider)) {
                 throw new IllegalStateException("Refusing removal of unmanaged replacement link");
             }
-            // Never restore production legacy delivery while target removal is still failing.
+            requireManagedSource(link, source);
+            // Removal callbacks can replace either link; a successful provider return is not proof of absence.
             linkRegistry.remove(targetLink(link).getUID());
+            requireRestoredState(link, source);
             if (source == null) {
-                linkRegistry.add(sourceLink(link));
+                ItemChannelLink restored = sourceLink(link);
+                try {
+                    linkRegistry.add(restored);
+                    requireRestoredState(link, restored);
+                } catch (RuntimeException failure) {
+                    // Compensate only our own unchanged source, never a listener's replacement.
+                    if (sameSource(link, restored)
+                            && restored.getConfiguration().getProperties().equals(link.configuration())
+                            && linkRegistry.getProvider(restored) instanceof ManagedItemChannelLinkProvider) {
+                        try {
+                            linkRegistry.remove(restored.getUID());
+                        } catch (RuntimeException compensationFailure) {
+                            failure.addSuppressed(compensationFailure);
+                        }
+                    }
+                    throw failure;
+                }
             }
             journal.remove(link);
             this.journal.links(key, journal);
+        }
+    }
+
+    private void requireRestoredState(MigrationLink link, @Nullable ItemChannelLink expectedSource) {
+        ItemChannelLink source = linkRegistry.get(sourceLink(link).getUID());
+        if (linkRegistry.get(targetLink(link).getUID()) != null || !sameSource(link, expectedSource)) {
+            throw new IllegalStateException("Link changed during migration recovery; retry rollback");
+        }
+        requireManagedSource(link, source);
+    }
+
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Equal link contents do not authorize a replacement instance.
+    private boolean sameSource(MigrationLink link, @Nullable ItemChannelLink expectedSource) {
+        return linkRegistry.get(sourceLink(link).getUID()) == expectedSource;
+    }
+
+    private void requireManagedSource(MigrationLink link, @Nullable ItemChannelLink source) {
+        if (source != null && (!source.getConfiguration().getProperties().equals(link.configuration())
+                || !(linkRegistry.getProvider(source) instanceof ManagedItemChannelLinkProvider))) {
+            throw new IllegalStateException("Refusing changed or unmanaged legacy link");
         }
     }
 

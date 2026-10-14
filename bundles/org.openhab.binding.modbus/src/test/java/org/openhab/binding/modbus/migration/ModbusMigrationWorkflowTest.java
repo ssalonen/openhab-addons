@@ -93,7 +93,8 @@ class ModbusMigrationWorkflowTest {
         org.mockito.Mockito.when(provider.remove(target)).thenThrow(new IllegalStateException("removal failed"))
                 .thenReturn(null);
         ModbusMigrationWorkflow workflow = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
-                new ManagedModbusMigrationApplier(provider, links));
+                new ManagedModbusMigrationApplier(provider, links,
+                        ManagedModbusMigrationStagingTest.managedRegistry(provider)));
         MigrationPreview preview = workflow.preview(List.of(poller()), List.of(data()));
         workflow.apply(preview.identity(), List.of(poller()), List.of(data()));
 

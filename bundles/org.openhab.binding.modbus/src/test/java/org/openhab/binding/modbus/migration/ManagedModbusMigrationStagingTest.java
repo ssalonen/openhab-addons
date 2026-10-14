@@ -50,7 +50,7 @@ class ManagedModbusMigrationStagingTest {
         ItemChannelLinkRegistry links = mock(ItemChannelLinkRegistry.class);
         lenient().when(links.getProvider(any(org.openhab.core.thing.link.ItemChannelLink.class)))
                 .thenReturn(mock(org.openhab.core.thing.link.ManagedItemChannelLinkProvider.class));
-        new ManagedModbusMigrationApplier(provider, links).createTargets(preview());
+        new ManagedModbusMigrationApplier(provider, links, managedRegistry(provider)).createTargets(preview());
         verify(provider).add(any());
         verifyNoInteractions(links);
     }
@@ -67,12 +67,13 @@ class ManagedModbusMigrationStagingTest {
                 new LegacyPoller("modbus:poller:tcp:b", "modbus:tcp:plant",
                         Map.of("start", 100, "length", 2, "type", "holding")));
         org.openhab.core.thing.ThingUID first = new org.openhab.core.thing.ThingUID("modbus:poller2:tcp:a");
+        var things = managedRegistry(provider);
         doNothing().doThrow(new IllegalStateException("create failed")).when(provider).add(any());
         when(provider.remove(first)).thenThrow(new IllegalStateException("compensation failed")).thenReturn(null);
         Map<String, String> persisted = new java.util.HashMap<>();
         MigrationJournal journal = new MigrationJournal(storage(persisted));
         ModbusMigrationWorkflow workflow = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
-                new ManagedModbusMigrationApplier(provider, links, journal), journal);
+                new ManagedModbusMigrationApplier(provider, links, journal, things), journal);
         List<LegacyData> data = List.of(
                 new LegacyData("modbus:data:tcp:a:value", "modbus:poller:tcp:a",
                         Map.of("readStart", "100", "readValueType", "int16"), List.of()),
@@ -83,7 +84,8 @@ class ManagedModbusMigrationStagingTest {
                 () -> workflow.apply(preview.identity(), pollers, data));
         MigrationJournal recovered = new MigrationJournal(storage(persisted));
         new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
-                new ManagedModbusMigrationApplier(provider, links, recovered), recovered).rollback(preview.identity());
+                new ManagedModbusMigrationApplier(provider, links, recovered, things), recovered)
+                .rollback(preview.identity());
         verify(provider, times(2)).remove(first);
         verify(provider).remove(new org.openhab.core.thing.ThingUID("modbus:poller2:tcp:b"));
         verifyNoInteractions(links);
@@ -140,7 +142,12 @@ class ManagedModbusMigrationStagingTest {
                 new org.openhab.core.thing.ChannelUID(mapping.sourceChannelUid()));
         var target = new org.openhab.core.thing.link.ItemChannelLink(mapping.itemName(),
                 new org.openhab.core.thing.ChannelUID(mapping.targetChannelUid()));
-        when(links.get(source.getUID())).thenReturn(source, null);
+        when(links.get(source.getUID())).thenReturn(source).thenReturn(null);
+        doAnswer(call -> {
+            var restored = call.getArgument(0, org.openhab.core.thing.link.ItemChannelLink.class);
+            when(links.get(restored.getUID())).thenReturn(restored);
+            return null;
+        }).when(links).add(source);
         doThrow(new IllegalStateException("link addition failed")).when(links).add(target);
         when(links.remove(target.getUID())).thenThrow(new IllegalStateException("compensation failed"))
                 .thenReturn(null);
@@ -244,7 +251,8 @@ class ManagedModbusMigrationStagingTest {
         var target = new org.openhab.core.thing.ThingUID(preview.groups().getFirst().targetPollerUid());
         doThrow(new IllegalStateException("listener failed after add")).when(provider).add(any());
         when(provider.remove(target)).thenThrow(new IllegalStateException("compensation failed")).thenReturn(null);
-        ManagedModbusMigrationApplier applier = new ManagedModbusMigrationApplier(provider, links);
+        ManagedModbusMigrationApplier applier = new ManagedModbusMigrationApplier(provider, links,
+                mock(org.openhab.core.thing.ThingRegistry.class));
         org.junit.jupiter.api.Assertions.assertThrows(ManagedModbusMigrationApplier.IncompleteStageException.class,
                 () -> applier.createTargets(preview));
         applier.removeTargets(preview);

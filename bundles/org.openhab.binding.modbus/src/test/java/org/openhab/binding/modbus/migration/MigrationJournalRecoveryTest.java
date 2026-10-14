@@ -199,6 +199,8 @@ class MigrationJournalRecoveryTest {
         var source = new org.openhab.core.thing.link.ItemChannelLink(mapping.itemName(),
                 new org.openhab.core.thing.ChannelUID(mapping.sourceChannelUid()));
         when(links.get(source.getUID())).thenReturn(source);
+        when(links.getProvider(source))
+                .thenReturn(mock(org.openhab.core.thing.link.ManagedItemChannelLinkProvider.class));
         doThrow(new IllegalArgumentException("duplicate source")).when(links).add(source);
         // A prior revert restored the source, but stopped before recording completion.
         journal.links(preview.identity() + ":" + group.sourcePollerUid(), List.of(mapping));
