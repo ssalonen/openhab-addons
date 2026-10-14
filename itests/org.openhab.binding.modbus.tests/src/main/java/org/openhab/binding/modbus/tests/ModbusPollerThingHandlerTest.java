@@ -63,6 +63,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * @author Sami Salonen - Initial contribution
+ * @author Sami Salonen - Capture-before-dispatch fixture coverage
  */
 public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
 
@@ -689,6 +690,44 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         verifyNoMoreInteractions(mockedModbusManager);
     }
 
+    // Pure mocks must capture a dispatch just like the real child API; delivery happens only when it runs.
+    private ModbusDataThingHandler mockChildHandler() {
+        ModbusDataThingHandler child = Mockito.mock(ModbusDataThingHandler.class);
+        doAnswer(invocation -> {
+            AsyncModbusReadResult result = invocation.getArgument(1);
+            boolean cached = invocation.getArgument(2);
+            return (Runnable) () -> child.onReadResult(result, cached);
+        }).when(child).prepareReadResult(any(ModbusPollerThingHandler.class), any(AsyncModbusReadResult.class),
+                anyBoolean());
+        doAnswer(invocation -> {
+            AsyncModbusFailure<ModbusReadRequestBlueprint> failure = invocation.getArgument(1);
+            return (Runnable) () -> child.handleReadError(failure);
+        }).when(child).prepareReadError(any(ModbusPollerThingHandler.class), any());
+        return child;
+    }
+
+    private void verifyReadDispatch(ModbusPollerThingHandler parent, AsyncModbusReadResult result, boolean cached,
+            ModbusDataThingHandler... children) {
+        var order = inOrder((Object[]) children);
+        for (ModbusDataThingHandler child : children) {
+            order.verify(child).prepareReadResult(same(parent), same(result), eq(cached));
+        }
+        for (ModbusDataThingHandler child : children) {
+            order.verify(child).onReadResult(same(result), eq(cached));
+        }
+    }
+
+    private void verifyErrorDispatch(ModbusPollerThingHandler parent,
+            AsyncModbusFailure<ModbusReadRequestBlueprint> failure, ModbusDataThingHandler... children) {
+        var order = inOrder((Object[]) children);
+        for (ModbusDataThingHandler child : children) {
+            order.verify(child).prepareReadError(same(parent), same(failure));
+        }
+        for (ModbusDataThingHandler child : children) {
+            order.verify(child).handleReadError(same(failure));
+        }
+    }
+
     @Test
     public void testRegistersPassedToChildDataThings()
             throws IllegalArgumentException, IllegalAccessException, NoSuchFieldException, SecurityException {
@@ -719,35 +758,34 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         ModbusPollerThingHandler thingHandler = (ModbusPollerThingHandler) poller.getHandler();
         assertNotNull(thingHandler);
 
-        ModbusDataThingHandler child1 = Mockito.mock(ModbusDataThingHandler.class);
-        ModbusDataThingHandler child2 = Mockito.mock(ModbusDataThingHandler.class);
+        ModbusDataThingHandler child1 = mockChildHandler();
+        ModbusDataThingHandler child2 = mockChildHandler();
 
         AsyncModbusReadResult result = new AsyncModbusReadResult(request, registers);
 
         // has one data child
         thingHandler.childHandlerInitialized(child1, Mockito.mock(Thing.class));
         readCallback.handle(result);
-        verify(child1).onReadResult(result);
+        verifyReadDispatch(thingHandler, result, false, child1);
         verifyNoMoreInteractions(child1);
         verifyNoMoreInteractions(child2);
 
-        reset(child1);
+        clearInvocations(child1);
 
         // two children (one child initialized)
         thingHandler.childHandlerInitialized(child2, Mockito.mock(Thing.class));
         readCallback.handle(result);
-        verify(child1).onReadResult(result);
-        verify(child2).onReadResult(result);
+        verifyReadDispatch(thingHandler, result, false, child1, child2);
         verifyNoMoreInteractions(child1);
         verifyNoMoreInteractions(child2);
 
-        reset(child1);
-        reset(child2);
+        clearInvocations(child1);
+        clearInvocations(child2);
 
         // one child disposed
         thingHandler.childHandlerDisposed(child1, Mockito.mock(Thing.class));
         readCallback.handle(result);
-        verify(child2).onReadResult(result);
+        verifyReadDispatch(thingHandler, result, false, child2);
         verifyNoMoreInteractions(child1);
         verifyNoMoreInteractions(child2);
     }
@@ -782,35 +820,34 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         ModbusPollerThingHandler thingHandler = (ModbusPollerThingHandler) poller.getHandler();
         assertNotNull(thingHandler);
 
-        ModbusDataThingHandler child1 = Mockito.mock(ModbusDataThingHandler.class);
-        ModbusDataThingHandler child2 = Mockito.mock(ModbusDataThingHandler.class);
+        ModbusDataThingHandler child1 = mockChildHandler();
+        ModbusDataThingHandler child2 = mockChildHandler();
 
         AsyncModbusReadResult result = new AsyncModbusReadResult(request, bits);
 
         // has one data child
         thingHandler.childHandlerInitialized(child1, Mockito.mock(Thing.class));
         readCallback.handle(result);
-        verify(child1).onReadResult(result);
+        verifyReadDispatch(thingHandler, result, false, child1);
         verifyNoMoreInteractions(child1);
         verifyNoMoreInteractions(child2);
 
-        reset(child1);
+        clearInvocations(child1);
 
         // two children (one child initialized)
         thingHandler.childHandlerInitialized(child2, Mockito.mock(Thing.class));
         readCallback.handle(result);
-        verify(child1).onReadResult(result);
-        verify(child2).onReadResult(result);
+        verifyReadDispatch(thingHandler, result, false, child1, child2);
         verifyNoMoreInteractions(child1);
         verifyNoMoreInteractions(child2);
 
-        reset(child1);
-        reset(child2);
+        clearInvocations(child1);
+        clearInvocations(child2);
 
         // one child disposed
         thingHandler.childHandlerDisposed(child1, Mockito.mock(Thing.class));
         readCallback.handle(result);
-        verify(child2).onReadResult(result);
+        verifyReadDispatch(thingHandler, result, false, child2);
         verifyNoMoreInteractions(child1);
         verifyNoMoreInteractions(child2);
     }
@@ -846,35 +883,34 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         ModbusPollerThingHandler thingHandler = (ModbusPollerThingHandler) poller.getHandler();
         assertNotNull(thingHandler);
 
-        ModbusDataThingHandler child1 = Mockito.mock(ModbusDataThingHandler.class);
-        ModbusDataThingHandler child2 = Mockito.mock(ModbusDataThingHandler.class);
+        ModbusDataThingHandler child1 = mockChildHandler();
+        ModbusDataThingHandler child2 = mockChildHandler();
 
         AsyncModbusFailure<ModbusReadRequestBlueprint> result = new AsyncModbusFailure<>(request, error);
 
         // has one data child
         thingHandler.childHandlerInitialized(child1, Mockito.mock(Thing.class));
         readCallback.handle(result);
-        verify(child1).handleReadError(result);
+        verifyErrorDispatch(thingHandler, result, child1);
         verifyNoMoreInteractions(child1);
         verifyNoMoreInteractions(child2);
 
-        reset(child1);
+        clearInvocations(child1);
 
         // two children (one child initialized)
         thingHandler.childHandlerInitialized(child2, Mockito.mock(Thing.class));
         readCallback.handle(result);
-        verify(child1).handleReadError(result);
-        verify(child2).handleReadError(result);
+        verifyErrorDispatch(thingHandler, result, child1, child2);
         verifyNoMoreInteractions(child1);
         verifyNoMoreInteractions(child2);
 
-        reset(child1);
-        reset(child2);
+        clearInvocations(child1);
+        clearInvocations(child2);
 
         // one child disposed
         thingHandler.childHandlerDisposed(child1, Mockito.mock(Thing.class));
         readCallback.handle(result);
-        verify(child2).handleReadError(result);
+        verifyErrorDispatch(thingHandler, result, child2);
         verifyNoMoreInteractions(child1);
         verifyNoMoreInteractions(child2);
     }
@@ -923,7 +959,7 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         addThing(poller);
         verifyEndpointBasicInitInteraction();
 
-        ModbusDataThingHandler child1 = Mockito.mock(ModbusDataThingHandler.class);
+        ModbusDataThingHandler child1 = mockChildHandler();
         ModbusPollerThingHandler thingHandler = (ModbusPollerThingHandler) poller.getHandler();
         assertNotNull(thingHandler);
         thingHandler.childHandlerInitialized(child1, Mockito.mock(Thing.class));
@@ -940,9 +976,9 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         pollerReadCallback.handle(result);
 
         // data child receives the data
-        verify(child1).onReadResult(result);
+        verifyReadDispatch(thingHandler, result, false, child1);
         verifyNoMoreInteractions(child1);
-        reset(child1);
+        clearInvocations(child1);
 
         // call refresh
         // cache is still valid, we should not have real data poll this time
@@ -950,7 +986,7 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         verify(comms, never()).submitOneTimePoll(any(), any(), any());
 
         // data child receives the cached data
-        verify(child1).onReadResult(result);
+        verifyReadDispatch(thingHandler, result, true, child1);
         verifyNoMoreInteractions(child1);
     }
 
@@ -978,7 +1014,7 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
 
         ModbusPollerThingHandler thingHandler = (ModbusPollerThingHandler) poller.getHandler();
         assertNotNull(thingHandler);
-        ModbusDataThingHandler child1 = Mockito.mock(ModbusDataThingHandler.class);
+        ModbusDataThingHandler child1 = mockChildHandler();
         thingHandler.childHandlerInitialized(child1, Mockito.mock(Thing.class));
 
         assertThat(poller.getStatus(), is(equalTo(ThingStatus.ONLINE)));
@@ -994,9 +1030,9 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         pollerReadCallback.handle(result);
 
         // data child receives the data
-        verify(child1).onReadResult(result);
+        verifyReadDispatch(thingHandler, result, false, child1);
         verifyNoMoreInteractions(child1);
-        reset(child1);
+        clearInvocations(child1);
 
         // call refresh
         // caching disabled, should poll from manager
@@ -1033,7 +1069,7 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
 
         ModbusPollerThingHandler thingHandler = (ModbusPollerThingHandler) poller.getHandler();
         assertNotNull(thingHandler);
-        ModbusDataThingHandler child1 = Mockito.mock(ModbusDataThingHandler.class);
+        ModbusDataThingHandler child1 = mockChildHandler();
         thingHandler.childHandlerInitialized(child1, Mockito.mock(Thing.class));
 
         assertThat(poller.getStatus(), is(equalTo(ThingStatus.ONLINE)));
@@ -1053,9 +1089,9 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         pollerReadCallback.handle(registersResult);
 
         // data child should receive the data
-        verify(child1).onReadResult(registersResult);
+        verifyReadDispatch(thingHandler, registersResult, false, child1);
         verifyNoMoreInteractions(child1);
-        reset(child1);
+        clearInvocations(child1);
 
         // Sleep to have time between the data
         Thread.sleep(5L);
@@ -1064,9 +1100,9 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         failureCallback.handle(errorResult);
 
         // data child should receive the error
-        verify(child1).handleReadError(errorResult);
+        verifyErrorDispatch(thingHandler, errorResult, child1);
         verifyNoMoreInteractions(child1);
-        reset(child1);
+        clearInvocations(child1);
 
         // call refresh, should return latest data (that is, error)
         // cache is still valid, we should not have real data poll this time
@@ -1074,7 +1110,7 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         verify(comms, never()).submitOneTimePoll(any(), any(), any());
 
         // data child receives the cached error
-        verify(child1).handleReadError(errorResult);
+        verifyErrorDispatch(thingHandler, errorResult, child1);
         verifyNoMoreInteractions(child1);
     }
 
@@ -1094,7 +1130,7 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
 
         ModbusPollerThingHandler thingHandler = (ModbusPollerThingHandler) poller.getHandler();
         assertNotNull(thingHandler);
-        ModbusDataThingHandler child1 = Mockito.mock(ModbusDataThingHandler.class);
+        ModbusDataThingHandler child1 = mockChildHandler();
         thingHandler.childHandlerInitialized(child1, Mockito.mock(Thing.class));
 
         assertThat(poller.getStatus(), is(equalTo(ThingStatus.ONLINE)));
@@ -1110,9 +1146,9 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         pollerReadCallback.handle(result);
 
         // data child should receive the data
-        verify(child1).onReadResult(result);
+        verifyReadDispatch(thingHandler, result, false, child1);
         verifyNoMoreInteractions(child1);
-        reset(child1);
+        clearInvocations(child1);
 
         // Sleep to ensure cache expiry
         Thread.sleep(15L);
