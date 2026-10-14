@@ -116,6 +116,20 @@ class ModbusMigrationResourceTest {
     }
 
     @Test
+    void providerOwnedPreviewIsReadOnlyAndDoesNotJournal() throws Exception {
+        var before = Map.copyOf(persisted);
+        var response = request("GET", "provider-previews", "");
+        assertEquals(200, response.statusCode());
+        var result = json(response);
+        assertTrue(result.get("revisionDigest").getAsString().matches("[0-9a-f]{64}"));
+        assertNotNull(result.getAsJsonArray("fileChanges"));
+        assertFalse(response.body().contains("SENTINEL"));
+        assertEquals(before, persisted);
+        verify(provider, never()).add(any());
+        verify(links, never()).add(any());
+    }
+
+    @Test
     void historicalUnversionedReviewIsQuarantinedOverCoreHttpWithoutRewritingStorage() throws Exception {
         String identity = capture();
         String key = "v1:workflow:" + identity;

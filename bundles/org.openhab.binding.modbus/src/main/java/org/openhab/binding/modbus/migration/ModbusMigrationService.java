@@ -34,6 +34,7 @@ import org.osgi.service.component.annotations.ServiceScope;
 @NonNullByDefault
 public final class ModbusMigrationService {
     private final ManagedModbusMigrationAdapter adapter;
+    private final ProviderOwnedMigrationAdapter providerAdapter;
     private final ModbusMigrationWorkflow workflow;
 
     @Activate
@@ -41,6 +42,7 @@ public final class ModbusMigrationService {
             @Reference ItemChannelLinkRegistry linkRegistry, @Reference ManagedThingProvider thingProvider,
             @Reference StorageService storageService) {
         adapter = new ManagedModbusMigrationAdapter(thingRegistry, linkRegistry, thingProvider);
+        providerAdapter = new ProviderOwnedMigrationAdapter(thingRegistry, linkRegistry);
         MigrationJournal journal = new MigrationJournal(storageService.getStorage("modbus-migration-journal"));
         workflow = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
                 new ManagedModbusMigrationApplier(thingProvider, linkRegistry, journal, thingRegistry), journal);
@@ -52,6 +54,11 @@ public final class ModbusMigrationService {
     public synchronized Preview preview() {
         var snapshot = adapter.snapshot();
         return new Preview(workflow.preview(snapshot.pollers(), snapshot.data(), snapshot.manualWork()), List.of());
+    }
+
+    /** Returns a detached provider-owned file proposal without journal, Thing or link writes. */
+    public synchronized ProviderOwnedMigrationPreview providerPreview() {
+        return providerAdapter.preview();
     }
 
     /** Reads an existing review and workflow status only; never captures, stages, validates or writes the journal. */

@@ -86,6 +86,12 @@ public class ModbusMigrationResource implements RESTResource {
     }
 
     @GET
+    @Path("provider-previews")
+    public Response providerPreview() {
+        return execute(service::providerPreview);
+    }
+
+    @GET
     @Path("workflows/{identity}")
     public Response report(@PathParam("identity") String identity) {
         return execute(() -> Report.from(review(identity)));

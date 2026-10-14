@@ -28,6 +28,18 @@ Save the complete console output with the backup.
 Review every target poller, channel, and replacement link, and resolve every `MANUAL:` entry yourself.
 Do not change the legacy source configuration between preview and apply.
 
+## Provider-owned file proposals
+
+Administrator clients can read `GET /rest/modbus/migration/provider-previews`.
+This returns a detached proposal without writing the migration journal, Things, or links.
+Eligible file-backed mappings include unlinked native YAML candidates, source/target link instructions, safe provider implementation names, and revision digests.
+The public provider API does not expose a source filename, so the proposal explicitly reports `UNKNOWN_MANUAL_LOCATION` rather than inventing a path.
+Unknown ownership, unsupported conversions, transformations, and non-default profiles remain manual work.
+These proposals are not managed workflow groups and cannot be applied or cut over through the managed migration operations.
+Review and edit the owning configuration yourself; retain its original contents for exact restoration.
+The preview is not a backup or proof that generated files have been loaded by the native YAML provider.
+The hosted view does not yet display these file proposals.
+
 ## Stage unlinked candidates
 
 Apply exactly the identity returned by the reviewed preview:
