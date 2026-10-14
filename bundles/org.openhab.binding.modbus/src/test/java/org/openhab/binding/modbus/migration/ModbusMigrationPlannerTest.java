@@ -28,6 +28,13 @@ class ModbusMigrationPlannerTest {
 
     private final ModbusMigrationPlanner planner = new ModbusMigrationPlanner();
 
+    @Test
+    void safeReviewsDoNotReuseHistoricalPreviewIdentities() {
+        String historical = ModbusMigrationPlanner.configurationIdentity(
+                List.of("modbus-migration-preview-v3", List.of(), List.of(), List.of(), List.of()));
+        org.junit.jupiter.api.Assertions.assertNotEquals(historical, planner.preview(List.of(), List.of()).identity());
+    }
+
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.MethodSource("customReadTransforms")
     void previewRefusesCustomListReadTransforms(List<?> transforms) {

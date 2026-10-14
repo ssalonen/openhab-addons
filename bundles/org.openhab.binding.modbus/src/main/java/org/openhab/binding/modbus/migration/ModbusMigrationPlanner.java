@@ -231,7 +231,7 @@ public final class ModbusMigrationPlanner {
         }).toList();
         List<?> manual = manualWork.stream()
                 .map(work -> List.of(work.sourceUid(), work.reason(), work.configurationIdentity())).toList();
-        return configurationIdentity(List.of("modbus-migration-preview-v3", sources, data, targets, manual));
+        return configurationIdentity(List.of("modbus-migration-preview-v4", sources, data, targets, manual));
     }
 
     static String configurationIdentity(Object value) {
