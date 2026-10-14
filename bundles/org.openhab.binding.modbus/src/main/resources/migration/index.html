@@ -27,7 +27,7 @@
       <h3>Item link impact</h3>
       <div class="table-scroll"><table><caption>Reviewed Item links and per-link recovery</caption><thead><tr><th scope="col">Item</th><th scope="col">Source channel</th><th scope="col">Target channel</th><th scope="col">Plan</th><th scope="col">Recovery</th></tr></thead><tbody id="impacts"></tbody></table></div>
     </section>
-    <section aria-labelledby="stage-title"><h2 id="stage-title">2. Stage candidates</h2><p>Creates disabled candidate Things. Existing source Things and Item links remain in place.</p><button id="stage" type="button" disabled>Stage reviewed plan</button></section>
+    <section aria-labelledby="stage-title"><h2 id="stage-title">2. Stage candidates</h2><p>Creates unlinked candidate Things which may poll alongside legacy Things immediately, increasing device reads. Existing source Things and Item links remain in place.</p><button id="stage" type="button" disabled>Stage reviewed plan</button></section>
     <section aria-labelledby="group-title"><h2 id="group-title">3. Validate and cut over an explicit group</h2><p id="readiness">No fresh validation evidence loaded.</p><div id="groups"></div></section>
     <section aria-labelledby="recovery-title"><h2 id="recovery-title">4. Recovery</h2><p>Use per-link revert above to restore a source link. Rollback removes staged candidates only when the backend safety checks permit it. Review the current report before confirming.</p><button id="rollback" type="button" disabled>Rollback staged candidates</button></section>
   </main>

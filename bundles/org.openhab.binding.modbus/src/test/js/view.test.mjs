@@ -38,6 +38,15 @@ test('view provides labelled review, group and recovery controls without inline 
   assert.ok(html.includes('<label for="identity"'));
   assert.ok(!/<script[^>]*>[^<]+<\/script>/.test(html));
 });
+test('staging consent discloses parallel polling without switching production links', async () => {
+  const app = await readFile(new URL('app.mjs', base), 'utf8');
+  const html = await readFile(new URL('index.html', base), 'utf8');
+  assert.ok(app.includes('may poll alongside legacy'));
+  assert.ok(app.includes('Item links do not switch'));
+  assert.ok(!app.includes('Candidates are disabled'));
+  assert.ok(html.includes('may poll alongside legacy'));
+});
+
 test('renderer uses safe text nodes and explicit confirmation for dangerous actions', async () => {
   const app = await readFile(new URL('app.mjs', base), 'utf8');
   assert.ok(!app.includes('innerHTML'));

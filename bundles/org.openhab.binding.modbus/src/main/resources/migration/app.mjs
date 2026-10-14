@@ -76,7 +76,7 @@ $('refresh').addEventListener('click', () => {
     await controller.refresh();
   });
 });
-$('stage').addEventListener('click', () => mutate('apply', {}, `Stage reviewed identity ${controller.state.identity}? Candidates are disabled; Item links do not switch.`));
+$('stage').addEventListener('click', () => mutate('apply', {}, `Stage reviewed identity ${controller.state.identity}? Candidates may poll alongside legacy Things immediately, increasing device reads; Item links do not switch.`));
 $('rollback').addEventListener('click', () => mutate('rollback', {}, `Rollback reviewed identity ${controller.state.identity}? Candidate removal is subject to backend safety checks.`));
 window.addEventListener('storage', event => {
   if (event.key === 'openhab.ui:refreshToken' || event.key === null) {
