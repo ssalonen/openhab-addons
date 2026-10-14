@@ -15,8 +15,10 @@ package org.openhab.binding.modbus.migration;
 import static org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal.THING_TYPE_MODBUS_POLLER2;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -37,6 +39,7 @@ import org.openhab.core.thing.link.ManagedItemChannelLinkProvider;
  * @author Sami Salonen - Unlinked staging and explicit link cutover
  * @author Sami Salonen - Durable ownership and precise link recovery
  * @author Sami Salonen - Authoritative compensation and registry-aware construction
+ * @author Sami Salonen - Per-link cutover checks and exact active-link recovery
  */
 @NonNullByDefault
 public final class ManagedModbusMigrationApplier implements MigrationApplier {
@@ -58,6 +61,7 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
     private static final String OWNER = "modbusMigrationIdentity";
     private final ManagedThingProvider thingProvider;
     private final ItemChannelLinkRegistry linkRegistry;
+    private final Map<String, ItemChannelLink> activeTargetLinks = new HashMap<>();
 
     /**
      * Creates a runtime-local applier without authoritative Thing ownership checks.
@@ -176,6 +180,7 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
         if (!journal.links(key).isEmpty()) {
             throw new IllegalStateException("Existing cutover journal; rollback before retry");
         }
+        Map<String, ItemChannelLink> reviewedSources = new HashMap<>();
         for (MigrationLink link : group.links()) {
             if (!(link.configuration().isEmpty() || link.configuration().equals(Map.of("profile", "system:default")))) {
                 throw new IllegalStateException("Non-default profiles require manual migration");
@@ -191,20 +196,33 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
             if (linkRegistry.get(targetLink(link).getUID()) != null) {
                 throw new IllegalStateException("Refusing existing target link");
             }
+            reviewedSources.put(source.getUID(), source);
         }
         List<MigrationLink> journal = new ArrayList<>();
         this.journal.manifest(preview);
         try {
             for (MigrationLink link : group.links()) {
                 requireOwnedTarget(preview, group);
+                ItemChannelLink source = Objects.requireNonNull(reviewedSources.get(sourceLink(link).getUID()));
+                requireCurrentSource(link, source);
                 journal.add(link);
                 this.journal.links(key, journal);
                 requireOwnedTarget(preview, group);
+                requireCurrentSource(link, source);
                 linkRegistry.remove(sourceLink(link).getUID());
                 // Provider callbacks can replace a Thing during either link mutation.
                 requireOwnedTarget(preview, group);
-                linkRegistry.add(targetLink(link));
+                if (linkRegistry.get(source.getUID()) != null || linkRegistry.get(targetLink(link).getUID()) != null) {
+                    throw new IllegalStateException("Link changed during cutover removal");
+                }
+                ItemChannelLink replacement = targetLink(link);
+                activeTargetLinks.put(replacement.getUID(), replacement);
+                linkRegistry.add(replacement);
                 requireOwnedTarget(preview, group);
+                for (MigrationLink switched : journal) {
+                    requireSwitchedLink(switched,
+                            Objects.requireNonNull(activeTargetLinks.get(targetLink(switched).getUID())));
+                }
             }
         } catch (RuntimeException failure) {
             try {
@@ -213,6 +231,26 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
                 failure.addSuppressed(compensationFailure);
             }
             throw failure;
+        }
+    }
+
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // A listener replacement is not the captured source instance.
+    private void requireCurrentSource(MigrationLink link, ItemChannelLink expected) {
+        ItemChannelLink source = linkRegistry.get(expected.getUID());
+        if (source != expected || !expected.getConfiguration().getProperties().equals(link.configuration())
+                || !(linkRegistry.getProvider(expected) instanceof ManagedItemChannelLinkProvider)
+                || linkRegistry.get(targetLink(link).getUID()) != null) {
+            throw new IllegalStateException("Source or target link changed before cutover mutation");
+        }
+    }
+
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Read back the exact link just added, not a listener
+                                                      // replacement.
+    private void requireSwitchedLink(MigrationLink link, ItemChannelLink expected) {
+        if (linkRegistry.get(sourceLink(link).getUID()) != null || linkRegistry.get(expected.getUID()) != expected
+                || !expected.getConfiguration().getProperties().equals(link.configuration())
+                || !(linkRegistry.getProvider(expected) instanceof ManagedItemChannelLinkProvider)) {
+            throw new IllegalStateException("Link changed during cutover publication");
         }
     }
 
@@ -264,6 +302,10 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
             if (target != null && !(linkRegistry.getProvider(target) instanceof ManagedItemChannelLinkProvider)) {
                 throw new IllegalStateException("Refusing removal of unmanaged replacement link");
             }
+            ItemChannelLink expectedTarget = activeTargetLinks.get(targetLink(link).getUID());
+            if (target != null && expectedTarget != null && !sameTarget(link, expectedTarget)) {
+                throw new IllegalStateException("Refusing replacement of the active cutover target link");
+            }
             requireManagedSource(link, source);
             // Removal callbacks can replace either link; a successful provider return is not proof of absence.
             linkRegistry.remove(targetLink(link).getUID());
@@ -289,7 +331,13 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
             }
             journal.remove(link);
             this.journal.links(key, journal);
+            activeTargetLinks.remove(targetLink(link).getUID());
         }
+    }
+
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Active ownership is tied to the link actually added.
+    private boolean sameTarget(MigrationLink link, ItemChannelLink expectedTarget) {
+        return linkRegistry.get(targetLink(link).getUID()) == expectedTarget;
     }
 
     private void requireRestoredState(MigrationLink link, @Nullable ItemChannelLink expectedSource) {

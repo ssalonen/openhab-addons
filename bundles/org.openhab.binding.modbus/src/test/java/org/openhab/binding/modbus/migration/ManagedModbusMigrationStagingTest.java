@@ -91,6 +91,19 @@ class ManagedModbusMigrationStagingTest {
         verifyNoInteractions(links);
     }
 
+    private void configureLinkState(ItemChannelLinkRegistry links,
+            org.openhab.core.thing.link.ItemChannelLink initial) {
+        Map<String, org.openhab.core.thing.link.ItemChannelLink> state = new java.util.HashMap<>();
+        state.put(initial.getUID(), initial);
+        when(links.get(anyString())).thenAnswer(call -> state.get(call.getArgument(0)));
+        when(links.remove(anyString())).thenAnswer(call -> state.remove(call.getArgument(0)));
+        doAnswer(call -> {
+            var added = call.getArgument(0, org.openhab.core.thing.link.ItemChannelLink.class);
+            state.put(added.getUID(), added);
+            return null;
+        }).when(links).add(any());
+    }
+
     @Test
     void explicitCutoverReplacesLegacyLinkInsteadOfDualLinking() {
         ManagedThingProvider provider = mock(ManagedThingProvider.class);
@@ -103,7 +116,7 @@ class ManagedModbusMigrationStagingTest {
         MigrationLink mapping = group.links().getFirst();
         org.openhab.core.thing.link.ItemChannelLink legacy = new org.openhab.core.thing.link.ItemChannelLink(
                 mapping.itemName(), new org.openhab.core.thing.ChannelUID(mapping.sourceChannelUid()));
-        when(links.get(legacy.getUID())).thenReturn(legacy);
+        configureLinkState(links, legacy);
         ModbusMigrationWorkflow workflow = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
                 new ManagedModbusMigrationApplier(provider, links, new MigrationJournal(), things),
                 (reviewed, candidate, stagedAt) -> new MigrationValidation.Observation(reviewed.identity(),
@@ -142,12 +155,7 @@ class ManagedModbusMigrationStagingTest {
                 new org.openhab.core.thing.ChannelUID(mapping.sourceChannelUid()));
         var target = new org.openhab.core.thing.link.ItemChannelLink(mapping.itemName(),
                 new org.openhab.core.thing.ChannelUID(mapping.targetChannelUid()));
-        when(links.get(source.getUID())).thenReturn(source).thenReturn(null);
-        doAnswer(call -> {
-            var restored = call.getArgument(0, org.openhab.core.thing.link.ItemChannelLink.class);
-            when(links.get(restored.getUID())).thenReturn(restored);
-            return null;
-        }).when(links).add(source);
+        configureLinkState(links, source);
         doThrow(new IllegalStateException("link addition failed")).when(links).add(target);
         when(links.remove(target.getUID())).thenThrow(new IllegalStateException("compensation failed"))
                 .thenReturn(null);

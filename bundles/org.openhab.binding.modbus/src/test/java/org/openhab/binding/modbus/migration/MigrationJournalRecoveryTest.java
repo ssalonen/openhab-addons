@@ -216,11 +216,31 @@ class MigrationJournalRecoveryTest {
         var mapping = group.links().getFirst();
         var source = new org.openhab.core.thing.link.ItemChannelLink(mapping.itemName(),
                 new org.openhab.core.thing.ChannelUID(mapping.sourceChannelUid()));
+        ManagedModbusMigrationStagingTest.trackManagedTargets(things, provider);
+        var applier = new ManagedModbusMigrationApplier(provider, links, journal(), things);
+        applier.createTargets(preview);
+        ThingUID target = new ThingUID(group.targetPollerUid());
+        assertTrue(ManagedModbusMigrationAdapter.ownsTarget(things, provider, target, preview.identity()));
+        assertEquals(List.of(group.targetPollerUid()), journal().targets(preview.identity()));
+        var foreign = mock(org.openhab.core.thing.link.ItemChannelLinkProvider.class);
         when(links.get(source.getUID())).thenReturn(source);
-        assertThrows(IllegalStateException.class,
-                () -> new ManagedModbusMigrationApplier(provider, links, journal()).cutover(preview, group));
+        when(links.getProvider(source)).thenReturn(foreign);
+        Map<String, String> before = Map.copyOf(persisted);
+        clearInvocations(provider, links);
+
+        var failure = assertThrows(IllegalStateException.class, () -> applier.cutover(preview, group));
+        assertEquals("Legacy link is not managed; provider-owned changes require manual work", failure.getMessage());
+        verify(links).getProvider(source);
         verify(links, never()).remove(anyString());
         verify(links, never()).add(any());
+        verify(provider, never()).add(any());
+        verify(provider, never()).remove(any());
+        assertSame(source, links.get(source.getUID()));
+        assertSame(foreign, links.getProvider(source));
+        assertNull(links.get(new org.openhab.core.thing.link.ItemChannelLink(mapping.itemName(),
+                new org.openhab.core.thing.ChannelUID(mapping.targetChannelUid())).getUID()));
+        assertEquals(before, persisted);
+        assertTrue(journal().links(preview.identity() + ":" + group.sourcePollerUid()).isEmpty());
     }
 
     @Test
