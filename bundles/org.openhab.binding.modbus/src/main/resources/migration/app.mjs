@@ -96,9 +96,33 @@ function renderProviders() {
     `${work.sourceUid}: ${work.reason} · Configuration digest: ${work.configurationIdentity}`));
   root.append(node('h3', 'Provider manual work'), manual);
 }
+function renderComparisons(report) {
+  const root = $('comparisons');
+  root.replaceChildren();
+  const observation = report?.observation;
+  if (!observation || !Array.isArray(observation.comparisons) || !observation.comparisons.length) {
+    root.append(node('p', 'No detailed comparison evidence returned. Validate a staged group; aggregate status alone is not a per-channel report.'));
+    return;
+  }
+  root.append(node('p', `Validation result: ${observation.outcome} · Source poller: ${observation.sourcePollerUid} · Report observed at: ${observation.observedAt}`));
+  const group = report.preview.groups.find(group => group.sourcePollerUid === observation.sourcePollerUid);
+  if (group) root.append(node('p', `Candidate Thing ID: ${group.targetPollerUid}`));
+  for (const comparison of observation.comparisons) {
+    const section = node('div', undefined, 'group');
+    section.append(node('h3', comparison.outcome),
+      node('p', `Source channel: ${comparison.sourceChannelUid}`),
+      node('p', `Target channel: ${comparison.targetChannelUid}`),
+      node('p', `Address: ${comparison.address} · Value type: ${comparison.valueType}`),
+      node('p', `Source value: ${comparison.sourceValue} · Source observed at: ${comparison.sourceObservedAt}`),
+      node('p', `Target value: ${comparison.targetValue} · Target observed at: ${comparison.targetObservedAt}`),
+      node('p', `Reason: ${comparison.reason}`));
+    root.append(section);
+  }
+}
 function render() {
   renderProviders();
   const { report, identity, uncertain } = controller.state;
+  renderComparisons(report);
   const plan = report?.preview;
   const locked = working || uncertain || !report;
   $('preview').disabled = working;

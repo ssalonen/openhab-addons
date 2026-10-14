@@ -80,6 +80,12 @@ export function createController({ auth, fetch = globalThis.fetch }) {
       check(capture);
       state.report = report;
       await refresh(capture);
+      // POST validation evidence is transient: GET readback does not collect observations.
+      // Keep it only for this successfully reconciled validation, never across an explicit refetch.
+      if (operation === 'validate' && report.observation?.previewIdentity === state.identity
+          && report.observation.sourcePollerUid === body.sourcePollerUid) {
+        state.report = { ...state.report, observation: report.observation };
+      }
     } catch (error) {
       if (current(capture)) {
         state.uncertain = true;

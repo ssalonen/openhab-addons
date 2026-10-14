@@ -35,6 +35,8 @@ This returns a detached proposal without writing the migration journal, Things, 
 Eligible file-backed mappings include unlinked native YAML candidates, source/target link instructions, safe provider implementation names, and revision digests.
 The public provider API does not expose a source filename, so the proposal explicitly reports `UNKNOWN_MANUAL_LOCATION` rather than inventing a path.
 Unknown ownership, unsupported conversions, transformations, and non-default profiles remain manual work.
+A proposal may cover only part of a legacy poller's consumers.
+Keep that legacy poller active until **every** residual consumer is resolved; migrating the eligible subset does not authorize whole-poller shutdown.
 These proposals are not managed workflow groups and cannot be applied or cut over through the managed migration operations.
 Review and edit the owning configuration yourself; retain its original contents for exact restoration.
 The preview is not a backup or proof that generated files have been loaded by the native YAML provider.
@@ -70,6 +72,12 @@ In this slice the console has no binding-owned observation provider, so validati
 There is no force flag, acknowledgement bypass, or automatic link switch in apply.
 An observation integration must compare all planned channels from fresh post-create device polls, verify candidate configuration/lifecycle, and report `MATCH`, `MISMATCH`, or `UNAVAILABLE` with the reviewed identity, poller UID, and timestamp.
 No live-device validation or boundary-coverage claim is made here.
+Comparisons assess read-equivalence, not device write behavior; writes require separate controlled verification.
+
+The hosted view includes a **Detailed channel comparisons** section, rendering source/target channels, address, value type, values, timestamps, outcome and reason when the validation response supplies them.
+At this revision REST observation DTOs and console output still expose aggregate validation only; the hosted renderer is tested with proposed DTO fixtures, not captured REST details.
+Until backend exposure is implemented and verified, the section reports that no detailed evidence was returned.
+Validation details are transient: explicit workflow refetch and logout clear them, and they do not override backend cutover readiness.
 
 When that integration is available, explicit cutover removes each eligible legacy Item-channel link **before** adding its reviewed replacement.
 Only empty or exactly `system:default` profile configurations are eligible; other profiles and rule/widget rewrites remain manual.
