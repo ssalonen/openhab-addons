@@ -28,6 +28,7 @@ public record MigrationWorkflowReport(MigrationPreview preview, Status status, I
         List<String> switchedLinks, MigrationValidation.Outcome validation, boolean cutoverReady,
         String readinessReason) {
     public enum Status {
+        QUARANTINED,
         PREVIEW,
         STAGED,
         RECOVERY,

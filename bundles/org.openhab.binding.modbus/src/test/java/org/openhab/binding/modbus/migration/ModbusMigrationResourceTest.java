@@ -116,6 +116,43 @@ class ModbusMigrationResourceTest {
     }
 
     @Test
+    void historicalUnversionedReviewIsQuarantinedOverCoreHttpWithoutRewritingStorage() throws Exception {
+        String identity = capture();
+        String key = "v1:workflow:" + identity;
+        var historical = JsonParser.parseString(java.util.Objects.requireNonNull(persisted.get(key))).getAsJsonObject();
+        historical.remove("reviewSafetyVersion");
+        var preview = historical.getAsJsonObject("preview");
+        for (String artifact : List.of("yaml", "manifestJson", "impactReport")) {
+            preview.addProperty(artifact, "SENTINEL-historical-credential");
+        }
+        preview.getAsJsonArray("groups").get(0).getAsJsonObject().getAsJsonObject("configuration")
+                .addProperty("innocuous", "SENTINEL-historical-credential");
+        persisted.put(key, historical.toString());
+        persisted.put("v1:review:" + identity, historical.toString());
+        var before = Map.copyOf(persisted);
+        stop();
+        start(); // Reconstruct the actual service and HTTP resource from the pre-fix serialized record.
+        clearInvocations(things, links, provider, storage);
+        var response = request("GET", "workflows/" + identity, "");
+        assertFalse(response.body().contains("SENTINEL"), response.body());
+        var report = json(response);
+        assertEquals("QUARANTINED", report.get("status").getAsString());
+        assertTrue(report.getAsJsonObject("preview").getAsJsonArray("groups").isEmpty());
+        assertFalse(report.get("cutoverReady").getAsBoolean());
+        assertFalse(service.report(identity).toString().contains("SENTINEL"));
+        assertEquals(before, persisted);
+        verifyNoInteractions(things, links, provider, storage);
+        for (String suffix : List.of("apply", "validate", "cutover")) {
+            response = request("POST", "workflows/" + identity + "/" + suffix,
+                    suffix.equals("apply") ? "" : "{\"sourcePollerUid\":\"modbus:poller:tcp:plant\"}");
+            assertEquals(409, response.statusCode(), response.body());
+            assertFalse(response.body().contains("SENTINEL"));
+        }
+        verify(provider, never()).add(any());
+        verify(links, never()).add(any());
+    }
+
+    @Test
     void coreJsonAndSavedReviewsOmitUnknownAndCustomConfigurationValues() throws Exception {
         var sourceThings = things.getAll();
         var data = sourceThings.stream().filter(thing -> thing.getThingTypeUID().getId().equals("data")).findFirst()

@@ -133,8 +133,9 @@ public class ModbusMigrationResource implements RESTResource {
             var report = review(identity);
             String item = field(body, "itemName", 255);
             String channel = field(body, "sourceChannelUid", 512);
-            if (report.preview().groups().stream().flatMap(group -> group.links().stream())
-                    .noneMatch(link -> link.itemName().equals(item) && link.sourceChannelUid().equals(channel))) {
+            if (report.status() != MigrationWorkflowReport.Status.QUARANTINED
+                    && report.preview().groups().stream().flatMap(group -> group.links().stream()).noneMatch(
+                            link -> link.itemName().equals(item) && link.sourceChannelUid().equals(channel))) {
                 throw new Failure(404, ErrorCode.NOT_FOUND);
             }
             service.revert(identity, item, channel);
@@ -153,6 +154,9 @@ public class ModbusMigrationResource implements RESTResource {
     }
 
     private String poller(MigrationWorkflowReport report, JsonObject body) {
+        if (report.status() == MigrationWorkflowReport.Status.QUARANTINED) {
+            throw new Failure(409, ErrorCode.CONFLICT);
+        }
         String poller = field(body, "sourcePollerUid", 512);
         if (report.preview().groups().stream().noneMatch(group -> group.sourcePollerUid().equals(poller))) {
             throw new Failure(404, ErrorCode.NOT_FOUND);

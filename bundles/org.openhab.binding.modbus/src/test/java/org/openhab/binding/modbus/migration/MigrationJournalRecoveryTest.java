@@ -119,6 +119,37 @@ class MigrationJournalRecoveryTest {
     }
 
     @Test
+    void quarantinedHistoricalStageRetainsRollbackOwnership() {
+        MigrationJournal journal = journal();
+        ModbusMigrationWorkflow workflow = workflow(journal);
+        var pollers = pollers(500);
+        var preview = workflow.preview(pollers, data);
+        ThingUID target = new ThingUID(preview.groups().getFirst().targetPollerUid());
+        doAnswer(call -> {
+            var thing = call.getArgument(0, org.openhab.core.thing.Thing.class);
+            when(provider.get(target)).thenReturn(thing);
+            throw new AssertionError("simulated interruption");
+        }).when(provider).add(any());
+        assertThrows(AssertionError.class, () -> workflow.apply(preview.identity(), pollers, data));
+        for (String prefix : List.of("v1:workflow:", "v1:review:")) {
+            String key = prefix + preview.identity();
+            var old = com.google.gson.JsonParser.parseString(java.util.Objects.requireNonNull(persisted.get(key)))
+                    .getAsJsonObject();
+            old.remove("reviewSafetyVersion");
+            old.getAsJsonObject("preview").addProperty("yaml", "SENTINEL-old-review");
+            persisted.put(key, old.toString());
+        }
+        var restored = workflow(journal());
+        assertEquals(MigrationWorkflowReport.Status.QUARANTINED, restored.report(preview.identity()).status());
+        assertFalse(restored.report(preview.identity()).toString().contains("SENTINEL"));
+        restored.rollback(preview.identity());
+        verify(provider).remove(target);
+        assertTrue(journal().targets(preview.identity()).isEmpty());
+        assertEquals("ROLLED_BACK", journal().workflows().getFirst().outcome());
+        assertEquals(0, journal().workflows().getFirst().reviewSafetyVersion());
+    }
+
+    @Test
     void reconstructedRollbackRefusesReplacementThingWithUnknownOwnership() {
         var workflow = workflow(journal());
         var pollers = pollers(500);

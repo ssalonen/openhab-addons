@@ -44,6 +44,7 @@ public final class ModbusMigrationWorkflow {
     private final MigrationApplier applier;
     private final Map<String, MigrationPreview> previews = new HashMap<>();
     private final Set<String> recovery = new HashSet<>();
+    private final Set<String> quarantined = new HashSet<>();
     private final Set<String> applied = new HashSet<>();
 
     public ModbusMigrationWorkflow(ModbusMigrationPlanner planner, MigrationApplier applier) {
@@ -67,6 +68,9 @@ public final class ModbusMigrationWorkflow {
         for (MigrationJournal.Workflow entry : journal.workflows()) {
             String identity = entry.preview().identity();
             previews.put(identity, entry.preview());
+            if (entry.reviewSafetyVersion() != 1) {
+                quarantined.add(identity);
+            }
             sources.put(identity, new Sources(entry.pollers(), entry.data(), entry.providerWork()));
             if (entry.outcome().equals("STAGED")) {
                 applied.add(identity);
@@ -104,6 +108,12 @@ public final class ModbusMigrationWorkflow {
         MigrationJournal.Workflow entry = journal.workflows().stream()
                 .filter(candidate -> candidate.preview().identity().equals(identity)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("unknown preview identity"));
+        if (quarantined.contains(identity)) {
+            MigrationPreview safe = new MigrationPreview(identity, List.of(), List.of(), List.of(), "", "", "");
+            return new MigrationWorkflowReport(safe, MigrationWorkflowReport.Status.QUARANTINED, Instant.EPOCH,
+                    List.of(), MigrationValidation.Outcome.UNAVAILABLE, false,
+                    "Historical review quarantined: configuration artifacts are withheld. Recovery records are retained.");
+        }
         MigrationWorkflowReport.Status status = switch (entry.outcome()) {
             case "STAGED" -> MigrationWorkflowReport.Status.STAGED;
             case "STAGING", "RECOVERY" -> MigrationWorkflowReport.Status.RECOVERY;
@@ -129,6 +139,7 @@ public final class ModbusMigrationWorkflow {
 
     synchronized void apply(String previewIdentity, List<LegacyPoller> pollers, List<LegacyData> dataThings,
             List<ManualMigrationWork> providerWork) {
+        requireSafeReview(previewIdentity);
         MigrationPreview currentPreview = planner.preview(pollers, dataThings, providerWork);
         if (!previewIdentity.equals(currentPreview.identity()) || !previews.containsKey(previewIdentity)) {
             throw new IllegalArgumentException("apply requires the exact, current preview identity");
@@ -155,6 +166,7 @@ public final class ModbusMigrationWorkflow {
     }
 
     public synchronized MigrationValidation.Observation validate(String previewIdentity, String sourcePollerUid) {
+        requireSafeReview(previewIdentity);
         MigrationPreview preview = appliedPreview(previewIdentity);
         MigrationGroup group = group(preview, sourcePollerUid);
         Instant createdAt = stagedAt.get(previewIdentity);
@@ -178,6 +190,7 @@ public final class ModbusMigrationWorkflow {
 
     synchronized void cutover(String previewIdentity, String sourcePollerUid, List<LegacyPoller> pollers,
             List<LegacyData> dataThings, List<ManualMigrationWork> providerWork) {
+        requireSafeReview(previewIdentity);
         MigrationPreview preview = appliedPreview(previewIdentity);
         Sources reviewedSources = java.util.Objects.requireNonNull(sources.get(previewIdentity));
         Set<String> removedLinks = new HashSet<>();
@@ -238,8 +251,15 @@ public final class ModbusMigrationWorkflow {
     }
 
     public synchronized void cleanupLegacy(String previewIdentity) {
+        requireSafeReview(previewIdentity);
         MigrationPreview preview = appliedPreview(previewIdentity);
         applier.removeLegacy(preview);
+    }
+
+    private void requireSafeReview(String identity) {
+        if (quarantined.contains(identity)) {
+            throw new IllegalStateException("Historical review quarantined; only recovery operations are permitted");
+        }
     }
 
     private MigrationPreview appliedPreview(String previewIdentity) {

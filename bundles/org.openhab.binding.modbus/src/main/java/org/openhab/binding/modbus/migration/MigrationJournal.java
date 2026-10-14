@@ -34,7 +34,11 @@ import com.google.gson.reflect.TypeToken;
 @NonNullByDefault
 final class MigrationJournal {
     record Workflow(MigrationPreview preview, List<LegacyPoller> pollers, List<LegacyData> data, String outcome,
-            String stagedAt, List<String> switched, List<ManualMigrationWork> providerWork) {
+            String stagedAt, List<String> switched, List<ManualMigrationWork> providerWork, int reviewSafetyVersion) {
+        Workflow(MigrationPreview preview, List<LegacyPoller> pollers, List<LegacyData> data, String outcome,
+                String stagedAt, List<String> switched, List<ManualMigrationWork> providerWork) {
+            this(preview, pollers, data, outcome, stagedAt, switched, providerWork, 1);
+        }
     }
 
     private final Gson gson = new GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.BIG_DECIMAL).create();
@@ -68,7 +72,7 @@ final class MigrationJournal {
         }
         Workflow review = Objects.requireNonNull(gson.fromJson(local.get(reviewKey), Workflow.class));
         Workflow outcome = new Workflow(review.preview(), review.pollers(), review.data(), workflow.outcome(),
-                workflow.stagedAt(), workflow.switched(), review.providerWork());
+                workflow.stagedAt(), workflow.switched(), review.providerWork(), review.reviewSafetyVersion());
         put("v1:workflow:" + workflow.preview().identity(), gson.toJson(outcome));
     }
 
