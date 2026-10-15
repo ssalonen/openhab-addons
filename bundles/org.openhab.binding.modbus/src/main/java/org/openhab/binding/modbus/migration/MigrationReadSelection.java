@@ -17,7 +17,11 @@ import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.modbus.handler.ModbusPollerThingHandler;
+import org.openhab.binding.modbus.internal.handler.ModbusDataThingHandler;
+import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingUID;
+import org.openhab.core.thing.binding.ThingHandler;
 
 /**
  * Exact reviewed Things eligible for a migration-owned read, never an implicit sibling wildcard.
@@ -25,9 +29,36 @@ import org.openhab.core.thing.ThingUID;
  * @author Sami Salonen - Scoped migration read selection
  */
 @NonNullByDefault
-public record MigrationReadSelection(Map<ThingUID, String> signatures) {
+public record MigrationReadSelection(Map<ThingUID, Binding> bindings) {
     public MigrationReadSelection {
-        signatures = Map.copyOf(signatures);
+        bindings = Map.copyOf(bindings);
+    }
+
+    /** Exact authoritative decoder pair and the complete configuration captured for this read. */
+    public record Binding(Thing thing, @Nullable ThingHandler handler, String signature) {
+        public Binding(Thing thing) {
+            this(thing, thing.getHandler(), Poller2ObservationCollector.signature(thing));
+        }
+
+        @SuppressWarnings("PMD.CompareObjectsWithEquals") // Decoder authority requires exact live instances.
+        public boolean matches(Thing selectedThing, ThingHandler selectedHandler) {
+            return thing == selectedThing && handler == selectedHandler && current();
+        }
+
+        @SuppressWarnings("PMD.CompareObjectsWithEquals") // Replacements cannot inherit decoder authority.
+        public boolean current() {
+            return (handler instanceof ModbusDataThingHandler || handler instanceof ModbusPollerThingHandler)
+                    && thing.getHandler() == handler && signature.equals(Poller2ObservationCollector.signature(thing));
+        }
+    }
+
+    public boolean matches(Thing thing, ThingHandler handler) {
+        Binding binding = bindings.get(thing.getUID());
+        return binding != null && binding.matches(thing, handler);
+    }
+
+    public boolean current() {
+        return !bindings.isEmpty() && bindings.values().stream().allMatch(Binding::current);
     }
 
     public static boolean identityTransform(@Nullable Object value) {

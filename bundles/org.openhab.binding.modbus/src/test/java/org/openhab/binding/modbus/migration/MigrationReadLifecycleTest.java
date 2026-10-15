@@ -76,11 +76,12 @@ class MigrationReadLifecycleTest {
                 return Optional.empty();
             }
         };
+        thing.setHandler(handler);
         handler.setCallback(mock(ThingHandlerCallback.class));
         handler.initialize();
         try {
             var read = handler.readForMigration(
-                    new MigrationReadSelection(Map.of(thing.getUID(), Poller2ObservationCollector.signature(thing))));
+                    new MigrationReadSelection(Map.of(thing.getUID(), new MigrationReadSelection.Binding(thing))));
             var request = ArgumentCaptor.forClass(ModbusReadRequestBlueprint.class);
             var callback = ArgumentCaptor.forClass(ModbusReadCallback.class);
             verify(communication).submitOneTimePoll(request.capture(), callback.capture(), any());
@@ -109,8 +110,8 @@ class MigrationReadLifecycleTest {
             if (!transition.equals("decode-failure")) {
                 handler.initialize();
                 clearInvocations(communication);
-                var recovered = handler.readForMigration(new MigrationReadSelection(
-                        Map.of(thing.getUID(), Poller2ObservationCollector.signature(thing))));
+                var recovered = handler.readForMigration(
+                        new MigrationReadSelection(Map.of(thing.getUID(), new MigrationReadSelection.Binding(thing))));
                 verify(communication).submitOneTimePoll(request.capture(), callback.capture(), any());
                 callback.getValue().handle(new AsyncModbusReadResult(request.getValue(), new ModbusRegisterArray(43)));
                 assertTrue(recovered.completion().isDone());

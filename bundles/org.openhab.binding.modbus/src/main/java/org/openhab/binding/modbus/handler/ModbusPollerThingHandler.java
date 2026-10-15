@@ -593,19 +593,16 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
             context = readConfiguration;
             generation = callbackGeneration;
             signature = Poller2ObservationCollector.signature(getThing());
-            permissions = childCallbacks.stream()
-                    .filter(child -> selection.signatures().containsKey(child.getThing().getUID()))
+            permissions = childCallbacks.stream().filter(child -> selection.matches(child.getThing(), child))
                     .map(child -> child.captureReadAuthorization(this)).toList();
         }
         var completion = new CompletableFuture<Map<ThingUID, Poller2Observation>>();
-        boolean ownChannels = selection.signatures().containsKey(getThing().getUID());
-        BooleanSupplier current = () -> !completion.isCancelled() && context != null
-                && !selection.signatures().isEmpty()
-                && selection.signatures().size() == permissions.size() + (ownChannels ? 1 : 0)
-                && (!ownChannels || signature.equals(selection.signatures().get(getThing().getUID()))
-                        && getThing().getChannels().stream()
-                                .allMatch(channel -> MigrationReadSelection
-                                        .identityTransform(channel.getConfiguration().get("readTransform"))))
+        boolean ownChannels = selection.matches(getThing(), this);
+        BooleanSupplier current = () -> !completion.isCancelled() && context != null && selection.current()
+                && selection.bindings().size() == permissions.size() + (ownChannels ? 1 : 0)
+                && (!ownChannels || selection.matches(getThing(), this) && getThing().getChannels().stream()
+                        .allMatch(channel -> MigrationReadSelection
+                                .identityTransform(channel.getConfiguration().get("readTransform"))))
                 && permissions.stream().allMatch(permission -> permission.eligible(selection))
                 && context == readConfiguration && generation == callbackGeneration && hasCurrentReadConfiguration()
                 && signature.equals(Poller2ObservationCollector.signature(getThing()))

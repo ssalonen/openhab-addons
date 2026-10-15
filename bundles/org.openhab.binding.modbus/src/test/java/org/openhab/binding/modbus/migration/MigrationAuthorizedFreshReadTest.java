@@ -63,6 +63,15 @@ import org.openhab.core.thing.link.ManagedItemChannelLinkProvider;
 class MigrationAuthorizedFreshReadTest {
     private int reloadPhase;
     private boolean manualSibling;
+    private int beforeObservation;
+
+    @ParameterizedTest
+    @ValueSource(ints = { 1, 2, 3, 4 })
+    void authoritativeDecoderReplacementBeforeObservationRefusesUntilCurrentChildRegistered(int replacement)
+            throws Exception {
+        beforeObservation = replacement;
+        validationSubmitsNewReadsInsteadOfReusingPeriodicEvidence(false);
+    }
 
     @Test
     void migrationDoesNotDecodeManualCustomSibling() throws Exception {
@@ -294,11 +303,12 @@ class MigrationAuthorizedFreshReadTest {
             if (manualSibling) {
                 ThingUID manualUid = new ThingUID("modbus:data:delayed:holding:manual");
                 for (var invalid : List.of(new MigrationReadSelection(Map.of()),
-                        new MigrationReadSelection(
-                                Map.of(new ThingUID("modbus:data:delayed:holding:missing"), "missing")),
-                        new MigrationReadSelection(Map.of(sourceUid, "stale")),
-                        new MigrationReadSelection(Map.of(manualUid, Poller2ObservationCollector
-                                .signature(Objects.requireNonNull(state.get(manualUid))))))) {
+                        new MigrationReadSelection(Map.of(new ThingUID("modbus:data:delayed:holding:missing"),
+                                new MigrationReadSelection.Binding(child.getThing()))),
+                        new MigrationReadSelection(Map.of(sourceUid,
+                                new MigrationReadSelection.Binding(child.getThing(), child, "stale"))),
+                        new MigrationReadSelection(Map.of(manualUid,
+                                new MigrationReadSelection.Binding(Objects.requireNonNull(state.get(manualUid))))))) {
                     var refused = poller.readForMigration(invalid);
                     assertTrue(refused.completion().isCompletedExceptionally());
                     assertFalse(refused.current().getAsBoolean());
@@ -313,6 +323,45 @@ class MigrationAuthorizedFreshReadTest {
                 callback.handle(new AsyncModbusReadResult(request, new ModbusRegisterArray(42, 42)));
                 return null;
             }).when(communication).submitOneTimePoll(any(), any(), any());
+            if (beforeObservation > 0) {
+                Thing authoritative = beforeObservation == 2 ? ThingBuilder.create(child.getThing()).build()
+                        : child.getThing();
+                var replacement = new ModbusDataThingHandler(authoritative) {
+                    @Override
+                    protected @Nullable Bridge getBridge() {
+                        return pollerThing;
+                    }
+                };
+                replacement.setCallback(mock(ThingHandlerCallback.class));
+                authoritative.setHandler(beforeObservation == 3 ? null
+                        : beforeObservation == 4 ? mock(ModbusTcpThingHandler.class)
+                                : beforeObservation == 2 ? child : replacement);
+                state.put(sourceUid, authoritative);
+                try {
+                    // No disposal notification: the old real decoder remains registered with identical configuration.
+                    assertEquals(MigrationValidation.Outcome.UNAVAILABLE,
+                            service.validate(reviewed.identity(), group.sourcePollerUid()).outcome());
+                    assertThrows(IllegalStateException.class,
+                            () -> service.cutover(reviewed.identity(), group.sourcePollerUid()));
+                    verify(links, never()).remove(anyString());
+                    verify(links, never()).add(any());
+                    assertEquals(Map.of(originalLink.getUID(), originalLink), routing);
+                    authoritative.setHandler(replacement);
+                    replacement.initialize();
+                    poller.childHandlerInitialized(replacement, authoritative);
+                    clearInvocations(communication);
+                    assertEquals(MigrationValidation.Outcome.MATCH,
+                            service.validate(reviewed.identity(), group.sourcePollerUid()).outcome());
+                    verify(communication, times(2)).submitOneTimePoll(any(), any(), any());
+                    assertEquals(Map.of(originalLink.getUID(), originalLink), routing);
+                    service.cutover(reviewed.identity(), group.sourcePollerUid());
+                    assertFalse(routing.containsKey(originalLink.getUID()));
+                    assertEquals(1, routing.size());
+                } finally {
+                    replacement.dispose();
+                }
+                return;
+            }
             if (reloadPhase > 0) {
                 var liveCandidate = candidate;
                 if (reloadPhase >= 11) {

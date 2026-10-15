@@ -24,6 +24,7 @@ import java.util.concurrent.CompletableFuture;
 
 import org.junit.jupiter.api.Test;
 import org.openhab.binding.modbus.handler.ModbusPollerThingHandler;
+import org.openhab.binding.modbus.internal.handler.ModbusDataThingHandler;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.thing.ChannelUID;
@@ -112,7 +113,7 @@ class LiveModbusMigrationValidationTest {
     }
 
     private void attach(Thing thing, Poller2ObservationCollector collector) {
-        ThingHandler handler = mock(ThingHandler.class,
+        ThingHandler handler = mock(ModbusDataThingHandler.class,
                 withSettings().extraInterfaces(ModbusObservationSource.class, BridgeHandler.class));
         when(((ModbusObservationSource) handler).getObservation()).thenAnswer(invocation -> collector.getObservation());
         thing.setHandler(handler);

@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.openhab.binding.modbus.handler.ModbusPollerThingHandler;
+import org.openhab.binding.modbus.internal.handler.ModbusDataThingHandler;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.storage.StorageService;
@@ -123,6 +124,7 @@ class StagedTargetOwnershipTest {
             if (thing.getUID().equals(target)) {
                 attachRequest(thing, Map.of(thing.getUID(), observation));
             } else {
+                thing.setHandler(mock(ModbusDataThingHandler.class));
                 legacyValues.put(thing.getUID(), observation);
             }
         }

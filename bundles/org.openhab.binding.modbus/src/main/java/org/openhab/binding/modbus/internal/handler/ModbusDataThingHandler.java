@@ -847,7 +847,8 @@ public class ModbusDataThingHandler extends BaseThingHandler implements ModbusOb
 
         public boolean eligible(MigrationReadSelection selection) {
             ModbusTransformation transformation = readTransformation;
-            return context != null && context.signature().equals(selection.signatures().get(getThing().getUID()))
+            return context != null && selection.matches(getThing(), ModbusDataThingHandler.this)
+                    && context.signature().equals(selection.bindings().get(getThing().getUID()).signature())
                     && MigrationReadSelection.identityTransform(getThing().getConfiguration().get("readTransform"))
                     && transformation != null && transformation.isIdentityTransform();
         }

@@ -32,7 +32,6 @@ import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingRegistry;
 import org.openhab.core.thing.ThingUID;
-import org.openhab.core.thing.binding.ThingHandler;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -60,21 +59,18 @@ public final class LiveModbusMigrationValidation implements MigrationValidation 
         Thing poller = registry.get(new ThingUID(group.sourcePollerUid()));
         var pollerHandler = poller == null ? null : poller.getHandler();
         var targetHandler = target == null ? null : target.getHandler();
-        Map<ThingUID, Optional<ThingHandler>> sourceHandlers = new HashMap<>();
-        Map<ThingUID, Thing> sources = new HashMap<>();
-        Map<ThingUID, String> sourceSignatures = new HashMap<>();
+        Map<ThingUID, MigrationReadSelection.Binding> sourceBindings = new HashMap<>();
         for (MigrationChannel mapping : group.channels()) {
             ThingUID uid = new ThingUID(mapping.sourceDataUid());
             Thing source = registry.get(uid);
             if (source != null) {
-                sources.put(uid, source);
-                sourceHandlers.put(uid, Optional.ofNullable(source.getHandler()));
-                sourceSignatures.put(uid, Poller2ObservationCollector.signature(source));
+                sourceBindings.put(uid, new MigrationReadSelection.Binding(source));
             }
         }
-        MigrationRead legacyRead = start(poller, new MigrationReadSelection(sourceSignatures));
+        var sourceSelection = new MigrationReadSelection(sourceBindings);
+        MigrationRead legacyRead = start(poller, sourceSelection);
         MigrationRead candidateRead = start(target, new MigrationReadSelection(
-                target == null ? Map.of() : Map.of(target.getUID(), Poller2ObservationCollector.signature(target))));
+                target == null ? Map.of() : Map.of(target.getUID(), new MigrationReadSelection.Binding(target))));
         Map<ThingUID, Poller2Observation> legacyValues = await(legacyRead);
         Map<ThingUID, Poller2Observation> candidateValues = await(candidateRead);
         Optional<Poller2Observation> candidate = read(target, stagedAt, candidateRead, candidateValues);
@@ -128,16 +124,11 @@ public final class LiveModbusMigrationValidation implements MigrationValidation 
                         && registry.get(new ThingUID(group.targetPollerUid())) == target
                         && registry.get(new ThingUID(group.sourcePollerUid())) == poller && poller != null
                         && poller.getHandler() == pollerHandler && target != null
-                        && target.getHandler() == targetHandler
-                        && sources
-                                .size() == group.channels().stream().map(MigrationChannel::sourceDataUid).distinct()
-                                        .count()
-                        && sources.entrySet().stream()
-                                .allMatch(entry -> registry.get(entry.getKey()) == entry.getValue()
-                                        && entry.getValue().getHandler() == Objects
-                                                .requireNonNull(sourceHandlers.get(entry.getKey())).orElse(null)
-                                        && Objects.equals(sourceSignatures.get(entry.getKey()),
-                                                Poller2ObservationCollector.signature(entry.getValue()))));
+                        && target.getHandler() == targetHandler && sourceSelection.current()
+                        && sourceBindings.size() == group.channels().stream().map(MigrationChannel::sourceDataUid)
+                                .distinct().count()
+                        && sourceBindings.entrySet().stream()
+                                .allMatch(entry -> registry.get(entry.getKey()) == entry.getValue().thing()));
     }
 
     private boolean matches(Thing thing, MigrationGroup group) {

@@ -88,6 +88,7 @@ class MigrationChildMonitorTest {
             }
         };
         var publication = mock(ThingHandlerCallback.class);
+        source.setHandler(child);
         child.setCallback(publication);
         var decoded = new AtomicInteger();
         try (var construction = mockConstruction(ModbusTransformation.class, (transform, context) -> {
@@ -103,7 +104,7 @@ class MigrationChildMonitorTest {
         clearInvocations(publication, communication);
         try {
             var selection = new MigrationReadSelection(
-                    Map.of(source.getUID(), Poller2ObservationCollector.signature(source)));
+                    Map.of(source.getUID(), new MigrationReadSelection.Binding(source)));
             var read = poller.readForMigration(selection);
             var request = ArgumentCaptor.forClass(ModbusReadRequestBlueprint.class);
             var callback = ArgumentCaptor.forClass(ModbusReadCallback.class);
