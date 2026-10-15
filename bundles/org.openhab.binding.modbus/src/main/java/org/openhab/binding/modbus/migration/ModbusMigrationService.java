@@ -15,6 +15,7 @@ package org.openhab.binding.modbus.migration;
 import java.util.List;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.core.storage.StorageService;
 import org.openhab.core.thing.ManagedThingProvider;
 import org.openhab.core.thing.ThingRegistry;
@@ -53,7 +54,7 @@ public final class ModbusMigrationService {
     public ModbusMigrationService(@Reference ThingRegistry thingRegistry,
             @Reference ItemChannelLinkRegistry linkRegistry, @Reference ManagedThingProvider thingProvider,
             @Reference StorageService storageService, @Reference MigrationValidation validation,
-            @Reference @org.eclipse.jdt.annotation.Nullable ManagedItemChannelLinkProvider linkProvider) {
+            @Reference @Nullable ManagedItemChannelLinkProvider linkProvider) {
         adapter = new ManagedModbusMigrationAdapter(thingRegistry, linkRegistry, thingProvider);
         providerAdapter = new ProviderOwnedMigrationAdapter(thingRegistry, linkRegistry);
         MigrationJournal journal = new MigrationJournal(storageService.getStorage("modbus-migration-journal"));
@@ -63,7 +64,19 @@ public final class ModbusMigrationService {
                     requireCurrentSources(preview.identity());
                     var observation = validation.observe(preview, group, stagedAt);
                     requireCurrentSources(preview.identity());
-                    return observation;
+                    return new MigrationValidation.Observation(observation.previewIdentity(),
+                            observation.sourcePollerUid(), observation.observedAt(), observation.outcome(),
+                            observation.comparisons(), () -> {
+                                if (!observation.authorization().getAsBoolean()) {
+                                    return false;
+                                }
+                                try {
+                                    requireCurrentSources(preview.identity());
+                                    return true;
+                                } catch (IllegalArgumentException | IllegalStateException e) {
+                                    return false;
+                                }
+                            });
                 }, journal);
     }
 

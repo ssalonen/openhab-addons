@@ -14,6 +14,7 @@ package org.openhab.binding.modbus.migration;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
@@ -37,7 +38,16 @@ public interface MigrationValidation {
     }
 
     record Observation(String previewIdentity, String sourcePollerUid, Instant observedAt, Outcome outcome,
-            List<Comparison> comparisons) {
+            List<Comparison> comparisons, BooleanSupplier authorization) {
+        public Outcome outcome() {
+            return authorization.getAsBoolean() ? outcome : Outcome.UNAVAILABLE;
+        }
+
+        public Observation(String previewIdentity, String sourcePollerUid, Instant observedAt, Outcome outcome,
+                List<Comparison> comparisons) {
+            this(previewIdentity, sourcePollerUid, observedAt, outcome, comparisons, () -> true);
+        }
+
         public Observation {
             comparisons = List.copyOf(comparisons);
         }

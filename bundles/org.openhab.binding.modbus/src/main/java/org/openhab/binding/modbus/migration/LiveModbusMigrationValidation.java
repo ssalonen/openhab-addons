@@ -14,15 +14,25 @@ package org.openhab.binding.modbus.migration;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Stream;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.modbus.handler.ModbusPollerThingHandler;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingRegistry;
 import org.openhab.core.thing.ThingUID;
+import org.openhab.core.thing.binding.ThingHandler;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -43,14 +53,34 @@ public final class LiveModbusMigrationValidation implements MigrationValidation 
     }
 
     @Override
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Replaced handlers/Things cannot retain read authorization.
     public Observation observe(MigrationPreview preview, MigrationGroup group, Instant stagedAt) {
         List<Comparison> details = new ArrayList<>();
         Thing target = registry.get(new ThingUID(group.targetPollerUid()));
         Thing poller = registry.get(new ThingUID(group.sourcePollerUid()));
-        Optional<Poller2Observation> candidate = read(target, stagedAt);
+        var pollerHandler = poller == null ? null : poller.getHandler();
+        var targetHandler = target == null ? null : target.getHandler();
+        Map<ThingUID, Optional<ThingHandler>> sourceHandlers = new HashMap<>();
+        Map<ThingUID, Thing> sources = new HashMap<>();
+        Map<ThingUID, String> sourceSignatures = new HashMap<>();
+        for (MigrationChannel mapping : group.channels()) {
+            ThingUID uid = new ThingUID(mapping.sourceDataUid());
+            Thing source = registry.get(uid);
+            if (source != null) {
+                sources.put(uid, source);
+                sourceHandlers.put(uid, Optional.ofNullable(source.getHandler()));
+                sourceSignatures.put(uid, Poller2ObservationCollector.signature(source));
+            }
+        }
+        MigrationRead legacyRead = start(poller, new MigrationReadSelection(sourceSignatures));
+        MigrationRead candidateRead = start(target, new MigrationReadSelection(
+                target == null ? Map.of() : Map.of(target.getUID(), Poller2ObservationCollector.signature(target))));
+        Map<ThingUID, Poller2Observation> legacyValues = await(legacyRead);
+        Map<ThingUID, Poller2Observation> candidateValues = await(candidateRead);
+        Optional<Poller2Observation> candidate = read(target, stagedAt, candidateRead, candidateValues);
         for (MigrationChannel mapping : group.channels()) {
             Thing source = registry.get(new ThingUID(mapping.sourceDataUid()));
-            Optional<Poller2Observation> legacy = read(source, stagedAt);
+            Optional<Poller2Observation> legacy = read(source, stagedAt, legacyRead, legacyValues);
             ChannelUID sourceUid = new ChannelUID(mapping.sourceDataUid() + ":number");
             ChannelUID targetUid = new ChannelUID(group.targetPollerUid() + ":" + mapping.id());
             String address = Objects.requireNonNull(Objects.toString(mapping.configuration().get("address"), ""));
@@ -90,10 +120,24 @@ public final class LiveModbusMigrationValidation implements MigrationValidation 
                         : details.stream().anyMatch(detail -> detail.outcome() == Outcome.MISMATCH) ? Outcome.MISMATCH
                                 : Outcome.MATCH;
         Instant timestamp = details.stream()
-                .flatMap(detail -> java.util.stream.Stream.of(detail.sourceObservedAt(), detail.targetObservedAt()))
+                .flatMap(detail -> Stream.of(detail.sourceObservedAt(), detail.targetObservedAt()))
                 .min(Instant::compareTo).orElse(Instant.EPOCH);
         return new Observation(preview.identity(), group.sourcePollerUid(), Objects.requireNonNull(timestamp), outcome,
-                details);
+                details,
+                () -> legacyRead.current().getAsBoolean() && candidateRead.current().getAsBoolean()
+                        && registry.get(new ThingUID(group.targetPollerUid())) == target
+                        && registry.get(new ThingUID(group.sourcePollerUid())) == poller && poller != null
+                        && poller.getHandler() == pollerHandler && target != null
+                        && target.getHandler() == targetHandler
+                        && sources
+                                .size() == group.channels().stream().map(MigrationChannel::sourceDataUid).distinct()
+                                        .count()
+                        && sources.entrySet().stream()
+                                .allMatch(entry -> registry.get(entry.getKey()) == entry.getValue()
+                                        && entry.getValue().getHandler() == Objects
+                                                .requireNonNull(sourceHandlers.get(entry.getKey())).orElse(null)
+                                        && Objects.equals(sourceSignatures.get(entry.getKey()),
+                                                Poller2ObservationCollector.signature(entry.getValue()))));
     }
 
     private boolean matches(Thing thing, MigrationGroup group) {
@@ -101,11 +145,32 @@ public final class LiveModbusMigrationValidation implements MigrationValidation 
                 .equals(Objects.toString(thing.getConfiguration().get(entry.getKey()))));
     }
 
-    private Optional<Poller2Observation> read(@org.eclipse.jdt.annotation.Nullable Thing thing, Instant stagedAt) {
-        if (thing == null || !(thing.getHandler() instanceof ModbusObservationSource source)) {
+    private MigrationRead start(@Nullable Thing thing, MigrationReadSelection selection) {
+        if (thing != null && thing.getHandler() instanceof ModbusPollerThingHandler handler) {
+            return handler.readForMigration(selection);
+        }
+        return new MigrationRead(CompletableFuture.completedFuture(Map.of()), () -> false);
+    }
+
+    private Map<ThingUID, Poller2Observation> await(MigrationRead read) {
+        try {
+            return read.completion().get(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            read.completion().cancel(false);
+            Thread.currentThread().interrupt();
+            return Map.of();
+        } catch (ExecutionException | TimeoutException e) {
+            read.completion().cancel(false);
+            return Map.of();
+        }
+    }
+
+    private Optional<Poller2Observation> read(@Nullable Thing thing, Instant stagedAt, MigrationRead read,
+            Map<ThingUID, Poller2Observation> values) {
+        if (thing == null || !read.current().getAsBoolean()) {
             return Optional.empty();
         }
-        return source.getObservation()
+        return Optional.ofNullable(values.get(thing.getUID()))
                 .filter(value -> value.configurationSignature().equals(Poller2ObservationCollector.signature(thing)))
                 .filter(value -> value.observedAt().isAfter(stagedAt) && !value.observedAt().isAfter(Instant.now()));
     }

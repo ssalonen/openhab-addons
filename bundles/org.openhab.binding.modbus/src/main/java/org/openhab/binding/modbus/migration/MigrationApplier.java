@@ -12,6 +12,8 @@
  */
 package org.openhab.binding.modbus.migration;
 
+import java.util.function.BooleanSupplier;
+
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /** Executes only the distinct state changes selected by an explicit migration workflow action. */
@@ -23,6 +25,22 @@ public interface MigrationApplier {
 
     default void cutover(MigrationPreview preview, MigrationGroup group) {
         throw new UnsupportedOperationException("cutover unavailable");
+    }
+
+    default void cutover(MigrationPreview preview, MigrationGroup group, BooleanSupplier authorization) {
+        if (!authorization.getAsBoolean()) {
+            throw new IllegalStateException("Migration read authorization expired");
+        }
+        cutover(preview, group);
+    }
+
+    default void cutover(MigrationPreview preview, MigrationGroup group, BooleanSupplier authorization,
+            Runnable completion) {
+        cutover(preview, group, authorization);
+        completion.run();
+        if (!authorization.getAsBoolean()) {
+            throw new IllegalStateException("Migration read authorization expired");
+        }
     }
 
     default void revertLink(MigrationPreview preview, MigrationLink link) {

@@ -38,6 +38,8 @@ import org.openhab.binding.modbus.internal.handler.Poller2WriteChannelConfigurat
 import org.openhab.binding.modbus.internal.handler.Poller2WriteRequest;
 import org.openhab.binding.modbus.internal.handler.Poller2WriteResult;
 import org.openhab.binding.modbus.internal.handler.PollerRegisterCache;
+import org.openhab.binding.modbus.migration.ModbusObservationSource;
+import org.openhab.binding.modbus.migration.ModbusReadEvidence;
 import org.openhab.binding.modbus.migration.Poller2Observation;
 import org.openhab.binding.modbus.migration.Poller2ObservationCollector;
 import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
@@ -67,8 +69,7 @@ import org.slf4j.LoggerFactory;
  * @author Sami Salonen - Initial contribution
  */
 @NonNullByDefault
-public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler
-        implements org.openhab.binding.modbus.migration.ModbusObservationSource {
+public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler implements ModbusObservationSource {
     private final Logger logger = LoggerFactory.getLogger(ModbusPoller2ThingHandler.class);
 
     private final ModbusChannelTypeProvider channelTypeProvider;
@@ -301,11 +302,32 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler
         result.getBits().ifPresent(
                 bits -> bitChannels.forEach((uid, channel) -> states.put(uid, channel.acceptBits(bits, pollStart))));
         if (!cached) {
-            Map<ChannelUID, org.openhab.binding.modbus.migration.ModbusReadEvidence> evidence = new LinkedHashMap<>();
+            Map<ChannelUID, ModbusReadEvidence> evidence = new LinkedHashMap<>();
             channels.forEach((uid, channel) -> evidence.put(uid, channel.getReadEvidence()));
             observations.record(generation, observedAt, states, evidence);
         }
         states.forEach(this::updateState);
+    }
+
+    @Override
+    protected Optional<Poller2Observation> observeMigrationResult(AsyncModbusReadResult result) {
+        // Fresh decoder instances isolate migration from operational throttles and write-overlay state.
+        Map<ChannelUID, State> states = new LinkedHashMap<>();
+        Map<ChannelUID, ModbusReadEvidence> evidence = new LinkedHashMap<>();
+        for (Channel channel : getThing().getChannels()) {
+            if (result.getRegisters().isPresent()) {
+                var parsed = Poller2ChannelConfiguration.create(channel.getUID().getId(),
+                        channel.getConfiguration().getProperties(), pollStart, getRequest().getDataLength());
+                if (parsed.channel().isPresent()) {
+                    var decoder = parsed.channel().orElseThrow();
+                    states.put(channel.getUID(),
+                            decoder.acceptRegisters(result.getRegisters().orElseThrow(), pollStart));
+                    evidence.put(channel.getUID(), decoder.getReadEvidence());
+                }
+            }
+        }
+        return Optional.of(new Poller2Observation(getThing().getUID(), observationGeneration,
+                Poller2ObservationCollector.signature(getThing()), Instant.now(), states, evidence));
     }
 
     /** Returns fresh decoded channel states without requiring Item-channel links. */

@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -186,6 +187,19 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
 
     @Override
     public void cutover(MigrationPreview preview, MigrationGroup group) {
+        cutover(preview, group, () -> true);
+    }
+
+    @Override
+    public void cutover(MigrationPreview preview, MigrationGroup group, BooleanSupplier authorization) {
+        cutover(preview, group, authorization, () -> {
+        });
+    }
+
+    @Override
+    public void cutover(MigrationPreview preview, MigrationGroup group, BooleanSupplier authorization,
+            Runnable completion) {
+        requireReadAuthorization(authorization);
         requireOwnedTarget(preview, group);
         String key = preview.identity() + ":" + group.sourcePollerUid();
         if (!journal.links(key).isEmpty()) {
@@ -223,6 +237,7 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
         this.journal.manifest(preview);
         try {
             for (MigrationLink link : group.links()) {
+                requireReadAuthorization(authorization);
                 requireOwnedTarget(preview, group);
                 ItemChannelLink source = Objects.requireNonNull(reviewedSources.get(sourceLink(link).getUID()));
                 requireCurrentSource(link, source);
@@ -230,24 +245,29 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
                 knownNotAdded.add(targetLink(link).getUID());
                 journal.add(new MigrationJournal.LinkIntent(link, MigrationJournal.LinkPhase.REMOVE_INTENDED));
                 this.journal.intents(key, journal);
+                requireReadAuthorization(authorization);
                 requireOwnedTarget(preview, group);
                 requireCurrentSource(link, source);
                 linkRegistry.remove(sourceLink(link).getUID());
                 // Provider callbacks can replace a Thing during either link mutation.
+                requireReadAuthorization(authorization);
                 requireOwnedTarget(preview, group);
                 if (linkRegistry.get(source.getUID()) != null || linkRegistry.get(targetLink(link).getUID()) != null) {
                     throw new IllegalStateException("Link changed during cutover removal");
                 }
                 ItemChannelLink replacement = targetLink(link);
                 advance(key, journal, link, MigrationJournal.LinkPhase.SOURCE_REMOVED);
+                requireReadAuthorization(authorization);
                 requireOwnedTarget(preview, group);
                 requireRestoredState(link, null);
                 advance(key, journal, link, MigrationJournal.LinkPhase.ADD_ATTEMPTED);
+                requireReadAuthorization(authorization);
                 requireOwnedTarget(preview, group);
                 requireRestoredState(link, null);
                 activeTargetLinks.put(replacement.getUID(), replacement);
                 knownNotAdded.remove(replacement.getUID());
                 linkRegistry.add(replacement);
+                requireReadAuthorization(authorization);
                 requireOwnedTarget(preview, group);
                 for (MigrationJournal.LinkIntent intent : journal) {
                     MigrationLink switched = intent.link();
@@ -255,11 +275,19 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
                             Objects.requireNonNull(activeTargetLinks.get(targetLink(switched).getUID())));
                 }
                 advance(key, journal, link, MigrationJournal.LinkPhase.ADD_CONFIRMED);
+                requireReadAuthorization(authorization);
                 requireOwnedTarget(preview, group);
                 for (MigrationJournal.LinkIntent intent : journal) {
                     requireSwitchedLink(intent.link(),
                             Objects.requireNonNull(activeTargetLinks.get(targetLink(intent.link()).getUID())));
                 }
+            }
+            // Workflow persistence can synchronously invoke provider/storage callbacks too.
+            completion.run();
+            requireReadAuthorization(authorization);
+            requireOwnedTarget(preview, group);
+            for (MigrationLink link : group.links()) {
+                requireSwitchedLink(link, Objects.requireNonNull(activeTargetLinks.get(targetLink(link).getUID())));
             }
             // After the whole switch completes, an unchanged UI save retains the reviewed marker claim.
             // Keep exact instances only while mutation/compensation is in progress.
@@ -273,6 +301,12 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
                 failure.addSuppressed(compensationFailure);
             }
             throw failure;
+        }
+    }
+
+    private void requireReadAuthorization(BooleanSupplier authorization) {
+        if (!authorization.getAsBoolean()) {
+            throw new IllegalStateException("Migration read authorization expired");
         }
     }
 

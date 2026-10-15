@@ -12,10 +12,15 @@
  */
 package org.openhab.binding.modbus.handler;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
@@ -24,6 +29,10 @@ import org.openhab.binding.modbus.internal.AtomicStampedValue;
 import org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal;
 import org.openhab.binding.modbus.internal.config.ModbusPollerConfiguration;
 import org.openhab.binding.modbus.internal.handler.ModbusDataThingHandler;
+import org.openhab.binding.modbus.migration.MigrationRead;
+import org.openhab.binding.modbus.migration.MigrationReadSelection;
+import org.openhab.binding.modbus.migration.Poller2Observation;
+import org.openhab.binding.modbus.migration.Poller2ObservationCollector;
 import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
 import org.openhab.core.io.transport.modbus.AsyncModbusReadResult;
 import org.openhab.core.io.transport.modbus.ModbusCommunicationInterface;
@@ -40,6 +49,7 @@ import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingStatusInfo;
+import org.openhab.core.thing.ThingUID;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.types.Command;
@@ -260,9 +270,9 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
 
     private String readConfigurationSignature() {
         Bridge endpoint = getBridge();
-        return org.openhab.binding.modbus.migration.Poller2ObservationCollector.signature(thing) + ":"
+        return Poller2ObservationCollector.signature(thing) + ":"
                 + (endpoint == null || endpoint.getConfiguration() == null ? ""
-                        : org.openhab.binding.modbus.migration.Poller2ObservationCollector.signature(endpoint));
+                        : Poller2ObservationCollector.signature(endpoint));
     }
 
     /** Whether the registered transport still represents the current endpoint and poll window configuration. */
@@ -561,6 +571,97 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
         }
         // Captured callbacks reject results if this context is superseded before submission.
         return new RefreshContext(localRequest, localComms, new ReadCallbackDelegator(callbackGeneration));
+    }
+
+    /**
+     * Submits a new read exclusively for migration validation, bypassing the response cache.
+     * Child permissions and parent/transport identity are captured before submission. Neither the
+     * regular callback nor REFRESH can complete this request. No lifecycle lock is held at submission.
+     */
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Equal values cannot authorize a replaced context or request.
+    public MigrationRead readForMigration() {
+        return readForMigration(new MigrationReadSelection(Map.of()));
+    }
+
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Exact registration and request identities authorize reads.
+    public MigrationRead readForMigration(MigrationReadSelection selection) {
+        final @Nullable ReadConfiguration context;
+        final long generation;
+        final String signature;
+        final List<ModbusDataThingHandler.ReadAuthorization> permissions;
+        synchronized (this) {
+            context = readConfiguration;
+            generation = callbackGeneration;
+            signature = Poller2ObservationCollector.signature(getThing());
+            permissions = childCallbacks.stream()
+                    .filter(child -> selection.signatures().containsKey(child.getThing().getUID()))
+                    .map(child -> child.captureReadAuthorization(this)).toList();
+        }
+        var completion = new CompletableFuture<Map<ThingUID, Poller2Observation>>();
+        boolean ownChannels = selection.signatures().containsKey(getThing().getUID());
+        BooleanSupplier current = () -> !completion.isCancelled() && context != null
+                && !selection.signatures().isEmpty()
+                && selection.signatures().size() == permissions.size() + (ownChannels ? 1 : 0)
+                && (!ownChannels || signature.equals(selection.signatures().get(getThing().getUID()))
+                        && getThing().getChannels().stream()
+                                .allMatch(channel -> MigrationReadSelection
+                                        .identityTransform(channel.getConfiguration().get("readTransform"))))
+                && permissions.stream().allMatch(permission -> permission.eligible(selection))
+                && context == readConfiguration && generation == callbackGeneration && hasCurrentReadConfiguration()
+                && signature.equals(Poller2ObservationCollector.signature(getThing()))
+                && permissions.stream().allMatch(permission -> permission.isCurrent());
+        var read = new MigrationRead(completion, current);
+        if (context == null || !current.getAsBoolean()) {
+            completion.completeExceptionally(new IllegalStateException("Migration read unavailable"));
+            return read;
+        }
+        var claimed = new AtomicBoolean();
+        try {
+            context.communication().submitOneTimePoll(context.request(), result -> {
+                if (completion.isDone() || !claimed.compareAndSet(false, true)) {
+                    return;
+                }
+                try {
+                    if (!current.getAsBoolean() || result.getRequest() != context.request()) {
+                        throw new IllegalStateException("Migration read superseded");
+                    }
+                    var evidence = new HashMap<ThingUID, Poller2Observation>();
+                    // Never nest parent/child monitors or run completion listeners while holding either.
+                    for (var permission : permissions) {
+                        if (!current.getAsBoolean()) {
+                            throw new IllegalStateException("Migration read superseded");
+                        }
+                        permission.observe(result, current).ifPresent(value -> evidence.put(value.thingUID(), value));
+                    }
+                    synchronized (this) {
+                        if (!current.getAsBoolean()) {
+                            throw new IllegalStateException("Migration read superseded");
+                        }
+                        if (ownChannels) {
+                            observeMigrationResult(result).ifPresent(value -> evidence.put(value.thingUID(), value));
+                        }
+                    }
+                    if (!current.getAsBoolean()) {
+                        throw new IllegalStateException("Migration read superseded");
+                    }
+                    completion.complete(Map.copyOf(evidence));
+                } catch (RuntimeException e) {
+                    completion.completeExceptionally(e);
+                }
+            }, failure -> {
+                if (claimed.compareAndSet(false, true)) {
+                    completion.completeExceptionally(failure.getCause());
+                }
+            });
+        } catch (RuntimeException e) {
+            completion.completeExceptionally(e);
+        }
+        return read;
+    }
+
+    /** Poller-owned channels override this to detach evidence from this exact successful request. */
+    protected Optional<Poller2Observation> observeMigrationResult(AsyncModbusReadResult result) {
+        return Optional.empty();
     }
 
     /**

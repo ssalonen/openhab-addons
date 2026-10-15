@@ -17,7 +17,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
@@ -126,9 +128,9 @@ public final class ModbusMigrationWorkflow {
     }
 
     private void save(String identity, String outcome) {
-        Sources source = java.util.Objects.requireNonNull(sources.get(identity));
-        journal.workflow(new MigrationJournal.Workflow(java.util.Objects.requireNonNull(previews.get(identity)),
-                source.pollers(), source.data(), outcome, stagedAt.getOrDefault(identity, Instant.EPOCH).toString(),
+        Sources source = Objects.requireNonNull(sources.get(identity));
+        journal.workflow(new MigrationJournal.Workflow(Objects.requireNonNull(previews.get(identity)), source.pollers(),
+                source.data(), outcome, stagedAt.getOrDefault(identity, Instant.EPOCH).toString(),
                 switched.stream().filter(key -> key.startsWith(identity + ":")).sorted().toList(),
                 source.providerWork()));
     }
@@ -150,7 +152,7 @@ public final class ModbusMigrationWorkflow {
             }
             save(previewIdentity, "STAGING");
             try {
-                applier.createTargets(java.util.Objects.requireNonNull(previews.get(previewIdentity)));
+                applier.createTargets(Objects.requireNonNull(previews.get(previewIdentity)));
             } catch (ManagedModbusMigrationApplier.IncompleteStageException e) {
                 recovery.add(previewIdentity);
                 save(previewIdentity, "RECOVERY");
@@ -198,12 +200,25 @@ public final class ModbusMigrationWorkflow {
                 && selected.links().stream().allMatch(link -> switched.contains(linkKey(previewIdentity, link)))) {
             return;
         }
-        if (validate(previewIdentity, sourcePollerUid).outcome() != MigrationValidation.Outcome.MATCH) {
+        var observation = validate(previewIdentity, sourcePollerUid);
+        if (observation.outcome() != MigrationValidation.Outcome.MATCH) {
             throw new IllegalStateException("Fresh candidate validation is not MATCH; cutover unavailable");
         }
-        applier.cutover(preview, selected);
-        selected.links().forEach(link -> switched.add(linkKey(previewIdentity, link)));
-        save(previewIdentity, "STAGED");
+        try {
+            applier.cutover(preview, selected, observation.authorization(), () -> {
+                selected.links().forEach(link -> switched.add(linkKey(previewIdentity, link)));
+                save(previewIdentity, "STAGED");
+            });
+        } catch (RuntimeException failure) {
+            selected.links().forEach(link -> switched.remove(linkKey(previewIdentity, link)));
+            recovery.add(previewIdentity);
+            try {
+                save(previewIdentity, "RECOVERY");
+            } catch (RuntimeException persistenceFailure) {
+                failure.addSuppressed(persistenceFailure);
+            }
+            throw failure;
+        }
     }
 
     synchronized Map<String, String> stagedTargets(String identity) {
@@ -212,18 +227,25 @@ public final class ModbusMigrationWorkflow {
         if (!journal.targets(identity).containsAll(targets)) {
             throw new IllegalArgumentException("Staged target journal ownership is incomplete");
         }
-        return targets.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(uid -> uid, uid -> identity));
+        return targets.stream().collect(Collectors.toUnmodifiableMap(uid -> uid, uid -> identity));
     }
 
     synchronized void requireCurrentSources(String previewIdentity, List<LegacyPoller> pollers,
             List<LegacyData> dataThings, List<ManualMigrationWork> providerWork) {
         requireSafeReview(previewIdentity);
         MigrationPreview preview = appliedPreview(previewIdentity);
-        Sources reviewedSources = java.util.Objects.requireNonNull(sources.get(previewIdentity));
+        Sources reviewedSources = Objects.requireNonNull(sources.get(previewIdentity));
         Set<String> removedLinks = new HashSet<>();
         preview.groups().stream().flatMap(candidate -> candidate.links().stream())
                 .filter(link -> switched.contains(linkKey(previewIdentity, link)))
                 .forEach(link -> removedLinks.add(link.itemName() + " -> " + link.sourceChannelUid()));
+        // Only journaled mutation intents may account for a source link removed by this live cutover.
+        preview.groups()
+                .forEach(candidate -> journal.links(previewIdentity + ":" + candidate.sourcePollerUid()).stream()
+                        .filter(link -> dataThings.stream().flatMap(data -> data.links().stream())
+                                .noneMatch(current -> current.itemName().equals(link.itemName())
+                                        && current.channelUid().equals(link.sourceChannelUid())))
+                        .forEach(link -> removedLinks.add(link.itemName() + " -> " + link.sourceChannelUid())));
         List<LegacyData> expectedData = reviewedSources.data().stream()
                 .map(data -> new LegacyData(data.uid(), data.pollerUid(), data.configuration(), data.links().stream()
                         .filter(link -> !removedLinks.contains(link.itemName() + " -> " + link.channelUid())).toList(),

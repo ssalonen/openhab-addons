@@ -19,15 +19,21 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.openhab.binding.modbus.handler.ModbusPollerThingHandler;
 import org.openhab.core.config.core.Configuration;
+import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.storage.StorageService;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.ManagedThingProvider;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingProvider;
+import org.openhab.core.thing.ThingRegistry;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.ThingUID;
 import org.openhab.core.thing.binding.builder.BridgeBuilder;
@@ -102,20 +108,34 @@ class StagedTargetOwnershipTest {
     }
 
     private void recordFreshEvidence() {
+        // Narrow typed transport-completion fixtures; ownership remains enforced by the real service/applier.
+        Map<ThingUID, Poller2Observation> legacyValues = new HashMap<>();
         for (Thing thing : inventory.values()) {
             if (!thing.getThingTypeUID().getId().equals("data") && !thing.getUID().equals(target)) {
                 continue;
             }
             var collector = new Poller2ObservationCollector();
-            var handler = mock(org.openhab.core.thing.binding.ThingHandler.class, withSettings().extraInterfaces(
-                    ModbusObservationSource.class, org.openhab.core.thing.binding.BridgeHandler.class));
-            when(((ModbusObservationSource) handler).getObservation()).thenAnswer(call -> collector.getObservation());
-            thing.setHandler(handler);
             var channel = thing.getChannels().getFirst().getUID();
-            var value = new org.openhab.core.library.types.DecimalType(42);
+            var value = new DecimalType(42);
             collector.record(collector.beginLifecycle(thing), Instant.now(), Map.of(channel, value),
                     Map.of(channel, new ModbusReadEvidence(value, value, ModbusReadEvidence.Provenance.DECODED)));
+            var observation = collector.getObservation().orElseThrow();
+            if (thing.getUID().equals(target)) {
+                attachRequest(thing, Map.of(thing.getUID(), observation));
+            } else {
+                legacyValues.put(thing.getUID(), observation);
+            }
         }
+        attachRequest(Objects.requireNonNull(inventory.get(source)), Map.copyOf(legacyValues));
+    }
+
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Fixture request belongs to this exact live Thing and handler.
+    private void attachRequest(Thing thing, Map<ThingUID, Poller2Observation> values) {
+        var handler = mock(ModbusPollerThingHandler.class);
+        thing.setHandler(handler);
+        when(handler.readForMigration(any(MigrationReadSelection.class)))
+                .thenAnswer(call -> new MigrationRead(CompletableFuture.completedFuture(values),
+                        () -> inventory.get(thing.getUID()) == thing && thing.getHandler() == handler));
     }
 
     private void replace(String ownership, String identity) {
@@ -204,7 +224,7 @@ class StagedTargetOwnershipTest {
         verify(links, never()).remove(anyString());
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void ownershipChangeDuringWriteAheadIntentDoesNotRemoveProductionLink() {
         var service = service();
         var plan = service.preview().plan();
@@ -225,7 +245,7 @@ class StagedTargetOwnershipTest {
         verify(links, never()).add(any());
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void missingJournalCannotExemptAnOtherwiseManagedMarkedTarget() {
         var service = service();
         String identity = service.preview().plan().identity();
@@ -239,12 +259,12 @@ class StagedTargetOwnershipTest {
         assertEquals(before, persisted);
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void registryWithoutAuthoritativeOwnershipCannotClaimMarkedTarget() {
         var service = service();
         String identity = service.preview().plan().identity();
         service.apply(identity);
-        var unknown = mock(org.openhab.core.thing.ThingRegistry.class);
+        var unknown = mock(ThingRegistry.class);
         when(unknown.getAll()).thenAnswer(call -> List.copyOf(inventory.values()));
         when(unknown.get(any(ThingUID.class))).thenAnswer(call -> inventory.get(call.getArgument(0)));
         var storage = mock(StorageService.class);
@@ -260,7 +280,7 @@ class StagedTargetOwnershipTest {
         verify(provider, never()).remove(target);
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void reviewedManagedTargetRemainsEligibleButOrdinaryPreviewRefusesIt() {
         var service = service();
         String identity = service.preview().plan().identity();

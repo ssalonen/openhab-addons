@@ -16,10 +16,14 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 import org.junit.jupiter.api.Test;
+import org.openhab.binding.modbus.handler.ModbusPollerThingHandler;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.thing.ChannelUID;
@@ -27,10 +31,12 @@ import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingRegistry;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.ThingUID;
+import org.openhab.core.thing.binding.BridgeHandler;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.thing.binding.builder.BridgeBuilder;
 import org.openhab.core.thing.binding.builder.ChannelBuilder;
 import org.openhab.core.thing.binding.builder.ThingBuilder;
+import org.openhab.core.types.State;
 import org.openhab.core.types.UnDefType;
 
 /** @author Sami Salonen - Initial contribution */
@@ -68,17 +74,14 @@ class LiveModbusMigrationValidationTest {
                                 .withConfiguration(new Configuration(mapping.configuration())).build())
                         .toList())
                 .build();
-        sources = mappings.stream()
-                .map(mapping -> ThingBuilder
-                        .create(new ThingTypeUID("modbus", "data"), new ThingUID(mapping.sourceDataUid()))
-                        .withBridge(poller.getUID())
-                        .withConfiguration(new Configuration(Map.of("readStart",
-                                java.util.Objects.requireNonNull(mapping.configuration().get("address")),
-                                "readValueType", "uint16")))
-                        .withChannel(ChannelBuilder.create(new ChannelUID(mapping.sourceDataUid() + ":number"))
-                                .withAcceptedItemType("Number").build())
-                        .build())
-                .toList();
+        sources = mappings.stream().map(mapping -> ThingBuilder
+                .create(new ThingTypeUID("modbus", "data"), new ThingUID(mapping.sourceDataUid()))
+                .withBridge(poller.getUID())
+                .withConfiguration(new Configuration(Map.of("readStart",
+                        Objects.requireNonNull(mapping.configuration().get("address")), "readValueType", "uint16")))
+                .withChannel(ChannelBuilder.create(new ChannelUID(mapping.sourceDataUid() + ":number"))
+                        .withAcceptedItemType("Number").build())
+                .build()).toList();
         when(registry.get(poller.getUID())).thenReturn(poller);
         attach(target, candidate);
         for (int i = 0; i < sources.size(); i++) {
@@ -86,11 +89,31 @@ class LiveModbusMigrationValidationTest {
             record(legacy.get(i), sources.get(i), new ChannelUID(sources.get(i).getUID(), "number"), 42, Instant.now());
         }
         recordCandidate(42, Instant.now());
+        // Typed response fixtures: each request detaches only its supplied completion payload.
+        var legacyHandler = mock(ModbusPollerThingHandler.class);
+        poller.setHandler(legacyHandler);
+        when(legacyHandler.readForMigration(any(MigrationReadSelection.class))).thenAnswer(call -> {
+            Map<ThingUID, Poller2Observation> values = new HashMap<>();
+            legacy.forEach(
+                    collector -> collector.getObservation().ifPresent(value -> values.put(value.thingUID(), value)));
+            return new MigrationRead(CompletableFuture.completedFuture(Map.copyOf(values)),
+                    () -> values.values().stream().allMatch(value -> legacy.stream()
+                            .anyMatch(collector -> collector.getObservation().filter(value::equals).isPresent())));
+        });
+        var candidateHandler = mock(ModbusPollerThingHandler.class);
+        target.setHandler(candidateHandler);
+        when(candidateHandler.readForMigration(any(MigrationReadSelection.class))).thenAnswer(call -> {
+            var value = candidate.getObservation();
+            return new MigrationRead(
+                    CompletableFuture
+                            .completedFuture(value.map(observation -> Map.of(targetUid, observation)).orElse(Map.of())),
+                    () -> value.equals(candidate.getObservation()));
+        });
     }
 
     private void attach(Thing thing, Poller2ObservationCollector collector) {
-        ThingHandler handler = mock(ThingHandler.class, withSettings().extraInterfaces(ModbusObservationSource.class,
-                org.openhab.core.thing.binding.BridgeHandler.class));
+        ThingHandler handler = mock(ThingHandler.class,
+                withSettings().extraInterfaces(ModbusObservationSource.class, BridgeHandler.class));
         when(((ModbusObservationSource) handler).getObservation()).thenAnswer(invocation -> collector.getObservation());
         thing.setHandler(handler);
         when(registry.get(thing.getUID())).thenReturn(thing);
@@ -104,7 +127,7 @@ class LiveModbusMigrationValidationTest {
 
     private void recordCandidate(int value, Instant time) {
         var state = new DecimalType(value);
-        Map<ChannelUID, org.openhab.core.types.State> states = Map.of(new ChannelUID(targetUid, "first"), state,
+        Map<ChannelUID, State> states = Map.of(new ChannelUID(targetUid, "first"), state,
                 new ChannelUID(targetUid, "second"), state);
         var evidence = new ModbusReadEvidence(state, state, ModbusReadEvidence.Provenance.DECODED);
         candidate.record(candidate.beginLifecycle(target), time, states,
@@ -113,6 +136,52 @@ class LiveModbusMigrationValidationTest {
 
     private MigrationValidation.Observation observe() {
         return validation.observe(preview, group, stagedAt);
+    }
+
+    @Test
+    void candidateReloadAfterRetrievalCannotAuthorizeComparison() {
+        when(registry.get(sources.getFirst().getUID())).thenAnswer(call -> {
+            candidate.beginLifecycle(target);
+            return sources.getFirst();
+        });
+        assertEquals(MigrationValidation.Outcome.UNAVAILABLE, observe().outcome());
+    }
+
+    @Test
+    void candidateReloadAfterComparisonRevokesAuthorization() {
+        var observation = observe();
+        assertEquals(MigrationValidation.Outcome.MATCH, observation.outcome());
+        candidate.beginLifecycle(target);
+        assertEquals(MigrationValidation.Outcome.UNAVAILABLE, observation.outcome());
+    }
+
+    @Test
+    void interruptionAbandonsBothRequests() {
+        var left = new MigrationRead(new CompletableFuture<>(), () -> true);
+        var right = new MigrationRead(new CompletableFuture<>(), () -> true);
+        when(((ModbusPollerThingHandler) poller.getHandler()).readForMigration(any(MigrationReadSelection.class)))
+                .thenReturn(left);
+        when(((ModbusPollerThingHandler) target.getHandler()).readForMigration(any(MigrationReadSelection.class)))
+                .thenReturn(right);
+        Thread.currentThread().interrupt();
+        try {
+            assertEquals(MigrationValidation.Outcome.UNAVAILABLE, observe().outcome());
+            assertTrue(Thread.currentThread().isInterrupted());
+            assertTrue(left.completion().isCancelled());
+            assertTrue(right.completion().isCancelled());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void timeoutAbandonsUncompletedRequest() {
+        var pending = new MigrationRead(new CompletableFuture<>(), () -> true);
+        when(((ModbusPollerThingHandler) poller.getHandler()).readForMigration(any(MigrationReadSelection.class)))
+                .thenReturn(pending);
+        assertEquals(MigrationValidation.Outcome.UNAVAILABLE, observe().outcome());
+        assertTrue(pending.completion().isCancelled());
+        assertFalse(pending.current().getAsBoolean());
     }
 
     @Test
