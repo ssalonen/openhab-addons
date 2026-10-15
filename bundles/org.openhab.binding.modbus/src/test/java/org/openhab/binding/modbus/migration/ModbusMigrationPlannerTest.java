@@ -29,6 +29,32 @@ class ModbusMigrationPlannerTest {
     private final ModbusMigrationPlanner planner = new ModbusMigrationPlanner();
 
     @Test
+    void targetMarkersDoNotLoosenSourceEligibility() {
+        var poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        var source = new LegacyLink("Value", "modbus:data:tcp:plant:value:number", "Number",
+                Map.of("profile", "system:default", "modbusMigrationOwner", "copied-marker"));
+        var data = new LegacyData("modbus:data:tcp:plant:value", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "int16"), List.of(source));
+        var plan = planner.preview(List.of(poller), List.of(data));
+        assertTrue(plan.groups().getFirst().links().isEmpty());
+        assertFalse(plan.manualWork().isEmpty());
+        assertFalse(plan.toString().contains("copied-marker"));
+    }
+
+    @Test
+    void markerIdentityIgnoresProviderRefusalInputOrder() {
+        var poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        var data = new LegacyData("modbus:data:tcp:plant:value", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "int16"),
+                List.of(new LegacyLink("Value", "modbus:data:tcp:plant:value:number", "Number")));
+        var a = new ManualMigrationWork("a", "provider-owned");
+        var b = new ManualMigrationWork("b", "provider-owned");
+        var first = planner.preview(List.of(poller), List.of(data), List.of(a, b));
+        var second = planner.preview(List.of(poller), List.of(data), List.of(b, a));
+        assertEquals(first, second);
+    }
+
+    @Test
     void safeReviewsDoNotReuseHistoricalPreviewIdentities() {
         String historical = ModbusMigrationPlanner.configurationIdentity(
                 List.of("modbus-migration-preview-v3", List.of(), List.of(), List.of(), List.of()));

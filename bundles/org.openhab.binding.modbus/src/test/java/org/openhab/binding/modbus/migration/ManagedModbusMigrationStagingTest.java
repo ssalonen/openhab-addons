@@ -91,7 +91,7 @@ class ManagedModbusMigrationStagingTest {
         verifyNoInteractions(links);
     }
 
-    private void configureLinkState(ItemChannelLinkRegistry links,
+    private Map<String, org.openhab.core.thing.link.ItemChannelLink> configureLinkState(ItemChannelLinkRegistry links,
             org.openhab.core.thing.link.ItemChannelLink initial) {
         Map<String, org.openhab.core.thing.link.ItemChannelLink> state = new java.util.HashMap<>();
         state.put(initial.getUID(), initial);
@@ -102,6 +102,7 @@ class ManagedModbusMigrationStagingTest {
             state.put(added.getUID(), added);
             return null;
         }).when(links).add(any());
+        return state;
     }
 
     @Test
@@ -155,10 +156,14 @@ class ManagedModbusMigrationStagingTest {
                 new org.openhab.core.thing.ChannelUID(mapping.sourceChannelUid()));
         var target = new org.openhab.core.thing.link.ItemChannelLink(mapping.itemName(),
                 new org.openhab.core.thing.ChannelUID(mapping.targetChannelUid()));
-        configureLinkState(links, source);
-        doThrow(new IllegalStateException("link addition failed")).when(links).add(target);
+        var routing = configureLinkState(links, source);
+        doAnswer(call -> {
+            var added = call.getArgument(0, org.openhab.core.thing.link.ItemChannelLink.class);
+            routing.put(added.getUID(), added);
+            throw new IllegalStateException("listener failed after addition");
+        }).when(links).add(argThat(link -> link.getUID().equals(target.getUID())));
         when(links.remove(target.getUID())).thenThrow(new IllegalStateException("compensation failed"))
-                .thenReturn(null);
+                .thenAnswer(call -> routing.remove(target.getUID()));
         var pollers = List.of(new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant",
                 Map.of("start", 100, "length", 2, "type", "holding")));
         var data = List.of(new LegacyData("modbus:data:tcp:plant:temperature", "modbus:poller:tcp:plant",
@@ -176,8 +181,9 @@ class ManagedModbusMigrationStagingTest {
         verify(links, never()).add(source);
         MigrationJournal recovered = new MigrationJournal(storage(persisted));
         new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
-                new ManagedModbusMigrationApplier(provider, links, recovered), recovered)
-                .revert(reviewed.identity(), mapping.itemName(), mapping.sourceChannelUid());
+                new ManagedModbusMigrationApplier(provider, links, recovered, things,
+                        (org.openhab.core.thing.link.ManagedItemChannelLinkProvider) links.getProvider(source)),
+                recovered).revert(reviewed.identity(), mapping.itemName(), mapping.sourceChannelUid());
         verify(provider, never()).remove(any());
         verify(links, times(2)).remove(target.getUID());
         verify(links).add(source);
@@ -315,7 +321,9 @@ class ManagedModbusMigrationStagingTest {
         workflow.cutover(preview.identity(), pollers.getFirst().uid(), pollers, data);
         MigrationJournal recovered = new MigrationJournal(storage(persisted));
         ModbusMigrationWorkflow restarted = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
-                new ManagedModbusMigrationApplier(provider, links, recovered), recovered);
+                new ManagedModbusMigrationApplier(provider, links, recovered, things,
+                        (org.openhab.core.thing.link.ManagedItemChannelLinkProvider) links.getProvider(original)),
+                recovered);
         restarted.revert(preview.identity(), mapping.itemName(), mapping.sourceChannelUid());
         org.junit.jupiter.api.Assertions.assertEquals(profile,
                 java.util.Objects.requireNonNull(routing.get(original.getUID())).getConfiguration().getProperties());

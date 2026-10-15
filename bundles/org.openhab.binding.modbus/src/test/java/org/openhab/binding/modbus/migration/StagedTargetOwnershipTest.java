@@ -174,8 +174,15 @@ class StagedTargetOwnershipTest {
         }
         var applier = new ManagedModbusMigrationApplier(provider, links, journal, things);
         assertThrows(IllegalStateException.class, () -> applier.cutover(plan, plan.groups().getFirst()));
-        assertEquals(Map.of(original.getUID(), original), routing);
-        assertTrue(journal.links(identity + ":" + source).isEmpty());
+        if (boundary.equals("add-listener")) {
+            // A foreign candidate no longer authorizes deletion of its connection or dual source delivery.
+            assertFalse(routing.containsKey(original.getUID()));
+            assertEquals(1, routing.size());
+            assertEquals(plan.groups().getFirst().links(), journal.links(identity + ":" + source));
+        } else {
+            assertEquals(Map.of(original.getUID(), original), routing);
+            assertTrue(journal.links(identity + ":" + source).isEmpty());
+        }
     }
 
     @ParameterizedTest
@@ -206,7 +213,7 @@ class StagedTargetOwnershipTest {
         doAnswer(call -> {
             String key = call.getArgument(0);
             String previous = persisted.put(key, call.getArgument(1));
-            if (key.startsWith("v1:links:")) {
+            if (key.startsWith("v2:links:")) {
                 replace("unmanaged", plan.identity());
             }
             return previous;

@@ -83,7 +83,7 @@ class ManagedModbusMigrationPublicApiTest {
         var source = new ItemChannelLink(mapping.itemName(), new ChannelUID(mapping.sourceChannelUid()),
                 new Configuration(mapping.configuration()));
         var target = new ItemChannelLink(mapping.itemName(), new ChannelUID(mapping.targetChannelUid()),
-                new Configuration(mapping.configuration()));
+                new Configuration(mapping.targetConfiguration()));
         routing.put(source.getUID(), source);
         var applier = new ManagedModbusMigrationApplier(provider, links, things);
         applier.createTargets(preview);

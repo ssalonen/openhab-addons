@@ -83,6 +83,22 @@ final class MigrationJournal {
         }
     }
 
+    boolean reviewedLink(String key, MigrationLink link) {
+        int separator = key.indexOf(':');
+        if (separator < 0) {
+            return false;
+        }
+        String identity = key.substring(0, separator);
+        String value = local.get("v1:manifest:" + identity);
+        if (value == null) {
+            return false;
+        }
+        MigrationPreview preview = gson.fromJson(value, MigrationPreview.class);
+        return preview != null && identity.equals(preview.identity())
+                && preview.groups().stream().filter(group -> key.equals(identity + ":" + group.sourcePollerUid()))
+                        .anyMatch(group -> group.links().contains(link));
+    }
+
     List<String> targets(String identity) {
         return read("v1:targets:" + identity, new TypeToken<List<String>>() {
         });
@@ -92,9 +108,39 @@ final class MigrationJournal {
         put("v1:targets:" + identity, gson.toJson(targets));
     }
 
+    enum LinkPhase {
+        HISTORICAL,
+        REMOVE_INTENDED,
+        SOURCE_REMOVED,
+        ADD_ATTEMPTED,
+        ADD_CONFIRMED
+    }
+
+    record LinkIntent(int version, MigrationLink link, @Nullable LinkPhase phase) {
+        LinkIntent(MigrationLink link, LinkPhase phase) {
+            this(1, link, phase);
+        }
+
+        boolean permitsTargetRemoval() {
+            return version == 1 && (phase == LinkPhase.ADD_ATTEMPTED || phase == LinkPhase.ADD_CONFIRMED);
+        }
+    }
+
+    List<LinkIntent> intents(String key) {
+        if (local.containsKey("v2:links:" + key)) {
+            return read("v2:links:" + key, new TypeToken<List<LinkIntent>>() {
+            });
+        }
+        return this.<MigrationLink> read("v1:links:" + key, new TypeToken<List<MigrationLink>>() {
+        }).stream().map(link -> new LinkIntent(link, LinkPhase.HISTORICAL)).toList();
+    }
+
+    void intents(String key, List<LinkIntent> intents) {
+        put("v2:links:" + key, gson.toJson(intents));
+    }
+
     List<MigrationLink> links(String key) {
-        return read("v1:links:" + key, new TypeToken<List<MigrationLink>>() {
-        });
+        return intents(key).stream().map(LinkIntent::link).toList();
     }
 
     void links(String key, List<MigrationLink> links) {

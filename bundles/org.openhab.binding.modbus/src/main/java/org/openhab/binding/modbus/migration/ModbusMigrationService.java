@@ -19,6 +19,7 @@ import org.openhab.core.storage.StorageService;
 import org.openhab.core.thing.ManagedThingProvider;
 import org.openhab.core.thing.ThingRegistry;
 import org.openhab.core.thing.link.ItemChannelLinkRegistry;
+import org.openhab.core.thing.link.ManagedItemChannelLinkProvider;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
@@ -43,15 +44,21 @@ public final class ModbusMigrationService {
                 new LiveModbusMigrationValidation(thingRegistry));
     }
 
+    public ModbusMigrationService(ThingRegistry thingRegistry, ItemChannelLinkRegistry linkRegistry,
+            ManagedThingProvider thingProvider, StorageService storageService, MigrationValidation validation) {
+        this(thingRegistry, linkRegistry, thingProvider, storageService, validation, null);
+    }
+
     @Activate
     public ModbusMigrationService(@Reference ThingRegistry thingRegistry,
             @Reference ItemChannelLinkRegistry linkRegistry, @Reference ManagedThingProvider thingProvider,
-            @Reference StorageService storageService, @Reference MigrationValidation validation) {
+            @Reference StorageService storageService, @Reference MigrationValidation validation,
+            @Reference @org.eclipse.jdt.annotation.Nullable ManagedItemChannelLinkProvider linkProvider) {
         adapter = new ManagedModbusMigrationAdapter(thingRegistry, linkRegistry, thingProvider);
         providerAdapter = new ProviderOwnedMigrationAdapter(thingRegistry, linkRegistry);
         MigrationJournal journal = new MigrationJournal(storageService.getStorage("modbus-migration-journal"));
         workflow = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
-                new ManagedModbusMigrationApplier(thingProvider, linkRegistry, journal, thingRegistry),
+                new ManagedModbusMigrationApplier(thingProvider, linkRegistry, journal, thingRegistry, linkProvider),
                 (preview, group, stagedAt) -> {
                     requireCurrentSources(preview.identity());
                     var observation = validation.observe(preview, group, stagedAt);

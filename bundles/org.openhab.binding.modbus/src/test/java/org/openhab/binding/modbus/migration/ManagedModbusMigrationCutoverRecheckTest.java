@@ -125,7 +125,7 @@ class ManagedModbusMigrationCutoverRecheckTest {
             String storageKey = call.getArgument(0);
             String value = call.getArgument(1);
             String previous = persisted.put(storageKey, value);
-            if (storageKey.equals("v1:links:" + key)) {
+            if (storageKey.equals("v2:links:" + key)) {
                 linkIntents.add(journal().links(key));
             }
             return previous;
@@ -136,6 +136,266 @@ class ManagedModbusMigrationCutoverRecheckTest {
         assertTrue(ManagedModbusMigrationAdapter.ownsTarget(things, thingProvider,
                 new ThingUID(group.targetPollerUid()), preview.identity()));
         assertEquals(List.of(group.targetPollerUid()), journal().targets(preview.identity()));
+    }
+
+    @Test
+    void addedTargetCarriesReviewedPerLinkMarkerAndReconstructsExactRevert() {
+        applier().cutover(preview, group);
+        ItemChannelLink added = java.util.Objects.requireNonNull(links.get(target(first).getUID()));
+        Object marker = added.getConfiguration().get("modbusMigrationOwner");
+        assertInstanceOf(String.class, marker);
+        assertFalse(((String) marker).isBlank());
+        ItemChannelLink other = java.util.Objects.requireNonNull(links.get(target(second).getUID()));
+        assertNotEquals(marker, other.getConfiguration().get("modbusMigrationOwner"));
+        assertEquals("system:default", added.getConfiguration().get("profile"));
+        assertTrue(preview.manifestJson().contains(marker.toString()));
+        assertTrue(persisted.get("v1:manifest:" + preview.identity()).contains(marker.toString()));
+        assertTrue(persisted.get("v2:links:" + key).contains(marker.toString()));
+        // Ordinary UI save/restart preserves the claim, not process-local Java identity.
+        replaceManaged(added, link(first, first.targetChannelUid(), added.getConfiguration().getProperties()));
+        applier().revertLink(preview, first);
+        assertFirstRestored();
+        assertEquals(Map.of(), links.get(source(first).getUID()).getConfiguration().getProperties());
+        assertEquals(List.of(second), journal().links(key));
+    }
+
+    @Test
+    void reconstructedRevertRefusesChangedCandidateOwnership() {
+        applier().cutover(preview, group);
+        ItemChannelLink owned = java.util.Objects.requireNonNull(links.get(target(first).getUID()));
+        Thing candidate = java.util.Objects.requireNonNull(managedThings.get(new ThingUID(group.targetPollerUid())));
+        candidate.setProperty("modbusMigrationIdentity", "another-review");
+        clearInvocations(linkProvider);
+
+        assertThrows(IllegalStateException.class, () -> applier().revertLink(preview, first));
+        assertSame(owned, links.get(owned.getUID()));
+        assertNull(links.get(source(first).getUID()));
+        verify(linkProvider, never()).remove(anyString());
+        verify(linkProvider, never()).add(any());
+        assertEquals(group.links(), journal().links(key));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "SOURCE_REMOVED", "ADD_ATTEMPTED" })
+    void phaseWriteCreatingIdenticallyMarkedTargetBeforeAddMustNotClaimIt(String phase) {
+        ItemChannelLink foreign = link(first, first.targetChannelUid(), first.targetConfiguration());
+        AtomicBoolean once = new AtomicBoolean();
+        doAnswer(call -> {
+            String storageKey = call.getArgument(0);
+            String value = call.getArgument(1);
+            String previous = persisted.put(storageKey, value);
+            if (storageKey.equals("v2:links:" + key)) {
+                linkIntents.add(journal().links(key));
+                if (value.contains("\"" + phase + "\"") && once.compareAndSet(false, true)) {
+                    links.add(foreign);
+                }
+            }
+            return previous;
+        }).when(storage).put(anyString(), anyString());
+
+        assertThrows(IllegalStateException.class, () -> applier().cutover(preview, group));
+        assertTrue(once.get());
+        assertSame(foreign, links.get(foreign.getUID()));
+        assertNull(links.get(source(first).getUID()));
+        verify(linkProvider, never()).remove(foreign.getUID());
+        assertEquals(List.of(first), journal().links(key));
+    }
+
+    @Test
+    void reconstructedRevertRefusesAnotherManagedProviderBeforeRemoval() {
+        applier().cutover(preview, group);
+        ItemChannelLink owned = java.util.Objects.requireNonNull(links.get(target(first).getUID()));
+        ItemChannelLink replacement = link(first, first.targetChannelUid(), first.targetConfiguration());
+        ManagedItemChannelLinkProvider another = mock(ManagedItemChannelLinkProvider.class);
+        when(another.getAll()).thenReturn(List.of());
+        links.attachForeign(another);
+        discardManaged(owned);
+        links.added(another, replacement);
+        clearInvocations(linkProvider);
+
+        assertThrows(IllegalStateException.class, () -> applier().revertLink(preview, first));
+        assertSame(replacement, links.get(replacement.getUID()));
+        assertNull(links.get(source(first).getUID()));
+        verify(linkProvider, never()).remove(anyString());
+        verify(linkProvider, never()).add(any());
+        assertEquals(group.links(), journal().links(key));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "profile", "missing-marker", "wrong-marker", "extra-setting", "unmanaged" })
+    void reconstructedRevertRefusesChangedMarkedTarget(String change) {
+        applier().cutover(preview, group);
+        ItemChannelLink owned = java.util.Objects.requireNonNull(links.get(target(first).getUID()));
+        Map<String, Object> configuration = new HashMap<>(owned.getConfiguration().getProperties());
+        switch (change) {
+            case "profile" -> configuration.put("profile", "system:follow");
+            case "missing-marker" -> configuration.remove("modbusMigrationOwner");
+            case "wrong-marker" -> configuration.put("modbusMigrationOwner", "foreign");
+            case "extra-setting" -> configuration.put("extra", true);
+            default -> {
+            }
+        }
+        ItemChannelLink replacement = link(first, first.targetChannelUid(), configuration);
+        if (change.equals("unmanaged")) {
+            replaceForeign(owned, replacement);
+        } else {
+            replaceManaged(owned, replacement);
+        }
+        clearInvocations(linkProvider);
+        assertThrows(IllegalStateException.class, () -> applier().revertLink(preview, first));
+        assertSame(replacement, links.get(replacement.getUID()));
+        assertNull(links.get(source(first).getUID()));
+        verify(linkProvider, never()).remove(anyString());
+        verify(linkProvider, never()).add(any());
+        assertEquals(group.links(), journal().links(key));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "historical", "unknown-version", "unknown-phase", "missing-phase" })
+    void ambiguousRecoveryRecordWithoutTargetMustNotCreateSource(String kind) {
+        links.remove(source(first).getUID());
+        if (kind.equals("historical")) {
+            journal().links(key, List.of(new MigrationLink(first.itemName(), first.sourceChannelUid(),
+                    first.targetChannelUid(), first.configuration())));
+        } else {
+            journal().intents(key,
+                    List.of(new MigrationJournal.LinkIntent(first, MigrationJournal.LinkPhase.ADD_ATTEMPTED)));
+            String value = java.util.Objects.requireNonNull(persisted.get("v2:links:" + key));
+            value = switch (kind) {
+                case "unknown-version" -> value.replace("\"version\":1", "\"version\":99");
+                case "unknown-phase" -> value.replace("ADD_ATTEMPTED", "UNRECOGNIZED");
+                default -> value.replace(",\"phase\":\"ADD_ATTEMPTED\"", "");
+            };
+            persisted.put("v2:links:" + key, value);
+        }
+        Map<String, String> before = Map.copyOf(persisted);
+        clearInvocations(linkProvider);
+        assertThrows(IllegalStateException.class, () -> applier().removeTargets(preview));
+        verify(linkProvider, never()).remove(anyString());
+        verify(linkProvider, never()).add(any());
+        assertEquals(before, persisted);
+        assertNull(links.get(source(first).getUID()));
+    }
+
+    @Test
+    void recoveryIntentCannotReplaceTheImmutableReviewedTargetClaim() {
+        applier().cutover(preview, group);
+        Map<String, Object> forgedConfiguration = Map.of("profile", "system:default", "modbusMigrationOwner", "copied");
+        MigrationLink forged = new MigrationLink(first.itemName(), first.sourceChannelUid(), first.targetChannelUid(),
+                first.configuration(), forgedConfiguration);
+        replaceManaged(target(first), link(first, first.targetChannelUid(), forgedConfiguration));
+        journal().intents(key,
+                List.of(new MigrationJournal.LinkIntent(forged, MigrationJournal.LinkPhase.ADD_CONFIRMED)));
+        Map<String, String> before = Map.copyOf(persisted);
+        clearInvocations(linkProvider);
+        assertThrows(IllegalStateException.class, () -> applier().removeTargets(preview));
+        verify(linkProvider, never()).remove(anyString());
+        verify(linkProvider, never()).add(any());
+        assertEquals(before, persisted);
+        assertNull(links.get(source(first).getUID()));
+    }
+
+    @Test
+    void completedCutoverAllowsUnchangedSaveWithinTheSameService() {
+        ManagedModbusMigrationApplier operation = applier();
+        operation.cutover(preview, group);
+        ItemChannelLink owned = java.util.Objects.requireNonNull(links.get(target(first).getUID()));
+        replaceManaged(owned, link(first, first.targetChannelUid(), owned.getConfiguration().getProperties()));
+        operation.revertLink(preview, first);
+        assertFirstRestored();
+        assertEquals(List.of(second), journal().links(key));
+    }
+
+    @Test
+    void intentWriteChangingManagedSourceOwnerWithSameInstanceMustNotRemoveIt() {
+        ItemChannelLink original = java.util.Objects.requireNonNull(links.get(source(first).getUID()));
+        ManagedItemChannelLinkProvider another = mock(ManagedItemChannelLinkProvider.class);
+        when(another.getAll()).thenReturn(List.of());
+        links.attachForeign(another);
+        onIntentWrite(() -> {
+            discardManaged(original);
+            links.added(another, original);
+        });
+        assertThrows(IllegalStateException.class, () -> applier().cutover(preview, group));
+        assertSame(original, links.get(original.getUID()));
+        assertSame(another, links.getProvider(original));
+        verify(linkProvider, never()).remove(original.getUID());
+        assertNull(links.get(target(first).getUID()));
+        assertEquals(List.of(first), journal().links(key));
+    }
+
+    @Test
+    void historicalUnmarkedPlanCannotStartAnotherCutover() {
+        MigrationLink unmarked = new MigrationLink(first.itemName(), first.sourceChannelUid(), first.targetChannelUid(),
+                first.configuration());
+        MigrationGroup historical = new MigrationGroup(group.sourcePollerUid(), group.targetPollerUid(),
+                group.targetBridgeUid(), group.configuration(), group.channels(), List.of(unmarked));
+        assertThrows(IllegalStateException.class, () -> applier().cutover(preview, historical));
+        verify(linkProvider, never()).remove(anyString());
+        verify(linkProvider, never()).add(any());
+        assertTrue(journal().links(key).isEmpty());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "REMOVE_INTENDED", "SOURCE_REMOVED", "ADD_ATTEMPTED", "ADD_CONFIRMED", "after-add" })
+    void eachDurablePhaseCanReconstructAnExactSafeRevert(String seam) {
+        if (seam.equals("after-add")) {
+            doAnswer(call -> {
+                ItemChannelLink added = call.getArgument(0);
+                managedLinks.put(added.getUID(), added);
+                links.added(linkProvider, added);
+                throw new AssertionError("interrupted after provider mutation");
+            }).when(linkProvider).add(argThat(link -> link.getUID().equals(target(first).getUID())));
+        } else {
+            doAnswer(call -> {
+                String storageKey = call.getArgument(0);
+                String value = call.getArgument(1);
+                String previous = persisted.put(storageKey, value);
+                if (storageKey.equals("v2:links:" + key) && value.contains("\"" + seam + "\"")) {
+                    throw new AssertionError("interrupted after intent persistence");
+                }
+                return previous;
+            }).when(storage).put(anyString(), anyString());
+        }
+        assertThrows(AssertionError.class, () -> applier().cutover(preview, group));
+        assertEquals(List.of(first), journal().links(key));
+        // New journal/provider-facing applier, no process-local link instances.
+        var cleanStorage = ManagedModbusMigrationStagingTest.storage(persisted);
+        applier(new MigrationJournal(cleanStorage)).revertLink(preview, first);
+        assertFirstRestored();
+        assertTrue(journal().links(key).isEmpty());
+        assertNotNull(links.get(source(second).getUID()));
+    }
+
+    @Test
+    void selectedRevertMustNotSilentlyAcknowledgeHistoricalUnmarkedIntent() {
+        links.remove(source(first).getUID());
+        ItemChannelLink unmarked = target(first);
+        links.add(unmarked);
+        journal().links(key, List.of(new MigrationLink(first.itemName(), first.sourceChannelUid(),
+                first.targetChannelUid(), first.configuration())));
+        Map<String, String> before = Map.copyOf(persisted);
+        clearInvocations(linkProvider);
+        assertThrows(IllegalStateException.class, () -> applier().revertLink(preview, first));
+        assertSame(unmarked, links.get(unmarked.getUID()));
+        assertNull(links.get(source(first).getUID()));
+        verify(linkProvider, never()).remove(anyString());
+        verify(linkProvider, never()).add(any());
+        assertEquals(before, persisted);
+    }
+
+    @Test
+    void reconstructionWithoutExpectedManagedOwnerMustNotRestoreAnAbsentSource() {
+        applier().cutover(preview, group);
+        links.remove(target(first).getUID());
+        clearInvocations(linkProvider);
+        ManagedModbusMigrationApplier unknownOwner = new ManagedModbusMigrationApplier(thingProvider, links, journal(),
+                things);
+        assertThrows(IllegalStateException.class, () -> unknownOwner.revertLink(preview, first));
+        verify(linkProvider, never()).add(any());
+        verify(linkProvider, never()).remove(anyString());
+        assertNull(links.get(source(first).getUID()));
+        assertEquals(group.links(), journal().links(key));
     }
 
     @Test
@@ -266,6 +526,98 @@ class ManagedModbusMigrationCutoverRecheckTest {
         assertEquals(List.of(first), journal().links(key));
     }
 
+    @Test
+    void sourceRemovalListenerCreatingManagedTargetBeforeAddMustRetainRecoveryIntent() {
+        ItemChannelLink foreign = target(first);
+        onRemove(source(first), () -> links.add(foreign));
+        ManagedModbusMigrationApplier operation = applier();
+
+        assertThrows(IllegalStateException.class, () -> operation.cutover(preview, group));
+        assertSame(foreign, links.get(foreign.getUID()));
+        assertSame(linkProvider, links.getProvider(foreign));
+        assertNull(links.get(source(first).getUID()), "Do not restore legacy delivery beside a foreign target");
+        verify(linkProvider, never()).remove(foreign.getUID());
+        verify(linkProvider, never()).add(argThat(link -> link.getUID().equals(source(first).getUID())));
+        // The sole target add belongs to the listener, not the applier.
+        verify(linkProvider).add(foreign);
+        assertUntouchedSecond();
+        assertEquals(List.of(first), journal().links(key));
+    }
+
+    @Test
+    void intentWriteCreatingManagedTargetBeforeSourceRemovalMustRetainRecoveryIntent() {
+        ItemChannelLink foreign = target(first);
+        ItemChannelLink original = links.get(source(first).getUID());
+        onIntentWrite(() -> links.add(foreign));
+
+        assertThrows(IllegalStateException.class, () -> applier().cutover(preview, group));
+        assertSame(foreign, links.get(foreign.getUID()));
+        assertSame(linkProvider, links.getProvider(foreign));
+        assertSame(original, links.get(source(first).getUID()));
+        verify(linkProvider, never()).remove(foreign.getUID());
+        verify(linkProvider, never()).remove(source(first).getUID());
+        verify(linkProvider, never()).add(argThat(link -> link.getUID().equals(source(first).getUID())));
+        verify(linkProvider).add(foreign);
+        assertUntouchedSecond();
+        assertEquals(List.of(first), journal().links(key));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void reconstructedRemovalOnlyIntentMustNotAuthorizeManagedTargetDeletion(boolean duringIntentWrite) {
+        ItemChannelLink foreign = target(first);
+        ItemChannelLink original = links.get(source(first).getUID());
+        Runnable interrupt = () -> {
+            links.add(foreign);
+            // Bypass live compensation to reconstruct at the actual pre-add interruption seam.
+            throw new AssertionError("simulated interruption before applier target addition");
+        };
+        if (duringIntentWrite) {
+            onIntentWrite(interrupt);
+        } else {
+            // Core registry listeners swallow Errors; interrupt at the provider boundary instead.
+            doAnswer(call -> {
+                ItemChannelLink removed = java.util.Objects.requireNonNull(managedLinks.remove(source(first).getUID()));
+                links.removed(linkProvider, removed);
+                interrupt.run();
+                return removed;
+            }).when(linkProvider).remove(source(first).getUID());
+        }
+        assertThrows(AssertionError.class, () -> applier().cutover(preview, group));
+        assertEquals(List.of(first), journal().links(key));
+
+        assertThrows(IllegalStateException.class, () -> applier().revertLink(preview, first));
+        assertSame(foreign, links.get(foreign.getUID()));
+        assertSame(linkProvider, links.getProvider(foreign));
+        if (duringIntentWrite) {
+            assertSame(original, links.get(source(first).getUID()));
+            verify(linkProvider, never()).remove(source(first).getUID());
+        } else {
+            assertNull(links.get(source(first).getUID()), "Do not restore legacy delivery beside a foreign target");
+        }
+        verify(linkProvider, never()).remove(foreign.getUID());
+        verify(linkProvider, never()).add(argThat(link -> link.getUID().equals(source(first).getUID())));
+        verify(linkProvider).add(foreign);
+        assertUntouchedSecond();
+        assertEquals(List.of(first), journal().links(key));
+    }
+
+    private void onIntentWrite(Runnable callback) {
+        AtomicBoolean once = new AtomicBoolean();
+        doAnswer(call -> {
+            String storageKey = call.getArgument(0);
+            String value = call.getArgument(1);
+            String previous = persisted.put(storageKey, value);
+            if (storageKey.equals("v2:links:" + key)) {
+                linkIntents.add(journal().links(key));
+                if (once.compareAndSet(false, true)) {
+                    callback.run();
+                }
+            }
+            return previous;
+        }).when(storage).put(anyString(), anyString());
+    }
+
     private void assertUntouchedSecond() {
         assertNull(links.get(target(second).getUID()));
         verify(linkProvider, never()).remove(source(second).getUID());
@@ -357,13 +709,17 @@ class ManagedModbusMigrationCutoverRecheckTest {
     }
 
     private ManagedModbusMigrationApplier applier(MigrationJournal journal) {
-        return new ManagedModbusMigrationApplier(thingProvider, links, journal, things);
+        return new ManagedModbusMigrationApplier(thingProvider, links, journal, things, linkProvider);
     }
 
     private static final class TestLinkRegistry extends ItemChannelLinkRegistry {
         TestLinkRegistry(ThingRegistry things) {
             super(Map.of(), things, mock(ItemRegistry.class), mock(ItemBuilderFactory.class),
                     mock(BundleContext.class));
+        }
+
+        void attachForeign(ItemChannelLinkProvider provider) {
+            addProvider(provider);
         }
 
         void attach(ManagedItemChannelLinkProvider managed, ItemChannelLinkProvider foreign) {

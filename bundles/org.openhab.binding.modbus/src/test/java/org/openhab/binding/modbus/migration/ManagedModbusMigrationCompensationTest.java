@@ -51,7 +51,7 @@ class ManagedModbusMigrationCompensationTest {
     private final MigrationLink mapping = group.links().getFirst();
     private final String key = preview.identity() + ":" + group.sourcePollerUid();
     private final ItemChannelLink source = link(mapping.sourceChannelUid(), mapping.configuration());
-    private final ItemChannelLink target = link(mapping.targetChannelUid(), mapping.configuration());
+    private final ItemChannelLink target = link(mapping.targetChannelUid(), mapping.targetConfiguration());
     private final Map<String, String> persisted = new HashMap<>();
     private final Map<String, ItemChannelLink> managedLinks = new HashMap<>();
     private final Map<ThingUID, Thing> managedThings = new HashMap<>();
@@ -105,13 +105,68 @@ class ManagedModbusMigrationCompensationTest {
         links.attach(linkProvider, foreignProvider);
         applier(journal()).createTargets(preview);
         links.add(target);
-        journal().links(key, List.of(mapping));
+        journal().intents(key,
+                List.of(new MigrationJournal.LinkIntent(mapping, MigrationJournal.LinkPhase.ADD_CONFIRMED)));
         clearInvocations(linkProvider);
     }
 
     @Test
+    void completionWriteRecreatingForeignTargetMustRetainIntentAndCompensateOwnSource() {
+        var storage = spy(ManagedModbusMigrationStagingTest.storage(persisted));
+        ItemChannelLink replacement = link(mapping.targetChannelUid(), mapping.targetConfiguration());
+        AtomicBoolean once = new AtomicBoolean();
+        doAnswer(call -> {
+            String storageKey = call.getArgument(0);
+            String value = call.getArgument(1);
+            String previous = persisted.put(storageKey, value);
+            if (storageKey.equals("v2:links:" + key) && value.equals("[]") && once.compareAndSet(false, true)) {
+                links.added(foreignProvider, replacement);
+            }
+            return previous;
+        }).when(storage).put(anyString(), anyString());
+
+        assertThrows(IllegalStateException.class,
+                () -> applier(new MigrationJournal(storage)).revertLink(preview, mapping));
+        assertTrue(once.get());
+        assertSame(replacement, links.get(target.getUID()));
+        assertNull(links.get(source.getUID()));
+        assertEquals(List.of(mapping), journal().links(key));
+        verify(linkProvider).remove(source.getUID());
+        clearInvocations(linkProvider);
+        assertThrows(IllegalStateException.class, () -> applier(journal()).revertLink(preview, mapping));
+        verifyNoInteractions(linkProvider);
+        links.removed(foreignProvider, replacement);
+        applier(journal()).revertLink(preview, mapping);
+        assertEquals(source, links.get(source.getUID()));
+        assertTrue(journal().links(key).isEmpty());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = { false, true })
+    void sourceAddFailureOrNoOpRetainsIntentForReconstructedRetry(boolean throwsFailure) {
+        doAnswer(call -> {
+            if (throwsFailure) {
+                throw new IllegalStateException("source add failed before mutation");
+            }
+            return null;
+        }).when(linkProvider).add(argThat(link -> link.getUID().equals(source.getUID())));
+        assertThrows(IllegalStateException.class, () -> applier(journal()).revertLink(preview, mapping));
+        assertNull(links.get(target.getUID()));
+        assertNull(links.get(source.getUID()));
+        assertEquals(List.of(mapping), journal().links(key));
+        doAnswer(call -> {
+            ItemChannelLink added = call.getArgument(0);
+            managedLinks.put(added.getUID(), added);
+            links.added(linkProvider, added);
+            return null;
+        }).when(linkProvider).add(argThat(link -> link.getUID().equals(source.getUID())));
+        clearInvocations(linkProvider);
+        assertSafeRestartRetry();
+    }
+
+    @Test
     void unmanagedReplacementFromRemovalListenerRetainsIntentUntilSafeRestartRetry() {
-        ItemChannelLink replacement = link(mapping.targetChannelUid(), mapping.configuration());
+        ItemChannelLink replacement = link(mapping.targetChannelUid(), mapping.targetConfiguration());
         assertNotSame(target, replacement);
         assertEquals(target.getUID(), replacement.getUID());
         assertEquals(target.getConfiguration().getProperties(), replacement.getConfiguration().getProperties());
@@ -174,7 +229,7 @@ class ManagedModbusMigrationCompensationTest {
 
     @Test
     void sourceAddListenerRecreatingForeignTargetCompensatesOnlyOwnSourceAndRetainsIntent() {
-        ItemChannelLink replacement = link(mapping.targetChannelUid(), mapping.configuration());
+        ItemChannelLink replacement = link(mapping.targetChannelUid(), mapping.targetConfiguration());
         AtomicBoolean once = new AtomicBoolean();
         links.addRegistryChangeListener(new RegistryChangeListener<>() {
             @Override
@@ -276,7 +331,7 @@ class ManagedModbusMigrationCompensationTest {
     }
 
     private ManagedModbusMigrationApplier applier(MigrationJournal journal) {
-        return new ManagedModbusMigrationApplier(thingProvider, links, journal, things);
+        return new ManagedModbusMigrationApplier(thingProvider, links, journal, things, linkProvider);
     }
 
     private static final class TestLinkRegistry extends ItemChannelLinkRegistry {

@@ -44,6 +44,12 @@ public final class ModbusMigrationPlanner {
         List<ManualMigrationWork> manualWork = new ArrayList<>(providerWork);
         List<MigrationGroup> groups = new ArrayList<>();
         List<MigrationImpact> impacts = new ArrayList<>();
+        String ownershipSeed = previewIdentity(sortedPollers, dataThings, List.of(),
+                providerWork.stream()
+                        .sorted(Comparator.comparing(ManualMigrationWork::sourceUid)
+                                .thenComparing(ManualMigrationWork::reason)
+                                .thenComparing(ManualMigrationWork::configurationIdentity))
+                        .toList());
         for (LegacyPoller poller : sortedPollers) {
             if (poller.configurationOmitted()) {
                 manualWork.add(new ManualMigrationWork(poller.uid(),
@@ -76,7 +82,10 @@ public final class ModbusMigrationPlanner {
                                     link.configuration(), compatible));
                             if (compatible) {
                                 links.add(new MigrationLink(link.itemName(), link.channelUid(), targetChannelUid,
-                                        link.configuration()));
+                                        link.configuration(),
+                                        Map.of("profile", "system:default", MigrationLink.OWNER,
+                                                configurationIdentity(List.of("modbus-link-owner-v1", ownershipSeed,
+                                                        link.itemName(), link.channelUid(), targetChannelUid)))));
                             } else {
                                 manualWork.add(new ManualMigrationWork(link.channelUid(),
                                         "Item link profile configuration is not proven compatible; target link was not planned"));
@@ -178,7 +187,8 @@ public final class ModbusMigrationPlanner {
             for (MigrationLink link : group.links()) {
                 mappings.add("{\"item\":\"" + json(link.itemName()) + "\",\"sourceLink\":\""
                         + json(link.sourceChannelUid()) + "\",\"targetLink\":\"" + json(link.targetChannelUid())
-                        + "\",\"profileConfiguration\":" + jsonObject(link.configuration()) + "}");
+                        + "\",\"profileConfiguration\":" + jsonObject(link.configuration())
+                        + ",\"targetConfiguration\":" + jsonObject(link.targetConfiguration()) + "}");
             }
         }
         List<String> manual = manualWork.stream()
@@ -226,7 +236,7 @@ public final class ModbusMigrationPlanner {
             List<?> channels = group.channels().stream().map(channel -> List.of(channel.sourceDataUid(), channel.id(),
                     channel.itemType(), channel.configuration())).toList();
             List<?> links = group.links().stream().map(link -> List.of(link.itemName(), link.sourceChannelUid(),
-                    link.targetChannelUid(), link.configuration())).toList();
+                    link.targetChannelUid(), link.configuration(), link.targetConfiguration())).toList();
             return List.of(group.targetPollerUid(), group.targetBridgeUid(), group.configuration(), channels, links);
         }).toList();
         List<?> manual = manualWork.stream()

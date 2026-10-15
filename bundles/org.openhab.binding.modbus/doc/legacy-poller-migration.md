@@ -117,6 +117,30 @@ It works without candidate validation, even when validation is `UNAVAILABLE` or 
 A link changed since migration is refused instead of overwritten; correct the conflict explicitly and retry.
 Repeated revert is harmless once its link recovery record has been resolved.
 
+### Replacement-link ownership and restart recovery
+
+Each newly created managed replacement uses the explicit `system:default` profile and an opaque per-link `modbusMigrationOwner` configuration value.
+The reviewed plan identity, manifest and recovery intent include this exact target configuration separately from the original source configuration.
+The source remains eligible only when its configuration is empty or exactly `{ "profile": "system:default" }`.
+An existing source carrying extra configuration, even a migration marker, is not automatically eligible.
+Source configuration is never decorated or rewritten, and provider-owned files are never modified.
+
+Recovery distinguishes intent to remove a source, checked source removal, attempted target addition and confirmed target addition.
+A removal-only intent cannot claim a target that appeared before the migration added one.
+During a live switch, callback replacements are checked by exact object instance and authoritative managed provider.
+After a completed switch or reconstruction, undo requires the reviewed marker, exact expected profile and entire configuration, the authoritative expected managed link provider, and the journaled candidate Thing owned by the same review.
+An unchanged editor save retaining those fields preserves the migration claim; retaining the marker while changing the profile does not.
+
+Missing or mismatched markers, changed profile/configuration/provider, unknown record versions/phases, and ambiguous historical unmarked records refuse automatic recovery.
+The unresolved record is retained for manual review: inspect both connections and their owning providers before resolving the conflict and retrying.
+Recovery never restores a source beside a target it cannot claim and never automatically adopts an unmarked historical connection.
+An already-restored exact managed source with no target can be acknowledged without adding it again.
+
+The marker is **not a secret or authentication mechanism** and grants no access.
+A deliberately copied identical marker, Item/channel identity and full configuration within the same authoritative managed provider are indistinguishable after reconstruction.
+Detecting that kind of clone would require a stronger Core revision/metadata contract.
+Standalone runtime-local appliers learn their managed owner during cutover; durable service recovery uses the injected managed link provider and authoritative Thing registry instead of guessing an owner.
+
 ### Roll back the complete staged migration
 
 If verification fails, restore switched legacy links and remove only migration-owned candidates:
