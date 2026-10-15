@@ -42,8 +42,8 @@ import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
 
 /**
- * Exercises JAX-RS routing and the actual Core JSON provider over loopback HTTP.
- * This standalone Jersey server does not prove Core runtime injection or role enforcement.
+ * Exercises resource operations and Core JSON responses over loopback HTTP using a test-only servlet adapter.
+ * This non-servlet Jersey server does not prove production routing, servlet injection or role enforcement.
  *
  * @author Sami Salonen - Initial contribution
  */
@@ -80,12 +80,12 @@ class ModbusMigrationResourceTest {
         when(storage.<String> getStorage("modbus-migration-journal"))
                 .thenReturn(ManagedModbusMigrationStagingTest.storage(persisted));
         service = spy(new ModbusMigrationService(things, links, provider, storage));
-        var resource = new ModbusMigrationResource(service);
-        var config = new ResourceConfig().register(ModbusMigrationResource.class)
+        var resource = new MigrationServletTestAdapter(new ModbusMigrationResource(service));
+        var config = new ResourceConfig().register(MigrationServletTestAdapter.class)
                 .register(new org.glassfish.jersey.internal.inject.AbstractBinder() {
                     @Override
                     protected void configure() {
-                        bind(resource).to(ModbusMigrationResource.class);
+                        bind(resource).to(MigrationServletTestAdapter.class);
                     }
                 }).register(new MediaTypeExtension<>());
         server = JdkHttpServerFactory.createHttpServer(URI.create("http://127.0.0.1:0/rest/"), config);
@@ -515,14 +515,67 @@ class ModbusMigrationResourceTest {
     }
 
     @Test
-    void bodyEndpointsUseUnannotatedEntityStreamsRatherThanBackendSpecificContextInjection() {
+    void bodyEndpointsUseCoreServletContextWithoutAnEntityProvider() {
         for (String name : List.of("validate", "cutover", "revert")) {
             var method = java.util.Arrays.stream(ModbusMigrationResource.class.getDeclaredMethods())
                     .filter(candidate -> candidate.getName().equals(name)).findFirst().orElseThrow();
             var entity = method.getParameters()[1];
-            assertEquals(java.io.InputStream.class, entity.getType(), name);
-            assertEquals(0, entity.getAnnotations().length, name + " must use the JAX-RS entity parameter");
+            assertEquals(javax.servlet.http.HttpServletRequest.class, entity.getType(), name);
+            assertNotNull(entity.getAnnotation(javax.ws.rs.core.Context.class), name);
+            assertEquals(1, entity.getAnnotations().length, name + " must have no entity parameter");
         }
+    }
+
+    @Test
+    void servletStreamsAreBoundedBeforeTheServiceMonitorAndIoErrorsAreSanitized() throws Exception {
+        var resource = new ModbusMigrationResource(service);
+        var consumed = new java.util.concurrent.atomic.AtomicInteger();
+        var endless = new java.io.InputStream() {
+            @Override
+            public int read() {
+                assertFalse(Thread.holdsLock(service));
+                consumed.incrementAndGet();
+                return ' ';
+            }
+        };
+        clearInvocations(service, things, links, provider, storage);
+        var response = resource.validate("0".repeat(64), MigrationServletTestAdapter.request(endless));
+        assertEquals(400, response.getStatus());
+        assertEquals(8193, consumed.get(), "Read at most the body limit plus one byte");
+        var failed = mock(javax.servlet.http.HttpServletRequest.class);
+        when(failed.getInputStream()).thenThrow(new java.io.IOException("private-input-failure"));
+        for (var result : List.of(resource.validate("0".repeat(64), failed), resource.cutover("0".repeat(64), failed),
+                resource.revert("0".repeat(64), failed))) {
+            assertEquals(400, result.getStatus());
+            assertEquals(new ModbusMigrationResource.Error(ModbusMigrationResource.ErrorCode.INVALID_INPUT,
+                    "Invalid migration request."), result.getEntity());
+        }
+        verifyNoInteractions(service, things, links, provider, storage);
+    }
+
+    @Test
+    void unavailableServletContextFailsClosedWithoutLeakingOrCallingService() throws Exception {
+        var resource = new ModbusMigrationResource(service);
+        clearInvocations(service, things, links, provider, storage);
+        var failed = mock(javax.servlet.http.HttpServletRequest.class);
+        when(failed.getInputStream()).thenThrow(new IllegalStateException("private-servlet-failure"));
+        for (var result : List.of(resource.validate("0".repeat(64), failed), resource.cutover("0".repeat(64), failed),
+                resource.revert("0".repeat(64), failed))) {
+            assertEquals(500, result.getStatus());
+            assertEquals(
+                    new ModbusMigrationResource.Error(ModbusMigrationResource.ErrorCode.INTERNAL_ERROR,
+                            "Migration operation failed; read the workflow report before retrying."),
+                    result.getEntity());
+        }
+        for (String name : List.of("validate", "cutover", "revert")) {
+            var method = ModbusMigrationResource.class.getMethod(name, String.class,
+                    javax.servlet.http.HttpServletRequest.class);
+            var result = (javax.ws.rs.core.Response) method.invoke(resource, "0".repeat(64), null);
+            assertEquals(500, result.getStatus());
+            assertEquals(ModbusMigrationResource.ErrorCode.INTERNAL_ERROR,
+                    ((ModbusMigrationResource.Error) result.getEntity()).code());
+        }
+        verifyNoInteractions(service, things, links, provider, storage);
     }
 
     @Test

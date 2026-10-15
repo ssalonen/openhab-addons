@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.lang.reflect.Field;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -690,41 +691,60 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         verifyNoMoreInteractions(mockedModbusManager);
     }
 
-    // Pure mocks must capture a dispatch just like the real child API; delivery happens only when it runs.
+    private final Map<ModbusDataThingHandler, ModbusDataThingHandler.ReadAuthorization> childAuthorizations = new IdentityHashMap<>();
+
+    // Pure mocks capture typed permission first; only delivery forwards the original result/error and cache flag.
     private ModbusDataThingHandler mockChildHandler() {
         ModbusDataThingHandler child = Mockito.mock(ModbusDataThingHandler.class);
         doAnswer(invocation -> {
-            AsyncModbusReadResult result = invocation.getArgument(1);
-            boolean cached = invocation.getArgument(2);
-            return (Runnable) () -> child.onReadResult(result, cached);
-        }).when(child).prepareReadResult(any(ModbusPollerThingHandler.class), any(AsyncModbusReadResult.class),
-                anyBoolean());
-        doAnswer(invocation -> {
-            AsyncModbusFailure<ModbusReadRequestBlueprint> failure = invocation.getArgument(1);
-            return (Runnable) () -> child.handleReadError(failure);
-        }).when(child).prepareReadError(any(ModbusPollerThingHandler.class), any());
+            ModbusDataThingHandler.ReadAuthorization authorization = Mockito
+                    .mock(ModbusDataThingHandler.ReadAuthorization.class);
+            doAnswer(delivery -> {
+                child.onReadResult(delivery.getArgument(0), delivery.getArgument(1));
+                return null;
+            }).when(authorization).deliver(any(AsyncModbusReadResult.class), anyBoolean());
+            doAnswer(delivery -> {
+                child.handleReadError(delivery.getArgument(0));
+                return null;
+            }).when(authorization).deliver(any(AsyncModbusFailure.class));
+            childAuthorizations.put(child, authorization);
+            return authorization;
+        }).when(child).captureReadAuthorization(any(ModbusPollerThingHandler.class));
         return child;
     }
 
     private void verifyReadDispatch(ModbusPollerThingHandler parent, AsyncModbusReadResult result, boolean cached,
             ModbusDataThingHandler... children) {
         var order = inOrder((Object[]) children);
-        for (ModbusDataThingHandler child : children) {
-            order.verify(child).prepareReadResult(same(parent), same(result), eq(cached));
+        if (!cached) {
+            for (ModbusDataThingHandler child : children) {
+                order.verify(child).captureReadAuthorization(same(parent));
+            }
         }
         for (ModbusDataThingHandler child : children) {
             order.verify(child).onReadResult(same(result), eq(cached));
+            ModbusDataThingHandler.ReadAuthorization authorization = childAuthorizations.get(child);
+            verify(authorization).deliver(same(result), eq(cached));
+            verifyNoMoreInteractions(authorization);
+            clearInvocations(authorization);
         }
     }
 
     private void verifyErrorDispatch(ModbusPollerThingHandler parent,
-            AsyncModbusFailure<ModbusReadRequestBlueprint> failure, ModbusDataThingHandler... children) {
+            AsyncModbusFailure<ModbusReadRequestBlueprint> failure, boolean cached,
+            ModbusDataThingHandler... children) {
         var order = inOrder((Object[]) children);
-        for (ModbusDataThingHandler child : children) {
-            order.verify(child).prepareReadError(same(parent), same(failure));
+        if (!cached) {
+            for (ModbusDataThingHandler child : children) {
+                order.verify(child).captureReadAuthorization(same(parent));
+            }
         }
         for (ModbusDataThingHandler child : children) {
             order.verify(child).handleReadError(same(failure));
+            ModbusDataThingHandler.ReadAuthorization authorization = childAuthorizations.get(child);
+            verify(authorization).deliver(same(failure));
+            verifyNoMoreInteractions(authorization);
+            clearInvocations(authorization);
         }
     }
 
@@ -891,7 +911,7 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         // has one data child
         thingHandler.childHandlerInitialized(child1, Mockito.mock(Thing.class));
         readCallback.handle(result);
-        verifyErrorDispatch(thingHandler, result, child1);
+        verifyErrorDispatch(thingHandler, result, false, child1);
         verifyNoMoreInteractions(child1);
         verifyNoMoreInteractions(child2);
 
@@ -900,7 +920,7 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         // two children (one child initialized)
         thingHandler.childHandlerInitialized(child2, Mockito.mock(Thing.class));
         readCallback.handle(result);
-        verifyErrorDispatch(thingHandler, result, child1, child2);
+        verifyErrorDispatch(thingHandler, result, false, child1, child2);
         verifyNoMoreInteractions(child1);
         verifyNoMoreInteractions(child2);
 
@@ -910,7 +930,7 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         // one child disposed
         thingHandler.childHandlerDisposed(child1, Mockito.mock(Thing.class));
         readCallback.handle(result);
-        verifyErrorDispatch(thingHandler, result, child2);
+        verifyErrorDispatch(thingHandler, result, false, child2);
         verifyNoMoreInteractions(child1);
         verifyNoMoreInteractions(child2);
     }
@@ -1040,7 +1060,9 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         verify(comms).submitOneTimePoll(any(), any(), any());
         verifyNoMoreInteractions(mockedModbusManager);
 
-        // data child receives the cached data
+        // A one-time request captures permission now, but must not deliver before its callback runs.
+        verify(child1).captureReadAuthorization(same(thingHandler));
+        verifyNoInteractions(childAuthorizations.get(child1));
         verifyNoMoreInteractions(child1);
     }
 
@@ -1100,7 +1122,7 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         failureCallback.handle(errorResult);
 
         // data child should receive the error
-        verifyErrorDispatch(thingHandler, errorResult, child1);
+        verifyErrorDispatch(thingHandler, errorResult, false, child1);
         verifyNoMoreInteractions(child1);
         clearInvocations(child1);
 
@@ -1110,7 +1132,7 @@ public class ModbusPollerThingHandlerTest extends AbstractModbusOSGiTest {
         verify(comms, never()).submitOneTimePoll(any(), any(), any());
 
         // data child receives the cached error
-        verifyErrorDispatch(thingHandler, errorResult, child1);
+        verifyErrorDispatch(thingHandler, errorResult, true, child1);
         verifyNoMoreInteractions(child1);
     }
 
