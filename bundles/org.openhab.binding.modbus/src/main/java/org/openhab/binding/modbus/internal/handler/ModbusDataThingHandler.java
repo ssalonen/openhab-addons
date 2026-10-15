@@ -825,6 +825,45 @@ public class ModbusDataThingHandler extends BaseThingHandler
                         .equals(org.openhab.binding.modbus.migration.Poller2ObservationCollector.signature(getThing()));
     }
 
+    /** Immutable permission captured before a transport request is submitted. */
+    public final class ReadAuthorization {
+        private final @Nullable ReadContext context = readContext;
+        private final ModbusPollerThingHandler parent;
+
+        private ReadAuthorization(ModbusPollerThingHandler parent) {
+            this.parent = parent;
+        }
+
+        @SuppressWarnings("PMD.CompareObjectsWithEquals") // Parent instance owns the authorization.
+        private boolean isCurrent() {
+            return context != null && context.parent() == parent
+                    && ModbusDataThingHandler.this.isCurrent(context, context.request());
+        }
+
+        public void deliver(AsyncModbusReadResult result, boolean cached) {
+            synchronized (ModbusDataThingHandler.this) {
+                if (isCurrent() && context != null
+                        && ModbusDataThingHandler.this.isCurrent(context, result.getRequest())) {
+                    publishReadResult(result, cached);
+                }
+            }
+        }
+
+        public void deliver(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+            synchronized (ModbusDataThingHandler.this) {
+                if (isCurrent() && context != null
+                        && ModbusDataThingHandler.this.isCurrent(context, failure.getRequest())) {
+                    publishReadError(failure);
+                }
+            }
+        }
+    }
+
+    /** Captures permission without acquiring the child lifecycle monitor. */
+    public ReadAuthorization captureReadAuthorization(ModbusPollerThingHandler parent) {
+        return new ReadAuthorization(parent);
+    }
+
     /** Captures child provenance without waiting for its lifecycle monitor. Run the returned dispatch once. */
     @SuppressWarnings("PMD.CompareObjectsWithEquals") // Parent handler instance owns this registration.
     public Runnable prepareReadResult(ModbusPollerThingHandler parent, AsyncModbusReadResult result, boolean cached) {

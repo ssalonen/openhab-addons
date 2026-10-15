@@ -90,9 +90,12 @@ class ModbusPollerThingHandlerTest {
             // Even a refresh captured before reinitialization must never combine the old request with the new endpoint.
             verify(fixture.newCommunication, never()).submitOneTimePoll(any(), any(), any());
             var callbacks = ArgumentCaptor.forClass(ModbusReadCallback.class);
+            var failures = ArgumentCaptor.forClass(org.openhab.core.io.transport.modbus.ModbusFailureCallback.class);
             verify(fixture.oldCommunication).submitOneTimePoll(org.mockito.ArgumentMatchers.same(oldRequest),
-                    callbacks.capture(), org.mockito.ArgumentMatchers.argThat(failure -> failure == oldRead));
-            assertSame(oldRead, callbacks.getValue());
+                    callbacks.capture(), failures.capture());
+            org.junit.jupiter.api.Assertions.assertNotSame(oldRead, callbacks.getValue(),
+                    "one-time reads capture their own child authorization");
+            assertSame(callbacks.getValue(), failures.getValue());
             clearInvocations(fixture.callback);
             callbacks.getValue().handle(fixture.result());
             verifyNoInteractions(fixture.callback);

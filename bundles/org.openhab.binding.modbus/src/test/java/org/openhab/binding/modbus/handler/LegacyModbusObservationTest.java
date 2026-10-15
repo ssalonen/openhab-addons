@@ -232,6 +232,103 @@ class LegacyModbusObservationTest {
         }
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = { false, true })
+    void submittedOneTimeReadCannotAcquireReloadedChildAuthorization(boolean failure) {
+        try {
+            poller.childHandlerInitialized(handler, handler.getThing());
+            poller.refresh();
+            var reads = org.mockito.ArgumentCaptor
+                    .forClass(org.openhab.core.io.transport.modbus.ModbusReadCallback.class);
+            var failures = org.mockito.ArgumentCaptor
+                    .forClass(org.openhab.core.io.transport.modbus.ModbusFailureCallback.class);
+            verify(communication).submitOneTimePoll(any(), reads.capture(), failures.capture());
+            handler.initialize();
+            poll(43, false);
+            var fresh = handler.getObservation().orElseThrow();
+            if (failure) {
+                failures.getValue().handle(new AsyncModbusFailure<>(request, new java.io.IOException("obsolete")));
+            } else {
+                reads.getValue().handle(new AsyncModbusReadResult(request, new ModbusRegisterArray(12)));
+            }
+            assertEquals(fresh, handler.getObservation().orElseThrow(),
+                    "a request submitted before child reload must not publish or invalidate new evidence");
+            clearInvocations(communication);
+            poller.refresh();
+            verify(communication).submitOneTimePoll(any(), reads.capture(), failures.capture());
+            reads.getValue().handle(new AsyncModbusReadResult(request, new ModbusRegisterArray(44)));
+            assertEquals(new DecimalType(44), handler.getObservation().orElseThrow().states().get(uid));
+        } finally {
+            handler.dispose();
+            poller.dispose();
+        }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = { false, true })
+    void cachedOneTimeOutcomeCannotAcquireReloadedChildAuthorization(boolean failure) {
+        try {
+            poller.thingUpdated(BridgeBuilder.create(bridge).withConfiguration(new Configuration(Map.of("start", 100,
+                    "length", 1, "type", "holding", "refresh", 0, "cacheMillis", Integer.MAX_VALUE))).build());
+            handler.initialize();
+            poller.childHandlerInitialized(handler, handler.getThing());
+            var currentRequest = java.util.Objects.requireNonNull(poller.getRequest());
+            poller.refresh();
+            var reads = org.mockito.ArgumentCaptor
+                    .forClass(org.openhab.core.io.transport.modbus.ModbusReadCallback.class);
+            var failures = org.mockito.ArgumentCaptor
+                    .forClass(org.openhab.core.io.transport.modbus.ModbusFailureCallback.class);
+            verify(communication).submitOneTimePoll(any(), reads.capture(), failures.capture());
+            if (failure) {
+                failures.getValue().handle(new AsyncModbusFailure<>(currentRequest, new java.io.IOException("old")));
+            } else {
+                reads.getValue().handle(new AsyncModbusReadResult(currentRequest, new ModbusRegisterArray(12)));
+            }
+            handler.initialize();
+            handler.onReadResult(new AsyncModbusReadResult(currentRequest, new ModbusRegisterArray(43)), false);
+            var fresh = handler.getObservation().orElseThrow();
+            var callback = mock(ThingHandlerCallback.class);
+            handler.setCallback(callback);
+            poller.refresh();
+            assertEquals(Optional.of(fresh), handler.getObservation());
+            verifyNoInteractions(callback);
+        } finally {
+            handler.dispose();
+            poller.dispose();
+        }
+    }
+
+    @Test
+    void unavailableChildAuthorizationDoesNotPreventOneTimePollerRecovery() {
+        try {
+            bridge.setStatusInfo(new ThingStatusInfo(ThingStatus.OFFLINE,
+                    org.openhab.core.thing.ThingStatusDetail.COMMUNICATION_ERROR, "fixture"));
+            handler.initialize();
+            poller.childHandlerInitialized(handler, handler.getThing());
+            var callback = mock(ThingHandlerCallback.class);
+            poller.setCallback(callback);
+            poller.refresh();
+            var reads = org.mockito.ArgumentCaptor
+                    .forClass(org.openhab.core.io.transport.modbus.ModbusReadCallback.class);
+            verify(communication).submitOneTimePoll(any(), reads.capture(), any());
+            reads.getValue().handle(new AsyncModbusReadResult(request, new ModbusRegisterArray(42)));
+            verify(callback).statusUpdated(eq(bridge), argThat(status -> status.getStatus() == ThingStatus.ONLINE));
+            assertTrue(handler.getObservation().isEmpty(),
+                    "the recovery response cannot grant missing child permission");
+            bridge.setStatusInfo(
+                    new ThingStatusInfo(ThingStatus.ONLINE, org.openhab.core.thing.ThingStatusDetail.NONE, null));
+            handler.initialize();
+            clearInvocations(communication);
+            poller.refresh();
+            verify(communication).submitOneTimePoll(any(), reads.capture(), any());
+            reads.getValue().handle(new AsyncModbusReadResult(request, new ModbusRegisterArray(43)));
+            assertEquals(new DecimalType(43), handler.getObservation().orElseThrow().states().get(uid));
+        } finally {
+            handler.dispose();
+            poller.dispose();
+        }
+    }
+
     @Test
     void cachedReplayCannotCreateOrRenewLegacyEvidence() {
         try {
