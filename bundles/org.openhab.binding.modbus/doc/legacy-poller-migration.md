@@ -127,7 +127,12 @@ Source configuration is never decorated or rewritten, and provider-owned files a
 
 Recovery distinguishes intent to remove a source, checked source removal, attempted target addition and confirmed target addition.
 A removal-only intent cannot claim a target that appeared before the migration added one.
+An attempted-add record is also insufficient after reconstruction: it was written **before** the provider add, so a present target may belong to a listener or another actor even if every marker and setting matches.
+Automatic deletion after reconstruction therefore requires a confirmed addition; an unconfirmed present target and its recovery record remain for manual review, without restoring an absent source beside it.
 During a live switch, callback replacements are checked by exact object instance and authoritative managed provider.
+An actual live addition can still be compensated using the exact instance this operation added.
+When restoring multiple links, all restored links and their recovery records remain guarded through subsequent provider callbacks and the final completion write.
+If a later callback recreates a target, recovery retains the unresolved records and compensates only exact unchanged source instances it added, never existing sources or listener replacements.
 After a completed switch or reconstruction, undo requires the reviewed marker, exact expected profile and entire configuration, the authoritative expected managed link provider, and the journaled candidate Thing owned by the same review.
 An unchanged editor save retaining those fields preserves the migration claim; retaining the marker while changing the profile does not.
 

@@ -188,13 +188,18 @@ class ManagedModbusMigrationCutoverRecheckTest {
                 linkIntents.add(journal().links(key));
                 if (value.contains("\"" + phase + "\"") && once.compareAndSet(false, true)) {
                     links.add(foreign);
+                    throw new AssertionError("interrupted after persistence before target add");
                 }
             }
             return previous;
         }).when(storage).put(anyString(), anyString());
 
-        assertThrows(IllegalStateException.class, () -> applier().cutover(preview, group));
+        assertThrows(AssertionError.class, () -> applier().cutover(preview, group));
         assertTrue(once.get());
+        clearInvocations(linkProvider);
+        var cleanStorage = ManagedModbusMigrationStagingTest.storage(persisted);
+        assertThrows(IllegalStateException.class,
+                () -> applier(new MigrationJournal(cleanStorage)).revertLink(preview, first));
         assertSame(foreign, links.get(foreign.getUID()));
         assertNull(links.get(source(first).getUID()));
         verify(linkProvider, never()).remove(foreign.getUID());
@@ -361,9 +366,17 @@ class ManagedModbusMigrationCutoverRecheckTest {
         assertEquals(List.of(first), journal().links(key));
         // New journal/provider-facing applier, no process-local link instances.
         var cleanStorage = ManagedModbusMigrationStagingTest.storage(persisted);
-        applier(new MigrationJournal(cleanStorage)).revertLink(preview, first);
-        assertFirstRestored();
-        assertTrue(journal().links(key).isEmpty());
+        if (seam.equals("after-add")) {
+            assertThrows(IllegalStateException.class,
+                    () -> applier(new MigrationJournal(cleanStorage)).revertLink(preview, first));
+            assertNotNull(links.get(target(first).getUID()));
+            assertNull(links.get(source(first).getUID()));
+            assertEquals(List.of(first), journal().links(key));
+        } else {
+            applier(new MigrationJournal(cleanStorage)).revertLink(preview, first);
+            assertFirstRestored();
+            assertTrue(journal().links(key).isEmpty());
+        }
         assertNotNull(links.get(source(second).getUID()));
     }
 
@@ -395,6 +408,71 @@ class ManagedModbusMigrationCutoverRecheckTest {
         verify(linkProvider, never()).add(any());
         verify(linkProvider, never()).remove(anyString());
         assertNull(links.get(source(first).getUID()));
+        assertEquals(group.links(), journal().links(key));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void laterSourceRestoreMustRevalidateEarlierRestoredLinks(boolean explicitRevert) {
+        ManagedModbusMigrationApplier operation = applier();
+        ItemChannelLink recreated = link(second, second.targetChannelUid(), second.targetConfiguration());
+        if (explicitRevert) {
+            operation.cutover(preview, group);
+        } else {
+            doAnswer(call -> {
+                ItemChannelLink added = call.getArgument(0);
+                managedLinks.put(added.getUID(), added);
+                links.added(linkProvider, added);
+                throw new IllegalStateException("fail after second target publication");
+            }).when(linkProvider).add(argThat(link -> link.getUID().equals(target(second).getUID())));
+        }
+        onAdd(source(first), () -> {
+            clearInvocations(linkProvider);
+            links.added(foreignProvider, recreated);
+        });
+
+        assertThrows(IllegalStateException.class, () -> {
+            if (explicitRevert) {
+                operation.removeTargets(preview);
+            } else {
+                operation.cutover(preview, group);
+            }
+        });
+        assertSame(recreated, links.get(recreated.getUID()));
+        assertNull(links.get(source(second).getUID()), "Remove only the source just restored by this recovery");
+        assertTrue(journal().links(key).contains(second), "Keep unresolved earlier restoration recoverable");
+        verify(linkProvider, never()).remove(recreated.getUID());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void recoveryCompletionMustGuardWholeRestoredSetAndPreserveReplacementSources(boolean replaceSource) {
+        ManagedModbusMigrationApplier operation = applier();
+        operation.cutover(preview, group);
+        ItemChannelLink recreated = link(second, second.targetChannelUid(), second.targetConfiguration());
+        ItemChannelLink replacement = source(second);
+        Runnable conflict = () -> {
+            if (replaceSource) {
+                replaceManaged(source(second), replacement);
+            }
+            clearInvocations(linkProvider);
+            links.added(foreignProvider, recreated);
+        };
+        if (replaceSource) {
+            onAdd(source(first), conflict);
+        } else {
+            onIntentWrite(conflict);
+        }
+
+        assertThrows(IllegalStateException.class, () -> operation.removeTargets(preview));
+        assertSame(recreated, links.get(recreated.getUID()));
+        if (replaceSource) {
+            assertSame(replacement, links.get(replacement.getUID()));
+            verify(linkProvider, never()).remove(replacement.getUID());
+        } else {
+            assertNull(links.get(source(second).getUID()));
+        }
+        verify(linkProvider, never()).remove(recreated.getUID());
         assertEquals(group.links(), journal().links(key));
     }
 
@@ -471,6 +549,25 @@ class ManagedModbusMigrationCutoverRecheckTest {
         assertFirstRestored();
         // Removing the target is safe here: the original reviewed managed source is still present.
         assertTrue(journal().links(key).isEmpty());
+    }
+
+    @Test
+    void targetAddListenerReplacingFirstTargetWithIdenticalMarkedManagedLinkMustRetainRecoveryIntent() {
+        ItemChannelLink replacement = link(first, first.targetChannelUid(), first.targetConfiguration());
+        onAdd(target(first), () -> {
+            ItemChannelLink added = java.util.Objects.requireNonNull(links.get(replacement.getUID()));
+            assertEquals(added.getConfiguration().getProperties(), replacement.getConfiguration().getProperties());
+            assertNotSame(added, replacement);
+            replaceManaged(added, replacement);
+        });
+
+        assertThrows(IllegalStateException.class, () -> applier().cutover(preview, group));
+        assertSame(replacement, links.get(replacement.getUID()));
+        assertSame(linkProvider, links.getProvider(replacement));
+        assertNull(links.get(source(first).getUID()));
+        verify(linkProvider, never()).remove(replacement.getUID());
+        assertUntouchedSecond();
+        assertEquals(List.of(first), journal().links(key));
     }
 
     @ParameterizedTest

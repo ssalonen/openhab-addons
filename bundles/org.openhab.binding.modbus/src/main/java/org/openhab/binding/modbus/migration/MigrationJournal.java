@@ -122,7 +122,7 @@ final class MigrationJournal {
         }
 
         boolean permitsTargetRemoval() {
-            return version == 1 && (phase == LinkPhase.ADD_ATTEMPTED || phase == LinkPhase.ADD_CONFIRMED);
+            return version == 1 && phase == LinkPhase.ADD_CONFIRMED;
         }
     }
 

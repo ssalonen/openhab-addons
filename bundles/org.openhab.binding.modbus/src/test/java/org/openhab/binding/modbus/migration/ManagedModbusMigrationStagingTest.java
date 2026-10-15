@@ -180,10 +180,14 @@ class ManagedModbusMigrationStagingTest {
         org.junit.jupiter.api.Assertions.assertEquals(1, failure.getSuppressed().length);
         verify(links, never()).add(source);
         MigrationJournal recovered = new MigrationJournal(storage(persisted));
-        new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
+        var reconstructed = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
                 new ManagedModbusMigrationApplier(provider, links, recovered, things,
                         (org.openhab.core.thing.link.ManagedItemChannelLinkProvider) links.getProvider(source)),
-                recovered).revert(reviewed.identity(), mapping.itemName(), mapping.sourceChannelUid());
+                recovered);
+        // An unconfirmed addition is ambiguous after reconstruction, but the live exact instance is retryable.
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> reconstructed.revert(reviewed.identity(), mapping.itemName(), mapping.sourceChannelUid()));
+        workflow.revert(reviewed.identity(), mapping.itemName(), mapping.sourceChannelUid());
         verify(provider, never()).remove(any());
         verify(links, times(2)).remove(target.getUID());
         verify(links).add(source);

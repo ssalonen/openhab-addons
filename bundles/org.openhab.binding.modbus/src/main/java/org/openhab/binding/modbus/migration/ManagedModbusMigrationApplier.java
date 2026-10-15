@@ -342,76 +342,96 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
         if (journal.isEmpty()) {
             return;
         }
-        for (MigrationJournal.LinkIntent intent : new ArrayList<>(journal).reversed()) {
-            MigrationLink link = intent.link();
-            if (!selected.contains(link)) {
-                continue;
-            }
-            ItemChannelLink target = linkRegistry.get(targetLink(link).getUID());
-            ItemChannelLink source = linkRegistry.get(sourceLink(link).getUID());
-            if (source == null && expectedLinkProvider == null) {
-                throw new IllegalStateException("Recovery requires the expected authoritative managed link provider");
-            }
-            if ((source == null || target != null) && !this.journal.reviewedLink(key, link)) {
-                throw new IllegalStateException("Recovery link differs from immutable review; manual review required");
-            }
-            if (source == null && (intent.version() != 1 || intent.phase() == null
-                    || intent.phase() == MigrationJournal.LinkPhase.HISTORICAL)) {
-                throw new IllegalStateException("Ambiguous recovery intent; manual review required");
-            }
-            if (target != null && (!intent.permitsTargetRemoval() || knownNotAdded.contains(target.getUID()))) {
-                throw new IllegalStateException(
-                        "Recovery intent does not authorize target removal; manual review required");
-            }
-            if (target != null) {
-                String identity = key.substring(0, key.indexOf(':'));
-                ThingRegistry registry = thingRegistry;
-                ThingUID candidate = new ChannelUID(link.targetChannelUid()).getThingUID();
-                if (!link.markedDefaultTarget() || registry == null
-                        || !this.journal.targets(identity).contains(candidate.toString())
-                        || !ManagedModbusMigrationAdapter.ownsTarget(registry, thingProvider, candidate, identity)) {
+        List<MigrationJournal.LinkIntent> original = List.copyOf(journal);
+        Map<MigrationLink, ItemChannelLink> restoredLinks = new HashMap<>();
+        Map<MigrationLink, ItemChannelLink> addedSources = new HashMap<>();
+        boolean completionAttempted = false;
+        try {
+            for (MigrationJournal.LinkIntent intent : new ArrayList<>(journal).reversed()) {
+                MigrationLink link = intent.link();
+                if (!selected.contains(link)) {
+                    continue;
+                }
+                ItemChannelLink target = linkRegistry.get(targetLink(link).getUID());
+                ItemChannelLink source = linkRegistry.get(sourceLink(link).getUID());
+                if (source == null && expectedLinkProvider == null) {
                     throw new IllegalStateException(
-                            "Target ownership is uncertain; retain recovery record for manual review");
+                            "Recovery requires the expected authoritative managed link provider");
                 }
-            }
-            if ((target != null && !target.getConfiguration().getProperties().equals(link.targetConfiguration()))
-                    || (source != null && !source.getConfiguration().getProperties().equals(link.configuration()))) {
-                throw new IllegalStateException("Refusing to overwrite a link changed since migration");
-            }
-            if (target != null && !expectedManagedOwner(target)) {
-                throw new IllegalStateException("Refusing removal of unmanaged replacement link");
-            }
-            ItemChannelLink expectedTarget = activeTargetLinks.get(targetLink(link).getUID());
-            if (target != null && expectedTarget != null && !sameTarget(link, expectedTarget)) {
-                throw new IllegalStateException("Refusing replacement of the active cutover target link");
-            }
-            requireManagedSource(link, source);
-            // Removal callbacks can replace either link; a successful provider return is not proof of absence.
-            if (target != null) {
-                linkRegistry.remove(targetLink(link).getUID());
-            }
-            requireRestoredState(link, source);
-            ItemChannelLink restored = source == null ? sourceLink(link) : source;
-            try {
-                if (source == null) {
-                    linkRegistry.add(restored);
+                if ((source == null || target != null) && !this.journal.reviewedLink(key, link)) {
+                    throw new IllegalStateException(
+                            "Recovery link differs from immutable review; manual review required");
                 }
-                requireRestoredState(link, restored);
-                journal.remove(intent);
-                this.journal.intents(key, journal);
-                // Storage listeners are mutation boundaries too, even when recording completion.
-                requireRestoredState(link, restored);
-            } catch (RuntimeException failure) {
-                if (!journal.contains(intent)) {
-                    journal.add(intent);
-                    try {
-                        this.journal.intents(key, journal);
-                    } catch (RuntimeException journalFailure) {
-                        failure.addSuppressed(journalFailure);
+                if (source == null && (intent.version() != 1 || intent.phase() == null
+                        || intent.phase() == MigrationJournal.LinkPhase.HISTORICAL)) {
+                    throw new IllegalStateException("Ambiguous recovery intent; manual review required");
+                }
+                ItemChannelLink expectedTarget = activeTargetLinks.get(targetLink(link).getUID());
+                boolean liveAdd = intent.version() == 1 && intent.phase() == MigrationJournal.LinkPhase.ADD_ATTEMPTED
+                        && expectedTarget != null && sameTarget(link, expectedTarget);
+                if (target != null
+                        && ((!intent.permitsTargetRemoval() && !liveAdd) || knownNotAdded.contains(target.getUID()))) {
+                    throw new IllegalStateException(
+                            "Recovery intent does not authorize target removal; manual review required");
+                }
+                if (target != null) {
+                    String identity = key.substring(0, key.indexOf(':'));
+                    ThingRegistry registry = thingRegistry;
+                    ThingUID candidate = new ChannelUID(link.targetChannelUid()).getThingUID();
+                    if (!link.markedDefaultTarget() || registry == null
+                            || !this.journal.targets(identity).contains(candidate.toString())
+                            || !ManagedModbusMigrationAdapter.ownsTarget(registry, thingProvider, candidate,
+                                    identity)) {
+                        throw new IllegalStateException(
+                                "Target ownership is uncertain; retain recovery record for manual review");
                     }
                 }
-                // Compensate only our own unchanged source, never a listener's replacement.
-                if (source == null && sameSource(link, restored)
+                if ((target != null && !target.getConfiguration().getProperties().equals(link.targetConfiguration()))
+                        || (source != null
+                                && !source.getConfiguration().getProperties().equals(link.configuration()))) {
+                    throw new IllegalStateException("Refusing to overwrite a link changed since migration");
+                }
+                if (target != null && !expectedManagedOwner(target)) {
+                    throw new IllegalStateException("Refusing removal of unmanaged replacement link");
+                }
+                if (target != null && expectedTarget != null && !sameTarget(link, expectedTarget)) {
+                    throw new IllegalStateException("Refusing replacement of the active cutover target link");
+                }
+                requireManagedSource(link, source);
+                // Removal callbacks can replace either link; a successful provider return is not proof of absence.
+                if (target != null) {
+                    linkRegistry.remove(targetLink(link).getUID());
+                }
+                requireRestoredState(link, source);
+                requireRestoredLinks(restoredLinks);
+                ItemChannelLink restored = source == null ? sourceLink(link) : source;
+                restoredLinks.put(link, restored);
+                if (source == null) {
+                    addedSources.put(link, restored);
+                    linkRegistry.add(restored);
+                }
+                requireRestoredLinks(restoredLinks);
+                journal.remove(intent);
+            }
+            // Keep the entire cohort recoverable until every provider callback has completed.
+            completionAttempted = true;
+            this.journal.intents(key, journal);
+            requireRestoredLinks(restoredLinks);
+            for (MigrationLink link : restoredLinks.keySet()) {
+                activeTargetLinks.remove(targetLink(link).getUID());
+                knownNotAdded.remove(targetLink(link).getUID());
+            }
+        } catch (RuntimeException failure) {
+            if (completionAttempted) {
+                try {
+                    this.journal.intents(key, original);
+                } catch (RuntimeException journalFailure) {
+                    failure.addSuppressed(journalFailure);
+                }
+            }
+            // Never remove a pre-existing source or a listener replacement, even with identical metadata.
+            addedSources.forEach((link, restored) -> {
+                if (sameSource(link, restored)
                         && restored.getConfiguration().getProperties().equals(link.configuration())
                         && expectedManagedOwner(restored)) {
                     try {
@@ -420,11 +440,13 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
                         failure.addSuppressed(compensationFailure);
                     }
                 }
-                throw failure;
-            }
-            activeTargetLinks.remove(targetLink(link).getUID());
-            knownNotAdded.remove(targetLink(link).getUID());
+            });
+            throw failure;
         }
+    }
+
+    private void requireRestoredLinks(Map<MigrationLink, ItemChannelLink> restoredLinks) {
+        restoredLinks.forEach(this::requireRestoredState);
     }
 
     @SuppressWarnings("PMD.CompareObjectsWithEquals") // Active ownership is tied to the link actually added.
