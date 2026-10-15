@@ -12,6 +12,7 @@
  */
 package org.openhab.binding.modbus.migration;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,8 +73,32 @@ final class MigrationReviewConfiguration {
                         && "default".equalsIgnoreCase(entry.trim());
     }
 
+    // Core injects these defaults even without a write destination. Validate them separately from the
+    // read-only display DTO; the original full source map must still determine review identity.
+    private static boolean inertDataDefault(String key, @Nullable Object value) {
+        return switch (key) {
+            case "writeTransform" -> value instanceof List<?> && identityTransform(value);
+            case "writeMultipleEvenWithSingleRegisterOrCoil" -> Boolean.FALSE.equals(value);
+            case "writeMaxTries" -> numericDefault(value, 3);
+            case "updateUnchangedValuesEveryMillis" -> numericDefault(value, 1000);
+            default -> false;
+        };
+    }
+
+    private static boolean numericDefault(@Nullable Object value, int expected) {
+        if (!(value instanceof Number)) {
+            return false;
+        }
+        try {
+            return new BigDecimal(value.toString()).compareTo(BigDecimal.valueOf(expected)) == 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
     static String dataReason(Map<String, Object> source) {
-        if (source.keySet().stream().anyMatch(key -> key.startsWith("write"))) {
+        if (source.entrySet().stream().anyMatch(
+                entry -> entry.getKey().startsWith("write") && !inertDataDefault(entry.getKey(), entry.getValue()))) {
             return source.get("writeTransform") instanceof String text && text.contains("JSON")
                     ? "JSON write transform requires manual migration; configuration omitted"
                     : "writes require manual migration; configuration omitted";
@@ -81,7 +106,9 @@ final class MigrationReviewConfiguration {
         if (source.containsKey("readTransform") && !identityTransform(source.get("readTransform"))) {
             return "custom readTransform requires manual migration; configuration omitted";
         }
-        if (!data(source).equals(source)) {
+        Map<String, Object> readable = data(source);
+        if (source.entrySet().stream().anyMatch(entry -> !readable.containsKey(entry.getKey())
+                && !inertDataDefault(entry.getKey(), entry.getValue()))) {
             return "unknown or invalid data configuration requires manual migration; configuration omitted";
         }
         return "";

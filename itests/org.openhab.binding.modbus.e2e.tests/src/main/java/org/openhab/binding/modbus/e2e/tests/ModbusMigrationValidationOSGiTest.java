@@ -131,16 +131,22 @@ public class ModbusMigrationValidationOSGiTest extends JavaOSGiTest {
                 waitForAssert(() -> assertNotNull(registry.get(data).getHandler()));
                 ModbusMigrationService service = getService(ModbusMigrationService.class);
                 assertNotNull(service);
-                // Core supplies inactive write defaults; this fixture explicitly models a read-only source.
+                // Keep Core's real injected defaults: removing them concealed runtime classification failures.
                 var readOnlyConfiguration = java.util.Objects.requireNonNull(registry.get(data)).getConfiguration();
-                readOnlyConfiguration.getProperties().keySet().stream()
-                        .filter(key -> !java.util.Set.of("readStart", "readValueType", "readTransform").contains(key))
-                        .toList().forEach(readOnlyConfiguration::remove);
-                // The fixture changed source configuration; responses may not open a replacement lifecycle themselves.
-                java.util.Objects.requireNonNull(registry.get(data).getHandler()).initialize();
+                waitForAssert(() -> {
+                    assertEquals(java.util.List.of("default"), readOnlyConfiguration.get("readTransform"));
+                    assertEquals(java.util.List.of("default"), readOnlyConfiguration.get("writeTransform"));
+                    assertEquals(Boolean.FALSE, readOnlyConfiguration.get("writeMultipleEvenWithSingleRegisterOrCoil"));
+                    assertEquals(new java.math.BigDecimal("3"), readOnlyConfiguration.get("writeMaxTries"));
+                    assertEquals(new java.math.BigDecimal("1000"),
+                            readOnlyConfiguration.get("updateUnchangedValuesEveryMillis"));
+                });
+                var capturedConfiguration = Map.copyOf(readOnlyConfiguration.getProperties());
                 links.add(production);
                 var plan = service.preview().plan();
                 assertEquals(1, plan.groups().size(), plan.yaml());
+                assertTrue(plan.manualWork().isEmpty(), plan.manualWork().toString());
+                assertEquals(capturedConfiguration, readOnlyConfiguration.getProperties());
                 String identity = plan.identity();
                 service.apply(identity);
                 ThingUID target = new ThingUID("modbus:poller2:validation:holding");
