@@ -13,6 +13,7 @@
 package org.openhab.binding.modbus.migration;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
@@ -26,8 +27,6 @@ import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
-import javax.ws.rs.container.ContainerRequestContext;
-import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
@@ -112,8 +111,8 @@ public class ModbusMigrationResource implements RESTResource {
     @POST
     @Path("workflows/{identity}/validate")
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response validate(@PathParam("identity") String identity, @Context ContainerRequestContext request) {
-        return withBody(request, List.of("sourcePollerUid"), body -> execute(() -> {
+    public Response validate(@PathParam("identity") String identity, InputStream entityStream) {
+        return withBody(entityStream, List.of("sourcePollerUid"), body -> execute(() -> {
             var report = review(identity);
             String poller = poller(report, body);
             var observation = service.validate(identity, poller);
@@ -124,8 +123,8 @@ public class ModbusMigrationResource implements RESTResource {
     @POST
     @Path("workflows/{identity}/cutover")
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response cutover(@PathParam("identity") String identity, @Context ContainerRequestContext request) {
-        return withBody(request, List.of("sourcePollerUid"), body -> execute(() -> {
+    public Response cutover(@PathParam("identity") String identity, InputStream entityStream) {
+        return withBody(entityStream, List.of("sourcePollerUid"), body -> execute(() -> {
             var report = review(identity);
             String poller = poller(report, body);
             service.cutover(identity, poller);
@@ -136,8 +135,8 @@ public class ModbusMigrationResource implements RESTResource {
     @POST
     @Path("workflows/{identity}/revert")
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response revert(@PathParam("identity") String identity, @Context ContainerRequestContext request) {
-        return withBody(request, List.of("itemName", "sourceChannelUid"), body -> execute(() -> {
+    public Response revert(@PathParam("identity") String identity, InputStream entityStream) {
+        return withBody(entityStream, List.of("itemName", "sourceChannelUid"), body -> execute(() -> {
             var report = review(identity);
             String item = field(body, "itemName", 255);
             String channel = field(body, "sourceChannelUid", 512);
@@ -172,11 +171,10 @@ public class ModbusMigrationResource implements RESTResource {
         return poller;
     }
 
-    private Response withBody(ContainerRequestContext request, List<String> fields,
-            Function<JsonObject, Response> operation) {
+    private Response withBody(InputStream entityStream, List<String> fields, Function<JsonObject, Response> operation) {
         try {
             // Do not hold the shared workflow monitor while receiving an HTTP request body.
-            var body = body(request);
+            var body = body(entityStream);
             if (body.size() != fields.size() || !body.keySet().containsAll(fields)) {
                 throw new Failure(400, ErrorCode.INVALID_INPUT);
             }
@@ -186,10 +184,10 @@ public class ModbusMigrationResource implements RESTResource {
         }
     }
 
-    private JsonObject body(ContainerRequestContext request) {
+    private JsonObject body(InputStream entityStream) {
         // Parsing here bounds input and sanitizes syntax/type failures before they reach generic REST error handling.
         try {
-            byte[] bytes = request.getEntityStream().readNBytes(MAX_BODY_BYTES + 1);
+            byte[] bytes = entityStream.readNBytes(MAX_BODY_BYTES + 1);
             if (bytes.length > MAX_BODY_BYTES) {
                 throw new Failure(400, ErrorCode.INVALID_INPUT);
             }

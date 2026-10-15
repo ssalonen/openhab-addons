@@ -43,7 +43,7 @@ import com.sun.net.httpserver.HttpServer;
 
 /**
  * Exercises JAX-RS routing and the actual Core JSON provider over loopback HTTP.
- * This standalone server deliberately does not test Core runtime role enforcement.
+ * This standalone Jersey server does not prove Core runtime injection or role enforcement.
  *
  * @author Sami Salonen - Initial contribution
  */
@@ -330,6 +330,7 @@ class ModbusMigrationResourceTest {
         assertEquals("1970-01-01T00:00:00Z", comparison.get("sourceObservedAt").getAsString());
         assertEquals("1970-01-01T00:00:00Z", comparison.get("targetObservedAt").getAsString());
         assertFalse(comparison.get("reason").getAsString().isBlank());
+        verify(service).validate(identity, "modbus:poller:tcp:plant");
         assertEquals(405, request("GET", "workflows/" + identity + "/validate", "").statusCode());
         java.nio.file.Files.writeString(java.nio.file.Path.of("target/migration-rest-validation-example.json"),
                 response.body());
@@ -422,6 +423,7 @@ class ModbusMigrationResourceTest {
         var response = request("POST", path, "{\"sourcePollerUid\":\"modbus:poller:tcp:plant\"}");
         assertEquals(409, response.statusCode(), response.body());
         assertEquals("CONFLICT", JsonParser.parseString(response.body()).getAsJsonObject().get("code").getAsString());
+        verify(service).cutover(identity, "modbus:poller:tcp:plant");
         assertEquals(405, request("GET", path, "").statusCode());
         verify(links, never()).add(any());
         verify(links, never()).remove(anyString());
@@ -449,6 +451,7 @@ class ModbusMigrationResourceTest {
         assertEquals("STAGED", report.get("status").getAsString());
         assertEquals(report, json(request("GET", "workflows/" + identity, "")));
         assertEquals(405, request("GET", path, "").statusCode());
+        verify(service).revert(identity, "Value", "modbus:data:tcp:plant:value:number");
         // There was no cutover: reverting the reviewed source link is an idempotent no-op.
         verify(links, never()).add(any());
         verify(links, never()).remove(anyString());
@@ -471,17 +474,26 @@ class ModbusMigrationResourceTest {
     @Test
     void malformedWrongTypeOversizedAndExtraRequestFieldsReturnTypedSanitizedInputErrors() throws Exception {
         String identity = capture();
+        var before = Map.copyOf(persisted);
+        clearInvocations(service, things, links, provider, storage);
         for (String suffix : List.of("validate", "cutover", "revert")) {
             for (String body : List.of("[1]", "{", "{\"password\":\"private-input\"}", "{\"sourcePollerUid\":123}",
                     "{\"sourcePollerUid\":\"modbus:poller:tcp:plant\",\"override\":true}",
                     "{\"sourcePollerUid\":\"" + "a".repeat(8193) + "\"}")) {
                 var response = request("POST", "workflows/" + identity + "/" + suffix, body);
                 assertEquals(400, response.statusCode(), response.body());
-                assertEquals("INVALID_INPUT",
-                        JsonParser.parseString(response.body()).getAsJsonObject().get("code").getAsString());
+                assertEquals(
+                        JsonParser
+                                .parseString("{\"code\":\"INVALID_INPUT\",\"message\":\"Invalid migration request.\"}"),
+                        JsonParser.parseString(response.body()));
                 assertFalse(response.body().contains("private-input"));
             }
         }
+        assertEquals(before, persisted);
+        verify(service, never()).validate(anyString(), anyString());
+        verify(service, never()).cutover(anyString(), anyString());
+        verify(service, never()).revert(anyString(), anyString(), anyString());
+        verifyNoInteractions(things, links, provider, storage);
         assertEquals(400, new ModbusMigrationResource(service).report("").getStatus());
     }
 
@@ -500,6 +512,17 @@ class ModbusMigrationResourceTest {
         assertEquals("INTERNAL_ERROR",
                 JsonParser.parseString(response.body()).getAsJsonObject().get("code").getAsString());
         assertFalse(response.body().contains("private-provider-message"));
+    }
+
+    @Test
+    void bodyEndpointsUseUnannotatedEntityStreamsRatherThanBackendSpecificContextInjection() {
+        for (String name : List.of("validate", "cutover", "revert")) {
+            var method = java.util.Arrays.stream(ModbusMigrationResource.class.getDeclaredMethods())
+                    .filter(candidate -> candidate.getName().equals(name)).findFirst().orElseThrow();
+            var entity = method.getParameters()[1];
+            assertEquals(java.io.InputStream.class, entity.getType(), name);
+            assertEquals(0, entity.getAnnotations().length, name + " must use the JAX-RS entity parameter");
+        }
     }
 
     @Test
