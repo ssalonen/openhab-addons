@@ -28,6 +28,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -54,6 +56,7 @@ import org.openhab.core.io.transport.modbus.AsyncModbusWriteResult;
 import org.openhab.core.io.transport.modbus.BitArray;
 import org.openhab.core.io.transport.modbus.ModbusConstants;
 import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
+import org.openhab.core.io.transport.modbus.ModbusFailureCallback;
 import org.openhab.core.io.transport.modbus.ModbusReadCallback;
 import org.openhab.core.io.transport.modbus.ModbusReadFunctionCode;
 import org.openhab.core.io.transport.modbus.ModbusReadRequestBlueprint;
@@ -443,6 +446,61 @@ public class ModbusDataHandlerTest extends AbstractModbusOSGiTest {
                 ModbusConstants.ValueType.INT32, ThingStatus.ONLINE);
     }
 
+    private record CapturedRead(ModbusReadRequestBlueprint request, ModbusReadCallback success,
+            ModbusFailureCallback<ModbusReadRequestBlueprint> failure) {
+    }
+
+    private Bridge createReadPoller(ModbusReadFunctionCode functionCode) {
+        Configuration config = new Configuration();
+        config.put("start", 0);
+        config.put("length", 3);
+        config.put("type", switch (functionCode) {
+            case READ_COILS -> READ_TYPE_COIL;
+            case READ_INPUT_DISCRETES -> READ_TYPE_DISCRETE_INPUT;
+            case READ_INPUT_REGISTERS -> READ_TYPE_INPUT_REGISTER;
+            case READ_MULTIPLE_REGISTERS -> READ_TYPE_HOLDING_REGISTER;
+        });
+        config.put("refresh", 0L);
+        config.put("cacheMillis", 0L);
+        Bridge poller = BridgeBuilder
+                .create(THING_TYPE_MODBUS_POLLER, new ThingUID(THING_TYPE_MODBUS_POLLER, "poller1"))
+                .withConfiguration(config).withBridge(realEndpointWithMockedComms.getUID()).build();
+        addThing(poller);
+        waitForAssert(() -> assertEquals(ThingStatus.ONLINE, poller.getStatus()));
+        ModbusPollerThingHandler parent = (ModbusPollerThingHandler) poller.getHandler();
+        assertNotNull(parent.getRequest());
+        assertTrue(parent.hasCurrentReadConfiguration());
+        return poller;
+    }
+
+    private BlockingQueue<CapturedRead> captureReadSubmissions() {
+        BlockingQueue<CapturedRead> reads = new LinkedBlockingQueue<>();
+        when(comms.submitOneTimePoll(any(), any(), any())).thenAnswer(invocation -> {
+            reads.add(
+                    new CapturedRead(invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2)));
+            return mock(ScheduledFuture.class);
+        });
+        return reads;
+    }
+
+    private void awaitLinkRefreshes(BlockingQueue<CapturedRead> reads) {
+        // Core sends one REFRESH per new Item link. Retain those real submissions without delivering them;
+        // only the explicit refresh below supplies the single outcome asserted by the read tests.
+        waitForAssert(() -> assertEquals(CHANNEL_TO_ACCEPTED_TYPE.size(), reads.size()));
+        reads.clear();
+    }
+
+    private CapturedRead captureRefresh(ModbusPollerThingHandler parent, BlockingQueue<CapturedRead> reads) {
+        assertTrue(reads.isEmpty());
+        assertTrue(parent.hasCurrentReadConfiguration());
+        parent.refresh();
+        CapturedRead read = reads.poll();
+        assertNotNull(read);
+        assertSame(parent.getRequest(), read.request());
+        assertTrue(reads.isEmpty());
+        return read;
+    }
+
     private ModbusDataThingHandler testReadHandlingGeneric(ModbusReadFunctionCode functionCode, String start,
             String transform, ValueType valueType, BitArray bits, ModbusRegisterArray registers, Exception error) {
         return testReadHandlingGeneric(functionCode, start, transform, valueType, bits, registers, error, null);
@@ -459,20 +517,9 @@ public class ModbusDataHandlerTest extends AbstractModbusOSGiTest {
     private ModbusDataThingHandler testReadHandlingGeneric(ModbusReadFunctionCode functionCode, String start,
             String transform, ValueType valueType, BitArray bits, ModbusRegisterArray registers, Exception error,
             BundleContext context, boolean autoCreateItemsAndLinkToChannels) {
-        ModbusSlaveEndpoint endpoint = new ModbusTCPSlaveEndpoint("thisishost", 502, false);
-
-        int pollLength = 3;
-
-        // Minimally mocked request
-        ModbusReadRequestBlueprint request = Mockito.mock(ModbusReadRequestBlueprint.class);
-        doReturn(pollLength).when(request).getDataLength();
-        doReturn(functionCode).when(request).getFunctionCode();
-
-        PollTask task = Mockito.mock(PollTask.class);
-        doReturn(endpoint).when(task).getEndpoint();
-        doReturn(request).when(task).getRequest();
-
-        Bridge poller = createPollerMock("poller1", task);
+        Bridge poller = createReadPoller(functionCode);
+        ModbusPollerThingHandler parent = (ModbusPollerThingHandler) poller.getHandler();
+        BlockingQueue<CapturedRead> reads = captureReadSubmissions();
 
         Configuration dataConfig = new Configuration();
         dataConfig.put("readStart", start);
@@ -485,23 +532,27 @@ public class ModbusDataHandlerTest extends AbstractModbusOSGiTest {
 
         assertThat(dataHandler.getThing().getStatus(), is(equalTo(ThingStatus.ONLINE)));
 
-        // call callbacks
+        if (autoCreateItemsAndLinkToChannels) {
+            awaitLinkRefreshes(reads);
+        }
+        CapturedRead read = captureRefresh(parent, reads);
+        ModbusReadRequestBlueprint request = read.request();
         if (bits != null) {
             assertNull(registers);
             assertNull(error);
             AsyncModbusReadResult result = new AsyncModbusReadResult(request, bits);
-            dataHandler.onReadResult(result);
+            read.success().handle(result);
         } else if (registers != null) {
             assertNull(bits);
             assertNull(error);
             AsyncModbusReadResult result = new AsyncModbusReadResult(request, registers);
-            dataHandler.onReadResult(result);
+            read.success().handle(result);
         } else {
             assertNull(bits);
             assertNull(registers);
             assertNotNull(error);
             AsyncModbusFailure<ModbusReadRequestBlueprint> result = new AsyncModbusFailure<>(request, error);
-            dataHandler.handleReadError(result);
+            read.failure().handle(result);
         }
         return dataHandler;
     }
