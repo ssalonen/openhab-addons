@@ -13,21 +13,26 @@
 package org.openhab.binding.modbus.internal;
 
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.modbus.ModbusBindingConstants;
+import org.openhab.core.thing.ThingRegistry;
 import org.openhab.core.thing.type.ChannelType;
 import org.openhab.core.thing.type.ChannelTypeBuilder;
 import org.openhab.core.thing.type.ChannelTypeProvider;
 import org.openhab.core.thing.type.ChannelTypeUID;
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 
 /**
- * Generates ChannelTypes for the accepted item types of live poller2 channels.
+ * Generates ChannelTypes for the accepted item types of live and persisted poller2 channels.
  *
  * @author Sami Salonen - Initial contribution
  */
@@ -36,31 +41,76 @@ import org.osgi.service.component.annotations.Component;
 public class ModbusChannelTypeProvider implements ChannelTypeProvider {
     private static final String GENERATED_PREFIX = "poller2-generated-";
 
-    private final Map<String, ChannelTypeUID> channelTypeUIDsByItemType = new ConcurrentHashMap<>();
-    private final Map<ChannelTypeUID, ChannelType> channelTypes = new ConcurrentHashMap<>();
+    private final Map<ChannelTypeUID, ChannelType> channelTypes = new HashMap<>();
+    private final Set<ChannelTypeUID> ambiguousUIDs = new HashSet<>();
+    private @Nullable ThingRegistry thingRegistry;
 
-    @Override
-    public Collection<ChannelType> getChannelTypes(@Nullable Locale locale) {
-        return channelTypes.values();
+    @Reference
+    public synchronized void setThingRegistry(ThingRegistry thingRegistry) {
+        this.thingRegistry = thingRegistry;
     }
 
     @Override
-    public @Nullable ChannelType getChannelType(ChannelTypeUID channelTypeUID, @Nullable Locale locale) {
+    public synchronized Collection<ChannelType> getChannelTypes(@Nullable Locale locale) {
+        restorePersistedChannelTypes();
+        return List.copyOf(channelTypes.values());
+    }
+
+    @Override
+    public synchronized @Nullable ChannelType getChannelType(ChannelTypeUID channelTypeUID, @Nullable Locale locale) {
+        restorePersistedChannelTypes();
         return channelTypes.get(channelTypeUID);
     }
 
-    public @Nullable ChannelTypeUID getGeneratedChannelTypeUID(@Nullable String itemType) {
+    private void restorePersistedChannelTypes() {
+        ThingRegistry registry = thingRegistry;
+        if (registry == null) {
+            return;
+        }
+        // Core resolves persisted channel types before creating handlers. Read the public registry lazily:
+        // the registry service may be activated before its managed Things have been restored.
+        for (var thing : registry.getAll()) {
+            if (ModbusBindingConstantsInternal.THING_TYPE_MODBUS_POLLER2.equals(thing.getThingTypeUID())) {
+                for (var channel : thing.getChannels()) {
+                    String itemType = channel.getAcceptedItemType();
+                    if (itemType != null && !itemType.isBlank()
+                            && generatedUID(itemType).equals(channel.getChannelTypeUID())) {
+                        registerChannelType(itemType);
+                    }
+                }
+            }
+        }
+    }
+
+    public synchronized @Nullable ChannelTypeUID getGeneratedChannelTypeUID(@Nullable String itemType) {
         if (itemType == null || itemType.isBlank()) {
             return null;
         }
-        return channelTypeUIDsByItemType.computeIfAbsent(itemType, this::createChannelType);
+        restorePersistedChannelTypes();
+        return registerChannelType(itemType);
     }
 
-    private ChannelTypeUID createChannelType(String itemType) {
+    private ChannelTypeUID generatedUID(String itemType) {
         String id = GENERATED_PREFIX
                 + itemType.replace(':', '-').replaceAll("([a-z])([A-Z])", "$1-$2").toLowerCase(Locale.ROOT);
-        ChannelTypeUID uid = new ChannelTypeUID(ModbusBindingConstants.BINDING_ID, id);
-        channelTypes.putIfAbsent(uid, ChannelTypeBuilder.state(uid, itemType, itemType).build());
+        return new ChannelTypeUID(ModbusBindingConstants.BINDING_ID, id);
+    }
+
+    private @Nullable ChannelTypeUID registerChannelType(String itemType) {
+        ChannelTypeUID uid = generatedUID(itemType);
+        if (ambiguousUIDs.contains(uid)) {
+            return null;
+        }
+        ChannelType existing = channelTypes.get(uid);
+        if (existing != null && !itemType.equals(existing.getItemType())) {
+            // The historical ID encoding is not injective. Never expose another accepted Item type under this ID.
+            channelTypes.remove(uid);
+            ambiguousUIDs.add(uid);
+            return null;
+        }
+        if (existing == null) {
+            channelTypes.put(uid, ChannelTypeBuilder.state(uid, itemType, itemType).build());
+        }
         return uid;
     }
 }

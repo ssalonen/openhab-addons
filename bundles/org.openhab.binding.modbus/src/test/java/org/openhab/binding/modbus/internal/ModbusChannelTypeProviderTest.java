@@ -14,10 +14,23 @@ package org.openhab.binding.modbus.internal;
 
 import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.mockito.Mockito.*;
+
+import java.util.List;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.openhab.core.thing.Bridge;
+import org.openhab.core.thing.ChannelUID;
+import org.openhab.core.thing.ThingRegistry;
+import org.openhab.core.thing.ThingTypeUID;
+import org.openhab.core.thing.ThingUID;
+import org.openhab.core.thing.binding.builder.BridgeBuilder;
+import org.openhab.core.thing.binding.builder.ChannelBuilder;
 import org.openhab.core.thing.type.ChannelType;
 import org.openhab.core.thing.type.ChannelTypeUID;
 
@@ -63,6 +76,88 @@ public class ModbusChannelTypeProviderTest {
                 assertEquals(java.util.Set.of("address", "valueType"), required);
             }
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "Number", "Number:Temperature", "Number:CustomDimension", "Switch", "Contact", "Dimmer",
+            "Rollershutter", "String", "DateTime" })
+    public void reconstructsPersistedManagedChannelsBeforeAnyHandlerExists(String itemType) {
+        var original = new ModbusChannelTypeProvider();
+        var uid = requireNonNull(original.getGeneratedChannelTypeUID(itemType));
+        var thing = persistedPoller("restored", itemType, uid);
+        var channels = List.copyOf(thing.getChannels());
+        var registry = mock(ThingRegistry.class);
+        when(registry.getAll()).thenReturn(List.of(thing));
+        var restarted = new ModbusChannelTypeProvider();
+        restarted.setThingRegistry(registry);
+
+        assertEquals(itemType, requireNonNull(restarted.getChannelType(uid, null)).getItemType());
+        assertEquals(channels, thing.getChannels());
+        assertNull(thing.getHandler());
+        assertEquals(1, restarted.getChannelTypes(null).size());
+        verify(registry, atLeastOnce()).getAll();
+        verifyNoMoreInteractions(registry);
+    }
+
+    @Test
+    public void discoversThingsRestoredAfterRegistryServiceActivation() {
+        var registry = mock(ThingRegistry.class);
+        var uid = new ChannelTypeUID("modbus:poller2-generated-number-temperature");
+        when(registry.getAll()).thenReturn(List.of());
+        var provider = new ModbusChannelTypeProvider();
+        provider.setThingRegistry(registry);
+        assertNull(provider.getChannelType(uid, null));
+        when(registry.getAll()).thenReturn(List.of(persistedPoller("late", "Number:Temperature", uid)));
+        assertEquals("Number:Temperature", provider.getChannelTypes(null).iterator().next().getItemType());
+        assertEquals("Number:Temperature", requireNonNull(provider.getChannelType(uid, null)).getItemType());
+    }
+
+    @Test
+    public void ignoresForeignThingsAndMismatchedOrStaticTypeIds() {
+        var registry = mock(ThingRegistry.class);
+        var uid = new ChannelTypeUID("modbus:poller2-generated-number-temperature");
+        var foreign = BridgeBuilder.create(new ThingTypeUID("other", "poller2"), "foreign").withChannels(ChannelBuilder
+                .create(new ChannelUID("other:poller2:foreign:value"), "Number:Temperature").withType(uid).build())
+                .build();
+        when(registry.getAll()).thenReturn(List.of(foreign, persistedPoller("mismatch", "Switch", uid),
+                persistedPoller("static", "Number:Temperature", new ChannelTypeUID("modbus:poller2-number"))));
+        var provider = new ModbusChannelTypeProvider();
+        provider.setThingRegistry(registry);
+        assertNull(provider.getChannelType(uid, null));
+        assertEquals(0, provider.getChannelTypes(null).size());
+    }
+
+    @Test
+    public void refusesPersistedCollisionsInEitherRegistryOrder() {
+        var uid = new ChannelTypeUID("modbus:poller2-generated-number-custom-dimension");
+        var first = persistedPoller("first", "Number:CustomDimension", uid);
+        var second = persistedPoller("second", "Number:Custom-Dimension", uid);
+        for (var things : List.of(List.of(first, second), List.of(second, first))) {
+            var registry = mock(ThingRegistry.class);
+            when(registry.getAll()).thenReturn(List.copyOf(things));
+            var provider = new ModbusChannelTypeProvider();
+            provider.setThingRegistry(registry);
+            assertNull(provider.getChannelType(uid, null));
+            assertEquals(0, provider.getChannelTypes(null).size());
+            assertNull(provider.getGeneratedChannelTypeUID("Number:CustomDimension"));
+        }
+    }
+
+    @Test
+    public void refusesAmbiguousGeneratedIdentities() {
+        var provider = new ModbusChannelTypeProvider();
+        var uid = requireNonNull(provider.getGeneratedChannelTypeUID("Number:CustomDimension"));
+        assertNull(provider.getGeneratedChannelTypeUID("Number:Custom-Dimension"));
+        assertNull(provider.getChannelType(uid, null));
+        assertNull(provider.getGeneratedChannelTypeUID("Number:CustomDimension"));
+        assertEquals(0, provider.getChannelTypes(null).size());
+    }
+
+    private Bridge persistedPoller(String id, String itemType, ChannelTypeUID typeUID) {
+        var thingUID = new ThingUID("modbus:poller2:recovery-acceptance:" + id);
+        var channel = ChannelBuilder.create(new ChannelUID(thingUID, "value"), itemType).withType(typeUID).build();
+        return BridgeBuilder.create(ModbusBindingConstantsInternal.THING_TYPE_MODBUS_POLLER2, thingUID)
+                .withChannels(channel).build();
     }
 
     @Test
