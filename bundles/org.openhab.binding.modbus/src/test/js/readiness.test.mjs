@@ -6,7 +6,10 @@ const sourcePollerUid = 'legacy:one';
 const other = 'legacy:two';
 const report = {preview:{identity:'review',groups:[{sourcePollerUid},{sourcePollerUid:other}]},
   status:'STAGED',validation:'UNAVAILABLE',cutoverReady:false,readinessReason:'No fresh comparison'};
-const comparison = {previewIdentity:'review',sourcePollerUid,outcome:'MATCH',comparisons:[{outcome:'MATCH'}]};
+const channel = {sourceChannelUid:'legacy:one:number',targetChannelUid:'modbus:poller2:one:number',
+  address:'100',valueType:'int16',sourceValue:'42',targetValue:'42',
+  sourceObservedAt:'2026-10-14T09:00:00Z',targetObservedAt:'2026-10-14T09:00:01Z',outcome:'MATCH',reason:''};
+const comparison = {previewIdentity:'review',sourcePollerUid,outcome:'MATCH',comparisons:[channel]};
 function fixture(observation = comparison) {
   const calls = [];
   let session = 1;
@@ -64,6 +67,25 @@ test('unknown, mismatched, unavailable, empty or inconsistent comparisons cannot
     const count = f.calls.length;
     await assert.rejects(request(f));
     assert.equal(f.calls.length,count);
+  }
+});
+
+test('malformed nested evidence is discarded before controller state is published', async () => {
+  const malformed = [null, {}, [], 'MATCH'];
+  for (const field of Object.keys(channel)) {
+    if (!field.endsWith('ObservedAt')) {
+      const missing = {...channel}; delete missing[field]; malformed.push(missing);
+    }
+    malformed.push({...channel,[field]:{unsafe:'backend detail'}});
+  }
+  for (const entry of malformed) {
+    const f = fixture({...comparison,comparisons:[entry]});
+    await validate(f);
+    assert.equal(f.controller.state.comparison,null);
+    assert.ok(cutoverBlockReason(report,sourcePollerUid,f.controller.state.comparison));
+    const count = f.calls.length;
+    await assert.rejects(request(f));
+    assert.equal(f.calls.length,count,'malformed evidence cannot issue a cutover POST');
   }
 });
 

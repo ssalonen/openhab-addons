@@ -13,6 +13,16 @@ function record(value) {
 function stringFields(value, keys) {
   return record(value) && keys.every(key => typeof value[key] === 'string');
 }
+function comparisonValid(observation) {
+  // Validate only the detached fields consumed by the renderer. Empty values and
+  // absent timestamps are legitimate UNAVAILABLE placeholders, not schema errors.
+  const timestamp = value => value == null || typeof value === 'string';
+  return stringFields(observation, ['previewIdentity','sourcePollerUid','outcome'])
+    && timestamp(observation.observedAt)
+    && Array.isArray(observation.comparisons) && observation.comparisons.every(entry =>
+      stringFields(entry, ['sourceChannelUid','targetChannelUid','address','valueType','sourceValue','targetValue','outcome','reason'])
+      && timestamp(entry.sourceObservedAt) && timestamp(entry.targetObservedAt));
+}
 function providerProposalValid(proposal) {
   return stringFields(proposal, ['revisionDigest'])
     && Array.isArray(proposal.fileChanges) && proposal.fileChanges.every(change =>
@@ -114,7 +124,7 @@ export function createController({ auth, fetch = globalThis.fetch }) {
       // Keep it only for this successfully reconciled validation, never across an explicit refetch.
       if (operation === 'validate' && identity === state.identity && state.report.preview.identity === identity
           && state.report.status === 'STAGED' && report.observation?.previewIdentity === identity
-          && report.observation.sourcePollerUid === body.sourcePollerUid) {
+          && report.observation.sourcePollerUid === body.sourcePollerUid && comparisonValid(report.observation)) {
         state.comparison = report.observation;
       }
     } catch (error) {

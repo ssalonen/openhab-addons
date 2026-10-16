@@ -73,6 +73,21 @@ test('absent evidence timestamps are not rendered as epoch device readings', asy
   assert.doesNotMatch(text(f.ids.get('summary')),/1970/);
 });
 
+test('runtime unavailable placeholders and empty or absent timestamps remain renderable', async () => {
+  for (const timestamp of [undefined,null,'','not a timestamp']) {
+    const detail = {...comparisons[2],address:'',valueType:'',reason:'',sourceObservedAt:timestamp,targetObservedAt:timestamp};
+    const f = await fixture(`placeholder-${timestamp}`, () => new Response(JSON.stringify({...report,
+      observation:{...observation,observedAt:timestamp,comparisons:[detail]}})));
+    await assert.doesNotReject(f.validate());
+    const rendered = text(f.ids.get('comparisons'));
+    assert.match(rendered,/Last explicit selected-group comparison: UNAVAILABLE/);
+    assert.match(rendered,/Source value: UNAVAILABLE/);
+    assert.match(rendered,/Target value: UNAVAILABLE/);
+    assert.equal((rendered.match(/Not observed/g) || []).length,3);
+    assert.equal(descendants(f.ids.get('groups')).find(e => e.textContent === 'Request cutover for this group').disabled,true);
+  }
+});
+
 test('selected MATCH enables only a cutover request and separates generic GET summary from explicit comparison', async () => {
   const f = await fixture('selected-match', () => new Response(JSON.stringify({...report,
     observation:{...observation,outcome:'MATCH',comparisons:[comparisons[0]]}})));
@@ -88,6 +103,31 @@ test('selected MATCH enables only a cutover request and separates generic GET su
   await cutover.handlers.click();
   assert.equal(f.calls.filter(c => c.url.endsWith('/cutover')).length,1);
   assert.equal(descendants(f.ids.get('groups')).find(e => e.textContent === 'Request cutover for this group').disabled,true);
+});
+
+test('malformed comparison evidence cannot throw or leave stale enabled cutover controls', async () => {
+  const malformed = [null, {}, [], 'MATCH'];
+  for (const field of ['outcome','sourceChannelUid','targetChannelUid','address','valueType','sourceValue','targetValue','reason']) {
+    const missing = {...comparisons[0]}; delete missing[field];
+    malformed.push(missing, {...comparisons[0],[field]:{unsafe:malicious}});
+  }
+  for (const field of ['sourceObservedAt','targetObservedAt'])
+    malformed.push({...comparisons[0],[field]:{unsafe:malicious}});
+  for (const [index, entry] of malformed.entries()) {
+    let evidence = {...observation,outcome:'MATCH',comparisons:[comparisons[0]]};
+    const f = await fixture(`malformed-${index}`, () => new Response(JSON.stringify({...report,observation:evidence})));
+    await f.validate();
+    assert.equal(descendants(f.ids.get('groups')).find(e => e.textContent === 'Request cutover for this group').disabled,false);
+    evidence = {...evidence,comparisons:[entry]};
+    await assert.doesNotReject(f.validate(), `malformed comparison ${index} must not interrupt rendering`);
+    assert.match(text(f.ids.get('comparisons')),/No detailed comparison/);
+    assert.doesNotMatch(text(f.ids.get('comparisons')),/unsafe|onerror/);
+    for (const control of descendants(f.ids.get('groups')).filter(e => e.textContent === 'Request cutover for this group'))
+      assert.equal(control.disabled,true);
+    assert.equal(descendants(f.ids.get('groups')).find(e => e.textContent === 'Validate this group').disabled,false,
+      'final rendering must finish and permit a fresh validation');
+    assert.equal(f.calls.filter(c => c.url.endsWith('/cutover')).length,0);
+  }
 });
 
 test('editing identity immediately clears comparison and disables every group request', async () => {
