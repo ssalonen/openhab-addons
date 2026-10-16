@@ -1,8 +1,11 @@
-export function cutoverBlockReason(report) {
+export function cutoverBlockReason(report, sourcePollerUid, comparison) {
   if (!report) return 'Load a reviewed workflow first.';
-  if (report.status !== 'STAGED' || report.validation !== 'MATCH' || report.cutoverReady !== true)
-    return report.readinessReason || 'Fresh binding-owned validation is unavailable; cutover is blocked.';
-  return '';
+  if (report.status === 'STAGED' && comparison?.previewIdentity === report.preview?.identity
+      && comparison.sourcePollerUid === sourcePollerUid
+      && report.preview.groups.some(group => group.sourcePollerUid === sourcePollerUid)
+      && comparison.outcome === 'MATCH' && Array.isArray(comparison.comparisons) && comparison.comparisons.length > 0
+      && comparison.comparisons.every(entry => entry?.outcome === 'MATCH')) return '';
+  return report.readinessReason || 'Validate this exact staged group in this session before requesting cutover.';
 }
 function record(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -26,13 +29,13 @@ function providerProposalValid(proposal) {
       stringFields(work, ['sourceUid','reason','configurationIdentity']));
 }
 export function createController({ auth, fetch = globalThis.fetch }) {
-  const state = { identity: '', report: null, manualWork: [], providerPreview: null, providerError: '', busy: false, uncertain: false };
+  const state = { identity: '', report: null, comparison: null, manualWork: [], providerPreview: null, providerError: '', busy: false, uncertain: false };
   let generation = 0;
   let session = auth.sessionVersion?.();
   function invalidateSession() {
     generation++;
     session = auth.sessionVersion?.();
-    Object.assign(state, { identity: '', report: null, manualWork: [], providerPreview: null, providerError: '', busy: false, uncertain: false });
+    Object.assign(state, { identity: '', report: null, comparison: null, manualWork: [], providerPreview: null, providerError: '', busy: false, uncertain: false });
   }
   function context() {
     if (auth.sessionVersion?.() !== session) invalidateSession();
@@ -65,6 +68,7 @@ export function createController({ auth, fetch = globalThis.fetch }) {
   }
   async function refresh(capture = context()) {
     check(capture);
+    state.comparison = null;
     if (!state.identity) throw new Error('Select a reviewed identity first.');
     state.report = null;
     const report = await request(capture, `workflows/${encodeURIComponent(state.identity)}`);
@@ -76,6 +80,7 @@ export function createController({ auth, fetch = globalThis.fetch }) {
   async function preview() {
     const capture = context();
     if (state.busy) throw new Error('An operation is already in progress.');
+    state.comparison = null;
     state.busy = true;
     try {
       const review = await request(capture, 'previews', 'POST');
@@ -92,10 +97,14 @@ export function createController({ auth, fetch = globalThis.fetch }) {
     if (!state.identity || !state.report || state.uncertain) throw new Error('Refetch the workflow before making changes.');
     if (state.busy) throw new Error('An operation is already in progress.');
     if (!['apply','validate','cutover','revert','rollback'].includes(operation)) throw new Error('Unknown operation.');
-    if (operation === 'cutover' && cutoverBlockReason(state.report)) throw new Error(cutoverBlockReason(state.report));
+    if (operation === 'cutover' && (state.identity !== state.report.preview.identity
+        || cutoverBlockReason(state.report, body.sourcePollerUid, state.comparison)))
+      throw new Error(cutoverBlockReason(state.report, body.sourcePollerUid, state.comparison) || 'Refetch the reviewed identity.');
     if (['validate','cutover'].includes(operation) && !state.report.preview.groups.some(g => g.sourcePollerUid === body.sourcePollerUid))
       throw new Error('Select an explicit reviewed poller group.');
     state.busy = true;
+    state.comparison = null;
+    const identity = state.identity;
     try {
       const report = await request(capture, `workflows/${encodeURIComponent(state.identity)}/${operation}`, 'POST', body);
       check(capture);
@@ -103,9 +112,10 @@ export function createController({ auth, fetch = globalThis.fetch }) {
       await refresh(capture);
       // POST validation evidence is transient: GET readback does not collect observations.
       // Keep it only for this successfully reconciled validation, never across an explicit refetch.
-      if (operation === 'validate' && report.observation?.previewIdentity === state.identity
+      if (operation === 'validate' && identity === state.identity && state.report.preview.identity === identity
+          && state.report.status === 'STAGED' && report.observation?.previewIdentity === identity
           && report.observation.sourcePollerUid === body.sourcePollerUid) {
-        state.report = { ...state.report, observation: report.observation };
+        state.comparison = report.observation;
       }
     } catch (error) {
       if (current(capture)) {
@@ -118,6 +128,7 @@ export function createController({ auth, fetch = globalThis.fetch }) {
   }
   async function providerPreviews() {
     const capture = context();
+    state.comparison = null;
     state.providerPreview = null;
     state.providerError = '';
     try {

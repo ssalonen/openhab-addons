@@ -12,8 +12,9 @@ const comparisons = ['MATCH','MISMATCH','UNAVAILABLE'].map((outcome, index) => (
   targetObservedAt:index === 2 ? '1970-01-01T00:00:00Z' : '2026-10-14T09:00:01Z',
   outcome, reason:`${outcome} reason ${malicious}`
 }));
-const report = {preview:{identity:'review',groups:[{sourcePollerUid:'legacy:poller',targetPollerUid:'modbus:poller2:plant',targetBridgeUid:'modbus:tcp:plant'}],impacts:[],manualWork:[]},
-  status:'STAGED',validation:'UNAVAILABLE',cutoverReady:false,readinessReason:'Missing evidence'};
+const report = {preview:{identity:'review',groups:[{sourcePollerUid:'legacy:poller',targetPollerUid:'modbus:poller2:plant',targetBridgeUid:'modbus:tcp:plant'},
+  {sourcePollerUid:'legacy:other',targetPollerUid:'modbus:poller2:other',targetBridgeUid:'modbus:tcp:plant'}],impacts:[],manualWork:[]},
+  status:'STAGED',stagedAt:'1970-01-01T00:00:00Z',validation:'UNAVAILABLE',cutoverReady:false,readinessReason:'Missing evidence'};
 const observation = {previewIdentity:'review',sourcePollerUid:'legacy:poller',observedAt:'2026-10-14T09:00:02Z',outcome:'UNAVAILABLE',comparisons};
 class Element {
   constructor(tag) { this.tag = tag; this.value = ''; this.handlers = {}; this.children = []; }
@@ -49,17 +50,58 @@ test('fixture DTO comparisons survive validate readback and render every field s
   await f.validate();
   assert.ok(f.ids.has('comparisons'), 'detailed comparison region must be rendered');
   const rendered = text(f.ids.get('comparisons'));
-  for (const comparison of comparisons) for (const value of Object.values(comparison)) assert.ok(rendered.includes(value),value);
+  for (const comparison of comparisons) for (const value of Object.values(comparison))
+    if (!String(value).startsWith('1970-01-01')) assert.ok(rendered.includes(value),value);
   assert.match(rendered,/Thing ID: modbus:poller2:plant/);
   assert.match(rendered,/2026-10-14T09:00:02Z/);
   assert.ok(!/lifecycle|generation/i.test(rendered));
-  const cutover = descendants(f.ids.get('groups')).find(e => e.textContent === 'Cut over this group');
+  const cutover = descendants(f.ids.get('groups')).find(e => e.textContent === 'Request cutover for this group');
   assert.equal(cutover.disabled,true);
   assert.equal(f.calls.filter(c => c.url !== '/rest/auth/token' && c.init?.method === 'POST').length,1);
   assert.equal(f.calls.at(-1).init.method,'GET');
   await f.ids.get('refresh').handlers.click();
   assert.ok(!text(f.ids.get('comparisons')).includes(malicious),'explicit GET must not present old evidence as fresh');
   assert.match(text(f.ids.get('comparisons')),/No detailed comparison/);
+});
+
+test('absent evidence timestamps are not rendered as epoch device readings', async () => {
+  const f = await fixture('no-evidence', () => new Response(JSON.stringify({...report,
+    observation:{...observation,observedAt:'1970-01-01T00:00:00Z',comparisons:[comparisons[2]]}})));
+  await f.validate();
+  assert.doesNotMatch(text(f.ids.get('comparisons')),/1970/);
+  assert.match(text(f.ids.get('comparisons')),/Not observed/);
+  assert.doesNotMatch(text(f.ids.get('summary')),/1970/);
+});
+
+test('selected MATCH enables only a cutover request and separates generic GET summary from explicit comparison', async () => {
+  const f = await fixture('selected-match', () => new Response(JSON.stringify({...report,
+    observation:{...observation,outcome:'MATCH',comparisons:[comparisons[0]]}})));
+  await f.validate();
+  const cutover = descendants(f.ids.get('groups')).find(e => e.textContent === 'Request cutover for this group');
+  assert.ok(cutover, 'label must describe a request, not retained server authorization');
+  assert.equal(cutover.disabled,false);
+  assert.equal(descendants(f.ids.get('groups')).filter(e => e.textContent === 'Request cutover for this group')[1].disabled,true);
+  assert.match(text(f.ids.get('summary')),/Read-only report validation/);
+  assert.match(text(f.ids.get('summary')),/UNAVAILABLE/);
+  assert.match(text(f.ids.get('comparisons')),/Last explicit selected-group comparison: MATCH/);
+  assert.match(text(f.ids.get('readiness')),/new fresh reads.*refuse/i);
+  await cutover.handlers.click();
+  assert.equal(f.calls.filter(c => c.url.endsWith('/cutover')).length,1);
+  assert.equal(descendants(f.ids.get('groups')).find(e => e.textContent === 'Request cutover for this group').disabled,true);
+});
+
+test('editing identity immediately clears comparison and disables every group request', async () => {
+  const f = await fixture('identity-edit', () => new Response(JSON.stringify({...report,
+    observation:{...observation,outcome:'MATCH',comparisons:[comparisons[0]]}})));
+  await f.validate();
+  const input = f.ids.get('identity');
+  input.value = 'different-review';
+  assert.equal(typeof input.handlers.input,'function','identity edits must invalidate the selected comparison');
+  input.handlers.input();
+  assert.equal(input.value,'different-review');
+  assert.match(text(f.ids.get('comparisons')),/No detailed comparison/);
+  for (const button of descendants(f.ids.get('groups')).filter(e => e.textContent === 'Request cutover for this group'))
+    assert.equal(button.disabled,true);
 });
 
 test('logout clears comparison fixtures and discards delayed validation or readback without replay', async () => {

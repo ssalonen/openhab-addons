@@ -96,15 +96,19 @@ function renderProviders() {
     `${work.sourceUid}: ${work.reason} · Configuration digest: ${work.configurationIdentity}`));
   root.append(node('h3', 'Provider manual work'), manual);
 }
+function observedAt(value) {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) && Date.parse(value) !== 0
+    ? value : 'Not observed';
+}
 function renderComparisons(report) {
   const root = $('comparisons');
   root.replaceChildren();
-  const observation = report?.observation;
+  const observation = controller.state.comparison;
   if (!observation || !Array.isArray(observation.comparisons) || !observation.comparisons.length) {
     root.append(node('p', 'No detailed comparison evidence returned. Validate a staged group; aggregate status alone is not a per-channel report.'));
     return;
   }
-  root.append(node('p', `Validation result: ${observation.outcome} · Source poller: ${observation.sourcePollerUid} · Report observed at: ${observation.observedAt}`));
+  root.append(node('p', `Last explicit selected-group comparison: ${observation.outcome} · Source poller: ${observation.sourcePollerUid} · Report observed at: ${observedAt(observation.observedAt)}`));
   const group = report.preview.groups.find(group => group.sourcePollerUid === observation.sourcePollerUid);
   if (group) root.append(node('p', `Candidate Thing ID: ${group.targetPollerUid}`));
   for (const comparison of observation.comparisons) {
@@ -113,8 +117,8 @@ function renderComparisons(report) {
       node('p', `Source channel: ${comparison.sourceChannelUid}`),
       node('p', `Target channel: ${comparison.targetChannelUid}`),
       node('p', `Address: ${comparison.address} · Value type: ${comparison.valueType}`),
-      node('p', `Source value: ${comparison.sourceValue} · Source observed at: ${comparison.sourceObservedAt}`),
-      node('p', `Target value: ${comparison.targetValue} · Target observed at: ${comparison.targetObservedAt}`),
+      node('p', `Source value: ${comparison.sourceValue} · Source observed at: ${observedAt(comparison.sourceObservedAt)}`),
+      node('p', `Target value: ${comparison.targetValue} · Target observed at: ${observedAt(comparison.targetObservedAt)}`),
       node('p', `Reason: ${comparison.reason}`));
     root.append(section);
   }
@@ -132,7 +136,7 @@ function render() {
   $('stage').disabled = locked || report?.status !== 'PREVIEW';
   $('rollback').disabled = locked || !['STAGED','RECOVERY'].includes(report?.status);
   $('summary').replaceChildren();
-  if (report) for (const [label, value] of [['Identity',plan.identity],['Stage',report.status],['Staged at',report.stagedAt],['Validation',report.validation],['Switched links',(report.switchedLinks || []).join(', ') || 'None reported']])
+  if (report) for (const [label, value] of [['Identity',plan.identity],['Stage',report.status],['Staged at',observedAt(report.stagedAt)],['Read-only report validation (GET does not validate)',report.validation],['Switched links',(report.switchedLinks || []).join(', ') || 'None reported']])
     $('summary').append(node('dt',label),node('dd',value));
   $('yaml').textContent = plan?.yaml || 'No reviewed plan loaded.';
   $('manual').replaceChildren();
@@ -140,16 +144,16 @@ function render() {
   const seen = new Set();
   for (const work of manual) { const text = `${work.sourceUid}: ${work.reason}`; if (!seen.has(text)) { $('manual').append(node('li', text)); seen.add(text); } }
   if (!manual.length) $('manual').append(node('li', plan ? 'No manual work reported by this review.' : 'Capture or load a review to see manual work.'));
-  const reason = cutoverBlockReason(report);
-  $('readiness').textContent = reason || 'Backend reports fresh matching validation and cutover readiness. Select a reviewed group explicitly.';
+  $('readiness').textContent = 'A last explicit MATCH permits requesting cutover only for that selected staged group. The server performs new fresh reads and can refuse; retained comparisons are not authorization. Read-only GET does not validate. Refetch or another operation clears the comparison.';
   $('groups').replaceChildren();
   for (const group of plan?.groups || []) {
+    const reason = cutoverBlockReason(report, group.sourcePollerUid, controller.state.comparison);
     const section = node('div', undefined, 'group');
     section.append(node('h3', group.sourcePollerUid), node('p', `Candidate: ${group.targetPollerUid} · Bridge: ${group.targetBridgeUid}`));
     const actions = node('div', undefined, 'actions');
     actions.append(button('Validate this group', () => mutate('validate', { sourcePollerUid: group.sourcePollerUid }, `Request fresh validation of ${group.sourcePollerUid}? Missing evidence remains blocked.`), locked || report.status !== 'STAGED'),
-      button('Cut over this group', () => mutate('cutover', { sourcePollerUid: group.sourcePollerUid }, `Switch reviewed Item links for ${group.sourcePollerUid}? Review impact and validation before proceeding.`), locked || !!reason));
-    section.append(actions); if (reason) section.append(node('p', `Cutover disabled: ${reason}`));
+      button('Request cutover for this group', () => mutate('cutover', { sourcePollerUid: group.sourcePollerUid }, `Request switching reviewed Item links for ${group.sourcePollerUid}? The server performs new fresh reads and can refuse if evidence or lifecycle has changed.`), locked || !!reason));
+    section.append(actions); if (reason) section.append(node('p', `Cutover request disabled: ${reason}`));
     $('groups').append(section);
   }
   $('impacts').replaceChildren();
@@ -163,6 +167,15 @@ function render() {
 }
 $('provider-refresh').addEventListener('click', () => run(() => controller.providerPreviews(), 'Provider proposals refetched for manual review. No configuration was changed.'));
 $('preview').addEventListener('click', () => run(() => controller.preview()));
+$('identity').addEventListener('input', () => {
+  if ($('identity').value !== controller.state.identity) {
+    controller.state.comparison = null;
+    controller.state.report = null;
+    controller.state.manualWork = [];
+    controller.state.identity = '';
+    render();
+  }
+});
 $('refresh').addEventListener('click', () => {
   const identity = $('identity').value.trim();
   return run(async () => {
