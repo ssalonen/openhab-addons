@@ -468,6 +468,274 @@ public class ModbusPoller2YamlOSGiTest extends JavaOSGiTest {
         }
     }
 
+    @Test
+    public void providerPreviewBytesLoadReloadAndRecoverLinkedItem() throws Exception {
+        ItemRegistry items = getService(ItemRegistry.class);
+        ItemChannelLinkRegistry links = getService(ItemChannelLinkRegistry.class);
+        EventPublisher events = getService(EventPublisher.class);
+        var migration = getService(org.openhab.binding.modbus.migration.ModbusMigrationService.class);
+        var storage = getService(org.openhab.core.storage.StorageService.class).getStorage("modbus-migration-journal");
+        assertNotNull(migration);
+        assertNotNull(items);
+        assertNotNull(links);
+        assertNotNull(events);
+        links.waitForCompletedAsyncActivationTasks();
+        Path source = yamlFile.resolveSibling("provider-source.yaml");
+        Path itemFile = yamlFile.resolveSibling("provider-items.yaml");
+        try (WireFixture wire = new WireFixture()) {
+            useEndpoint(wire.server.getLocalPort());
+            wire.registers.set(new int[] { 41, 73 });
+            writeModel(source, legacyYaml("value", 100), WatchService.Kind.CREATE);
+            writeModel(itemFile, itemYaml("modbus:data:yaml-endpoint:legacy:value:number"), WatchService.Kind.CREATE);
+            ThingUID data = new ThingUID("modbus:data:yaml-endpoint:legacy:value");
+            waitForAssert(() -> {
+                Thing legacy = requireNonNull(thingRegistry.get(data));
+                assertNotNull(legacy.getHandler());
+                assertEquals(java.util.List.of("default"), legacy.getConfiguration().get("writeTransform"));
+                assertEquals(Boolean.FALSE, legacy.getConfiguration().get("writeMultipleEvenWithSingleRegisterOrCoil"));
+                assertNotNull(links.get(new ItemChannelLink("YamlLive", new ChannelUID(data, "number")).getUID()));
+            });
+            var thingIds = thingRegistry.getAll().stream().map(Thing::getUID)
+                    .collect(java.util.stream.Collectors.toSet());
+            var linkIds = links.getAll().stream().map(ItemChannelLink::getUID)
+                    .collect(java.util.stream.Collectors.toSet());
+            var journalKeys = java.util.Set.copyOf(storage.getKeys());
+            var preview = migration.providerPreview();
+            assertEquals(1, preview.fileChanges().size(), preview.toString());
+            var first = preview.fileChanges().getFirst();
+            assertEquals(thingIds,
+                    thingRegistry.getAll().stream().map(Thing::getUID).collect(java.util.stream.Collectors.toSet()));
+            assertEquals(linkIds,
+                    links.getAll().stream().map(ItemChannelLink::getUID).collect(java.util.stream.Collectors.toSet()));
+            assertEquals(journalKeys, java.util.Set.copyOf(storage.getKeys()));
+            assertEquals(1, first.linkPatches().size());
+            assertEquals("modbus:data:yaml-endpoint:legacy:value:number",
+                    first.linkPatches().getFirst().sourceChannelUid());
+            assertTrue(!first.candidateYaml().contains("items:"), "Generated candidates must remain unlinked");
+            ThingUID target = new ThingUID(first.targetPollerUid());
+            ChannelUID original = new ChannelUID(first.linkPatches().getFirst().targetChannelUid());
+            writeModel(yamlFile, first.candidateYaml(), WatchService.Kind.CREATE);
+            waitForAssert(() -> {
+                Thing candidate = requireNonNull(thingRegistry.get(target));
+                assertEquals(ThingStatus.ONLINE, candidate.getStatus());
+                assertNotNull(candidate.getHandler());
+                assertEquals("Number", requireNonNull(candidate.getChannel(original.getId())).getAcceptedItemType());
+                assertNotNull(candidate.getChannel(original.getId()).getChannelTypeUID());
+                assertTrue(links.getLinks(original).isEmpty());
+                assertNotNull(links.get(new ItemChannelLink("YamlLive", new ChannelUID(data, "number")).getUID()));
+            });
+            // Public provider provenance, not a managed registry insertion or an inferred filename.
+            @SuppressWarnings("unchecked")
+            var registry = (org.openhab.core.common.registry.AbstractRegistry<Thing, ThingUID, org.openhab.core.thing.ThingProvider>) thingRegistry;
+            assertTrue(!(registry.getProvider(requireNonNull(
+                    thingRegistry.get(target))) instanceof org.openhab.core.common.registry.ManagedProvider));
+            assertNotNull(registry.getProvider(requireNonNull(thingRegistry.get(target))));
+            assertEquals(registry.getProvider(requireNonNull(thingRegistry.get(data))),
+                    registry.getProvider(requireNonNull(thingRegistry.get(target))));
+            var candidateHandler = (org.openhab.binding.modbus.handler.ModbusPoller2ThingHandler) requireNonNull(
+                    thingRegistry.get(target)).getHandler();
+            assertNotNull(candidateHandler);
+            candidateHandler.handleCommand(original, RefreshType.REFRESH);
+            waitForAssert(() -> {
+                var observation = candidateHandler.getObservation();
+                assertTrue(observation.isPresent(), "The unlinked candidate must decode a fresh wire response");
+                assertEquals(new DecimalType(41), observation.orElseThrow().states().get(original));
+            });
+            assertTrue(links.getLinks(original).isEmpty(), "Fresh decoded candidate data must not create an Item link");
+            assertTrue(migration.providerPreview().fileChanges().isEmpty(),
+                    "An existing candidate must refuse a second proposal");
+            writeModel(itemFile, itemYaml(original.toString()), WatchService.Kind.MODIFY);
+            awaitProviderLink(items, links, target, original);
+            refreshState(events, items, wire, 41);
+
+            // Remove only the disposable candidate to obtain a genuine new proposal, never rewrite emitted YAML.
+            writeModel(itemFile, itemYaml("modbus:data:yaml-endpoint:legacy:value:number"), WatchService.Kind.MODIFY);
+            Files.delete(yamlFile);
+            yamlRepository.processWatchEvent(WatchService.Kind.DELETE, yamlFile);
+            waitForAssert(() -> assertNull(thingRegistry.get(target)));
+            writeModel(source, legacyYaml("replacement", 101), WatchService.Kind.MODIFY);
+            writeModel(itemFile, itemYaml("modbus:data:yaml-endpoint:legacy:replacement:number"),
+                    WatchService.Kind.MODIFY);
+            waitForAssert(() -> {
+                assertNull(thingRegistry.get(data));
+                assertNotNull(
+                        requireNonNull(thingRegistry.get(new ThingUID("modbus:data:yaml-endpoint:legacy:replacement")))
+                                .getHandler());
+                assertNotNull(links.get(new ItemChannelLink("YamlLive",
+                        new ChannelUID("modbus:data:yaml-endpoint:legacy:replacement:number")).getUID()));
+            });
+            var secondPreview = migration.providerPreview();
+            assertEquals(1, secondPreview.fileChanges().size(), secondPreview.toString());
+            assertTrue(!preview.revisionDigest().equals(secondPreview.revisionDigest()));
+            var second = secondPreview.fileChanges().getFirst();
+            ChannelUID replacement = new ChannelUID(second.linkPatches().getFirst().targetChannelUid());
+            assertTrue(!original.equals(replacement));
+            // Recreate the old candidate, then MODIFY that actual provider model with the exact new proposal.
+            writeModel(yamlFile, first.candidateYaml(), WatchService.Kind.CREATE);
+            waitForAssert(() -> assertNotNull(requireNonNull(thingRegistry.get(target)).getChannel(original.getId())));
+            writeModel(yamlFile, second.candidateYaml(), WatchService.Kind.MODIFY);
+            writeModel(itemFile, itemYaml(replacement.toString()), WatchService.Kind.MODIFY);
+            awaitProviderLink(items, links, target, replacement);
+            waitForAssert(() -> {
+                assertNull(requireNonNull(thingRegistry.get(target)).getChannel(original.getId()));
+                assertTrue(links.getLinks(original).isEmpty());
+            });
+            wire.registers.set(new int[] { 52, 89 });
+            refreshState(events, items, wire, 89);
+            for (String failure : new String[] { "exception", "malformed" }) {
+                wire.failure.set(failure);
+                events.post(ItemEventFactory.createCommandEvent("YamlLive", RefreshType.REFRESH));
+                waitForAssert(() -> {
+                    assertEquals(ThingStatus.OFFLINE, requireNonNull(thingRegistry.get(target)).getStatus());
+                    assertEquals(org.openhab.core.types.UnDefType.UNDEF,
+                            requireNonNull(items.get("YamlLive")).getState());
+                });
+                wire.failure.set("");
+                wire.registers.set(new int[] { 63, "exception".equals(failure) ? 97 : 109 });
+                refreshState(events, items, wire, "exception".equals(failure) ? 97 : 109);
+                waitForAssert(
+                        () -> assertEquals(ThingStatus.ONLINE, requireNonNull(thingRegistry.get(target)).getStatus()));
+            }
+            assertEquals(new DecimalType(109), requireNonNull(items.get("YamlLive")).getState(),
+                    "Generated provider reload must publish register 101 after malformed-response recovery");
+        } finally {
+            for (Path path : new Path[] { itemFile, source }) {
+                Files.deleteIfExists(path);
+                yamlRepository.processWatchEvent(WatchService.Kind.DELETE, path);
+            }
+        }
+    }
+
+    @Test
+    public void nativeYamlModifyRetainsWireCommandsAfterFailureRecovery() throws Exception {
+        ItemRegistry items = getService(ItemRegistry.class);
+        ItemChannelLinkRegistry links = getService(ItemChannelLinkRegistry.class);
+        EventPublisher events = getService(EventPublisher.class);
+        assertNotNull(items);
+        assertNotNull(links);
+        assertNotNull(events);
+        links.waitForCompletedAsyncActivationTasks();
+        Hashtable<String, Object> properties = new Hashtable<>();
+        properties.put("openhab.transform", "YAMLRELOAD");
+        registerService((TransformationService) (function, value) -> new BigDecimal(value)
+                .multiply(new BigDecimal("100")).add(new BigDecimal("7")).toPlainString(), properties);
+        try (WireFixture wire = new WireFixture()) {
+            useEndpoint(wire.server.getLocalPort());
+            loadYaml(writableRoutingYaml("original", 100, 321));
+            awaitLink(items, links, "YamlLive", "original");
+            writeCommand(events, wire, "12.3", 321, 1237);
+            writeModel(yamlFile, writableRoutingYaml("replacement", 101, 322), WatchService.Kind.MODIFY);
+            awaitLink(items, links, "YamlLive", "replacement");
+            waitForAssert(() -> {
+                assertNull(requireNonNull(thingRegistry.get(POLLER_UID)).getChannel("original"));
+                assertTrue(links.getLinks(new ChannelUID(POLLER_UID, "original")).isEmpty());
+            });
+            writeCommand(events, wire, "45.6", 322, 4567);
+            wire.failure.set("writeException");
+            writeCommand(events, wire, "23.4", 322, 2347);
+            waitForAssert(() -> {
+                Thing poller = requireNonNull(thingRegistry.get(POLLER_UID));
+                assertEquals(ThingStatus.OFFLINE, poller.getStatus());
+                assertEquals(ThingStatusDetail.COMMUNICATION_ERROR, poller.getStatusInfo().getStatusDetail());
+            });
+            wire.failure.set("");
+            writeCommand(events, wire, "34.5", 322, 3457);
+            waitForAssert(
+                    () -> assertEquals(ThingStatus.ONLINE, requireNonNull(thingRegistry.get(POLLER_UID)).getStatus()));
+            wire.failure.set("exception");
+            events.post(ItemEventFactory.createCommandEvent("YamlLive", RefreshType.REFRESH));
+            waitForAssert(() -> {
+                assertEquals(ThingStatus.OFFLINE, requireNonNull(thingRegistry.get(POLLER_UID)).getStatus());
+                assertEquals(org.openhab.core.types.UnDefType.UNDEF, requireNonNull(items.get("YamlLive")).getState());
+            });
+            wire.failure.set("");
+            wire.registers.set(new int[] { 52, 89 });
+            refreshState(events, items, wire, 89);
+            waitForAssert(
+                    () -> assertEquals(ThingStatus.ONLINE, requireNonNull(thingRegistry.get(POLLER_UID)).getStatus()));
+            writeCommand(events, wire, "67.8", 322, 6787);
+        }
+    }
+
+    private void writeCommand(EventPublisher events, WireFixture wire, String value, int address, int expected)
+            throws Exception {
+        wire.writes.clear();
+        events.post(ItemEventFactory.createCommandEvent("YamlLive", new DecimalType(value)));
+        int[] actual = wire.writes.poll(10, TimeUnit.SECONDS);
+        assertNotNull(actual, "Public Item command must produce an FC6 frame");
+        assertEquals(address, actual[0]);
+        assertEquals(expected, actual[1], "The post-reload command must use the new address and nonidentity transform");
+    }
+
+    private String writableRoutingYaml(String channel, int address, int writeAddress) {
+        // Independent writable contract: never add write settings to a migration-generated proposal.
+        return routingYaml(channel, address).replace("valueType: int16", """
+                valueType: int16
+                          writeStart: "%d"
+                          writeValueType: int16
+                          writeTransform: "YAMLRELOAD(scale)"
+                          writeMaxTries: 1
+                """.formatted(writeAddress).stripTrailing());
+    }
+
+    private void writeModel(Path path, String yaml, WatchService.Kind kind) throws IOException {
+        Files.writeString(path, yaml);
+        yamlRepository.processWatchEvent(kind, path);
+    }
+
+    private String itemYaml(String channel) {
+        return """
+                version: 1
+                items:
+                  YamlLive:
+                    type: Number
+                    channel: %s
+                """.formatted(channel);
+    }
+
+    private String legacyYaml(String name, int address) {
+        return """
+                version: 1
+                things:
+                  modbus:poller:yaml-endpoint:legacy:
+                    bridge: modbus:tcp:yaml-endpoint
+                    config:
+                      start: 100
+                      length: 2
+                      type: holding
+                      refresh: 0
+                      cacheMillis: 0
+                      maxTries: 1
+                  modbus:data:yaml-endpoint:legacy:%s:
+                    bridge: modbus:poller:yaml-endpoint:legacy
+                    config:
+                      readStart: "%d"
+                      readValueType: int16
+                """.formatted(name, address);
+    }
+
+    private void awaitProviderLink(ItemRegistry items, ItemChannelLinkRegistry links, ThingUID target,
+            ChannelUID channel) {
+        waitForAssert(() -> {
+            Thing candidate = requireNonNull(thingRegistry.get(target));
+            assertEquals(ThingStatus.ONLINE, candidate.getStatus());
+            assertNotNull(candidate.getHandler());
+            assertNotNull(candidate.getChannel(channel.getId()));
+            assertNotNull(items.get("YamlLive"));
+            assertEquals(java.util.Set.of(channel),
+                    links.getAll().stream().filter(link -> link.getItemName().equals("YamlLive"))
+                            .map(ItemChannelLink::getLinkedUID).collect(java.util.stream.Collectors.toSet()));
+        });
+    }
+
+    private void refreshState(EventPublisher events, ItemRegistry items, WireFixture wire, int expected)
+            throws Exception {
+        wire.reads.clear();
+        events.post(ItemEventFactory.createCommandEvent("YamlLive", RefreshType.REFRESH));
+        assertNotNull(wire.reads.poll(10, TimeUnit.SECONDS), "A fresh FC3 wire read is required");
+        waitForAssert(() -> assertEquals(new DecimalType(expected), requireNonNull(items.get("YamlLive")).getState()));
+    }
+
     private void useEndpoint(int port) {
         thingProvider.update(BridgeBuilder.create(new ThingTypeUID("modbus", "tcp"), ENDPOINT_UID)
                 .withConfiguration(new Configuration(Map.of("host", "127.0.0.1", "port", port))).build());
@@ -516,6 +784,8 @@ public class ModbusPoller2YamlOSGiTest extends JavaOSGiTest {
         private final AtomicReference<@Nullable Socket> connection = new AtomicReference<>();
         private final AtomicReference<int[]> registers = new AtomicReference<>(new int[] { 0, 0 });
         private final java.util.concurrent.BlockingQueue<Integer> reads = new java.util.concurrent.LinkedBlockingQueue<>();
+        private final AtomicReference<String> failure = new AtomicReference<>("");
+        private final java.util.concurrent.BlockingQueue<int[]> writes = new java.util.concurrent.LinkedBlockingQueue<>();
         private final Future<?> replies;
         private volatile boolean closed;
 
@@ -536,12 +806,27 @@ public class ModbusPoller2YamlOSGiTest extends JavaOSGiTest {
                         assertEquals(1, request[6]);
                         int address = (Byte.toUnsignedInt(request[8]) << 8) | Byte.toUnsignedInt(request[9]);
                         int value = (Byte.toUnsignedInt(request[10]) << 8) | Byte.toUnsignedInt(request[11]);
+                        if (request[7] == 6) {
+                            byte[] response = failure.get().equals("writeException")
+                                    ? new byte[] { request[0], request[1], 0, 0, 0, 3, request[6], (byte) 0x86, 2 }
+                                    : request;
+                            socket.getOutputStream().write(response);
+                            socket.getOutputStream().flush();
+                            writes.add(new int[] { address, value });
+                            continue;
+                        }
                         assertEquals(3, request[7]);
                         assertEquals(100, address);
                         assertEquals(2, value);
                         int[] data = registers.get();
-                        byte[] response = { request[0], request[1], 0, 0, 0, 7, request[6], 3, 4, (byte) (data[0] >> 8),
-                                (byte) data[0], (byte) (data[1] >> 8), (byte) data[1] };
+                        byte[] response = switch (failure.get()) {
+                            case "exception" ->
+                                new byte[] { request[0], request[1], 0, 0, 0, 3, request[6], (byte) 0x83, 2 };
+                            case "malformed" ->
+                                new byte[] { request[0], request[1], 0, 0, 0, 5, request[6], 3, 2, 0, 1 };
+                            default -> new byte[] { request[0], request[1], 0, 0, 0, 7, request[6], 3, 4,
+                                    (byte) (data[0] >> 8), (byte) data[0], (byte) (data[1] >> 8), (byte) data[1] };
+                        };
                         socket.getOutputStream().write(response);
                         reads.add(data[1]);
                         socket.getOutputStream().flush();
