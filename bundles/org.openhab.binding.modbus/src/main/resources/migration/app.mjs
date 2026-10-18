@@ -5,6 +5,10 @@ const controller = createController({ auth });
 const $ = id => document.getElementById(id);
 let working = false;
 let generation = 0;
+let focusVersion = 0;
+window.addEventListener('focusin', event => {
+  if (event.target !== document.body) focusVersion++;
+});
 const actionControls = new Map();
 const actionKey = (...parts) => JSON.stringify(parts);
 function sessionChanged() {
@@ -38,8 +42,10 @@ async function run(action, success = 'Workflow refetched from openHAB. Review th
     if (session !== auth.sessionVersion()) { sessionChanged(); return false; }
     return true;
   }
-  // Capture before replaceChildren disconnects the keyboard-activated control.
-  const focusKey = [...actionControls].find(([, element]) => element === document.activeElement)?.[0];
+  // Capture before rendering disconnects dynamic controls or disables static ones.
+  const initiatingControl = document.activeElement;
+  const focusKey = [...actionControls].find(([, element]) => element === initiatingControl)?.[0];
+  const capturedFocusVersion = focusVersion;
   await runInteraction({
     start() { working = true; $('error').hidden = true; render(); $('status').textContent = 'Waiting for openHAB…'; },
     action,
@@ -47,8 +53,13 @@ async function run(action, success = 'Workflow refetched from openHAB. Review th
     failed(error) { if (current()) { $('error').textContent = error.message; $('error').hidden = false; $('status').textContent = 'Operation stopped. No mutation was automatically replayed.'; } },
     finished() {
       if (!current()) return;
+      // Automatic blur to BODY retains ownership; intentional focus elsewhere
+      // relinquishes it, even if that element subsequently blurs back to BODY.
+      const ownsFocus = capturedFocusVersion === focusVersion
+        && (document.activeElement === document.body || document.activeElement === initiatingControl);
       working = false;
       render();
+      if (!ownsFocus) return;
       restoreActionFocus(focusKey, {
         focusAction(key) {
           const control = actionControls.get(key);
@@ -144,6 +155,8 @@ function renderComparisons(report) {
 }
 function render() {
   actionControls.clear();
+  for (const id of ['preview','refresh','provider-refresh','stage','rollback'])
+    actionControls.set(actionKey('static',id), $(id));
   renderProviders();
   const { report, identity, uncertain } = controller.state;
   renderComparisons(report);
