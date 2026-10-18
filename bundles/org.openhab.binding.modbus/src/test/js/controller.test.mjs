@@ -72,7 +72,7 @@ test('403 shows forbidden and network failure does not replay mutation', async (
   }
 });
 
-const plan = { identity: 'review/1', groups: [{sourcePollerUid:'modbus:poller:plant'}], yaml: 'things:', manualWork: [], impacts: [] };
+const plan = { identity: 'review/1', groups: [{sourcePollerUid:'modbus:poller:plant',targetPollerUid:'modbus:poller2:plant',targetBridgeUid:'modbus:tcp:plant'}], yaml: 'things:', manualWork: [], impacts: [] };
 const report = { preview: plan, status: 'STAGED', validation: 'UNAVAILABLE', cutoverReady: false, readinessReason: 'No fresh comparison' };
 function fixture(fetch) {
   const calls = [];

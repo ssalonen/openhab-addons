@@ -1,10 +1,12 @@
 import { createAuthClient } from './auth.mjs';
-import { createController, cutoverBlockReason } from './controller.mjs';
+import { createController, cutoverBlockReason, runInteraction, restoreActionFocus } from './controller.mjs';
 const auth = createAuthClient();
 const controller = createController({ auth });
 const $ = id => document.getElementById(id);
 let working = false;
 let generation = 0;
+const actionControls = new Map();
+const actionKey = (...parts) => JSON.stringify(parts);
 function sessionChanged() {
   generation++;
   controller.invalidateSession();
@@ -20,10 +22,11 @@ function node(tag, text, className) {
   if (className) element.className = className;
   return element;
 }
-function button(text, action, disabled = false) {
+function button(text, action, disabled = false, key) {
   const element = node('button', text);
   element.type = 'button'; element.disabled = disabled;
   element.addEventListener('click', action);
+  if (key !== undefined) actionControls.set(key, element);
   return element;
 }
 async function run(action, success = 'Workflow refetched from openHAB. Review the current state below.') {
@@ -35,11 +38,27 @@ async function run(action, success = 'Workflow refetched from openHAB. Review th
     if (session !== auth.sessionVersion()) { sessionChanged(); return false; }
     return true;
   }
-  working = true; $('error').hidden = true;
-  render(); $('status').textContent = 'Waiting for openHAB…';
-  try { await action(); if (current()) $('status').textContent = success; }
-  catch (error) { if (current()) { $('error').textContent = error.message; $('error').hidden = false; $('status').textContent = 'Operation stopped. No mutation was automatically replayed.'; } }
-  finally { if (current()) { working = false; render(); } }
+  // Capture before replaceChildren disconnects the keyboard-activated control.
+  const focusKey = [...actionControls].find(([, element]) => element === document.activeElement)?.[0];
+  await runInteraction({
+    start() { working = true; $('error').hidden = true; render(); $('status').textContent = 'Waiting for openHAB…'; },
+    action,
+    succeeded() { if (current()) $('status').textContent = success; },
+    failed(error) { if (current()) { $('error').textContent = error.message; $('error').hidden = false; $('status').textContent = 'Operation stopped. No mutation was automatically replayed.'; } },
+    finished() {
+      if (!current()) return;
+      working = false;
+      render();
+      restoreActionFocus(focusKey, {
+        focusAction(key) {
+          const control = actionControls.get(key);
+          if (!control || control.disabled) return false;
+          control.focus(); return true;
+        },
+        focusResult() { $('status').focus(); }
+      });
+    }
+  });
 }
 function mutate(operation, body, message) {
   if (confirm(message)) return run(() => controller.mutate(operation, body, true));
@@ -72,7 +91,7 @@ function renderProviders() {
     actions.append(button('Copy candidate YAML', () => exportCandidate(async () => {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable. Select the displayed YAML or download the candidate instead.');
       await navigator.clipboard.writeText(change.candidateYaml);
-    }, 'Candidate YAML copied. No configuration was changed.'), working),
+    }, 'Candidate YAML copied. No configuration was changed.'), working, actionKey('copy',change.sourcePollerUid,change.revisionDigest)),
     button('Download candidate YAML', () => exportCandidate(() => {
       const url = URL.createObjectURL(new Blob([change.candidateYaml], {type:'application/yaml;charset=utf-8'}));
       try {
@@ -80,7 +99,7 @@ function renderProviders() {
         link.href = url; link.download = 'modbus-poller2-candidate.yaml';
         link.click();
       } finally { URL.revokeObjectURL(url); }
-    }, 'Candidate YAML download requested. This is not the source filename; no configuration was changed.'), working));
+    }, 'Candidate YAML download requested. This is not the source filename; no configuration was changed.'), working, actionKey('download',change.sourcePollerUid,change.revisionDigest)));
     section.append(actions, node('p', change.instructions));
     for (const patch of change.linkPatches || []) {
       const profile = patch.sourceProfileConfiguration ?? patch.profileConfiguration;
@@ -124,6 +143,7 @@ function renderComparisons(report) {
   }
 }
 function render() {
+  actionControls.clear();
   renderProviders();
   const { report, identity, uncertain } = controller.state;
   renderComparisons(report);
@@ -151,8 +171,8 @@ function render() {
     const section = node('div', undefined, 'group');
     section.append(node('h3', group.sourcePollerUid), node('p', `Candidate: ${group.targetPollerUid} · Bridge: ${group.targetBridgeUid}`));
     const actions = node('div', undefined, 'actions');
-    actions.append(button('Validate this group', () => mutate('validate', { sourcePollerUid: group.sourcePollerUid }, `Request fresh validation of ${group.sourcePollerUid}? Missing evidence remains blocked.`), locked || report.status !== 'STAGED'),
-      button('Request cutover for this group', () => mutate('cutover', { sourcePollerUid: group.sourcePollerUid }, `Request switching reviewed Item links for ${group.sourcePollerUid}? The server performs new fresh reads and can refuse if evidence or lifecycle has changed.`), locked || !!reason));
+    actions.append(button('Validate this group', () => mutate('validate', { sourcePollerUid: group.sourcePollerUid }, `Request fresh validation of ${group.sourcePollerUid}? Missing evidence remains blocked.`), locked || report.status !== 'STAGED', actionKey('validate',group.sourcePollerUid)),
+      button('Request cutover for this group', () => mutate('cutover', { sourcePollerUid: group.sourcePollerUid }, `Request switching reviewed Item links for ${group.sourcePollerUid}? The server performs new fresh reads and can refuse if evidence or lifecycle has changed.`), locked || !!reason, actionKey('cutover',group.sourcePollerUid)));
     section.append(actions); if (reason) section.append(node('p', `Cutover request disabled: ${reason}`));
     $('groups').append(section);
   }
@@ -161,7 +181,7 @@ function render() {
     const row = node('tr');
     for (const value of [impact.itemName, impact.sourceChannelUid, impact.targetChannelUid, impact.targetLinkPlanned ? 'Link planned' : 'Manual review']) row.append(node('td',value));
     const recovery = node('td');
-    recovery.append(button(`Revert ${impact.itemName}`, () => mutate('revert', {itemName:impact.itemName, sourceChannelUid:impact.sourceChannelUid}, `Restore ${impact.itemName} to ${impact.sourceChannelUid}? The backend verifies ownership before changing links.`), locked || !['STAGED','RECOVERY'].includes(report.status)));
+    recovery.append(button(`Revert ${impact.itemName}`, () => mutate('revert', {itemName:impact.itemName, sourceChannelUid:impact.sourceChannelUid}, `Restore ${impact.itemName} to ${impact.sourceChannelUid}? The backend verifies ownership before changing links.`), locked || !['STAGED','RECOVERY'].includes(report.status), actionKey('revert',impact.itemName,impact.sourceChannelUid)));
     row.append(recovery); $('impacts').append(row);
   }
 }

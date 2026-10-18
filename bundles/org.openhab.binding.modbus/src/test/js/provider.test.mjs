@@ -22,7 +22,7 @@ test('provider failure clears stale proposals but leaves managed operations avai
         if (failure === 'shape') return new Response('{}');
         return new Response('{}',{status:failure});
       }
-      return new Response(JSON.stringify({preview:{identity:'managed'},status:'PREVIEW'}));
+      return new Response(JSON.stringify({preview:{identity:'managed',groups:[],impacts:[],manualWork:[]},status:'PREVIEW'}));
     }});
     controller.state.identity = 'managed';
     await controller.refresh();
@@ -77,7 +77,7 @@ test('every nested provider record is validated before publication without damag
   }
   for (const body of invalid) {
     const calls = [];
-    const report = {preview:{identity:'managed'},status:'PREVIEW'};
+    const report = {preview:{identity:'managed',groups:[],impacts:[],manualWork:[]},status:'PREVIEW'};
     const controller = createController({auth:{headers:async () => ({}),invalidate() {}},fetch:async (url,init) => {
       calls.push({url,init});
       return new Response(JSON.stringify(url.endsWith('provider-previews') ? body : report));

@@ -1,3 +1,15 @@
+// Keep cleanup around the initial render as well as asynchronous operations.
+export async function runInteraction({ start, action, succeeded, failed, finished }) {
+  try { start(); await action(); succeeded(); }
+  catch (error) { failed(error); }
+  finally { finished(); }
+}
+
+// Resolve stable action identity against new controls without imitating a DOM in tests.
+export function restoreActionFocus(key, { focusAction, focusResult }) {
+  if (key !== undefined && !focusAction(key)) focusResult();
+}
+
 export function cutoverBlockReason(report, sourcePollerUid, comparison) {
   if (!report) return 'Load a reviewed workflow first.';
   if (report.status === 'STAGED' && comparison?.previewIdentity === report.preview?.identity
@@ -12,6 +24,25 @@ function record(value) {
 }
 function stringFields(value, keys) {
   return record(value) && keys.every(key => typeof value[key] === 'string');
+}
+function manualWorkValid(work) {
+  return Array.isArray(work) && work.every(entry => stringFields(entry, ['sourceUid','reason']));
+}
+function workflowValid(report) {
+  // Check renderer inputs, not unused backend internals or opaque profile values.
+  const plan = report?.preview;
+  return stringFields(report, ['status']) && stringFields(plan, ['identity'])
+    && (plan.yaml === undefined || typeof plan.yaml === 'string')
+    && (report.validation === undefined || typeof report.validation === 'string')
+    && (report.stagedAt == null || typeof report.stagedAt === 'string')
+    && (report.switchedLinks === undefined || (Array.isArray(report.switchedLinks)
+      && report.switchedLinks.every(link => typeof link === 'string')))
+    && Array.isArray(plan.groups) && plan.groups.every(group =>
+      stringFields(group, ['sourcePollerUid','targetPollerUid','targetBridgeUid']))
+    && Array.isArray(plan.impacts) && plan.impacts.every(impact =>
+      stringFields(impact, ['itemName','sourceChannelUid','targetChannelUid'])
+      && typeof impact.targetLinkPlanned === 'boolean')
+    && manualWorkValid(plan.manualWork);
 }
 function comparisonValid(observation) {
   // Validate only the detached fields consumed by the renderer. Empty values and
@@ -83,6 +114,7 @@ export function createController({ auth, fetch = globalThis.fetch }) {
     state.report = null;
     const report = await request(capture, `workflows/${encodeURIComponent(state.identity)}`);
     check(capture);
+    if (!workflowValid(report)) throw new Error('Invalid backend response.');
     state.report = report;
     state.uncertain = false;
     return state.report;
@@ -91,10 +123,14 @@ export function createController({ auth, fetch = globalThis.fetch }) {
     const capture = context();
     if (state.busy) throw new Error('An operation is already in progress.');
     state.comparison = null;
+    state.report = null;
+    state.manualWork = [];
     state.busy = true;
     try {
       const review = await request(capture, 'previews', 'POST');
       check(capture);
+      if (!stringFields(review?.plan, ['identity']) || !manualWorkValid(review.manualWork))
+        throw new Error('Invalid backend response.');
       state.identity = review.plan.identity;
       state.manualWork = review.manualWork || [];
       state.report = null;
@@ -118,7 +154,7 @@ export function createController({ auth, fetch = globalThis.fetch }) {
     try {
       const report = await request(capture, `workflows/${encodeURIComponent(state.identity)}/${operation}`, 'POST', body);
       check(capture);
-      state.report = report;
+      if (!workflowValid(report)) throw new Error('Invalid backend response.');
       await refresh(capture);
       // POST validation evidence is transient: GET readback does not collect observations.
       // Keep it only for this successfully reconciled validation, never across an explicit refetch.

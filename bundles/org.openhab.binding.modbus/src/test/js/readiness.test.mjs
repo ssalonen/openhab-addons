@@ -4,7 +4,7 @@ import { createController, cutoverBlockReason } from '../../main/resources/migra
 
 const sourcePollerUid = 'legacy:one';
 const other = 'legacy:two';
-const report = {preview:{identity:'review',groups:[{sourcePollerUid},{sourcePollerUid:other}]},
+const report = {preview:{identity:'review',groups:[sourcePollerUid,other].map(source => ({sourcePollerUid:source,targetPollerUid:`target:${source}`,targetBridgeUid:'bridge'})),impacts:[],manualWork:[]},
   status:'STAGED',validation:'UNAVAILABLE',cutoverReady:false,readinessReason:'No fresh comparison'};
 const channel = {sourceChannelUid:'legacy:one:number',targetChannelUid:'modbus:poller2:one:number',
   address:'100',valueType:'int16',sourceValue:'42',targetValue:'42',

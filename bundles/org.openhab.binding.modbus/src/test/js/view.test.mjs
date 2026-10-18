@@ -83,11 +83,80 @@ test('storage logout clears controls and late requests cannot unlock a new sessi
   }
 });
 
+test('malformed managed reports are announced, never rendered, and allow a subsequent valid capture', async () => {
+  const plan = {identity:'review',yaml:'things:',groups:[],impacts:[],manualWork:[]};
+  const valid = {preview:plan,status:'PREVIEW',validation:'UNAVAILABLE'};
+  const malformed = [{},{status:'STAGED'}, {...valid,preview:null},
+    ...['groups','impacts','manualWork'].map(field => ({...valid,preview:{...plan,[field]:[null]}}))];
+  for (const [index,bad] of malformed.entries()) {
+    class Element {
+      constructor() { this.value = ''; this.handlers = {}; this.children = []; }
+      addEventListener(name, fn) { this.handlers[name] = fn; }
+      append(...children) { this.children.push(...children); }
+      replaceChildren(...children) { this.children = children; }
+    }
+    const ids = new Map(); let result = bad; let captures = 0;
+    globalThis.document = {cookie:'',getElementById:id => { if (!ids.has(id)) ids.set(id,new Element()); return ids.get(id); },createElement:() => new Element()};
+    globalThis.window = {addEventListener() {}};
+    globalThis.location = {origin:'https://openhab.test'};
+    globalThis.localStorage = {getItem:() => 'refresh'};
+    globalThis.fetch = async url => {
+      if (url === '/rest/auth/token') return new Response(JSON.stringify({access_token:'access',expires_in:60}));
+      if (url.endsWith('/previews')) { captures++; return new Response(JSON.stringify({plan,manualWork:[]})); }
+      return new Response(JSON.stringify(result));
+    };
+    await import(new URL(`app.mjs?malformed-report-${index}`,base));
+    await assert.doesNotReject(ids.get('preview').handlers.click());
+    assert.equal(ids.get('error').hidden,false);
+    assert.equal(ids.get('error').textContent,'Invalid backend response.');
+    assert.match(ids.get('status').textContent,/Operation stopped/);
+    assert.equal(ids.get('preview').disabled,false);
+    for (const control of ['stage','rollback']) assert.equal(ids.get(control).disabled,true);
+    assert.equal(ids.get('groups').children.length,0);
+    assert.equal(ids.get('impacts').children.length,0);
+    result = valid; await ids.get('preview').handlers.click();
+    assert.equal(captures,2);
+    assert.equal(ids.get('stage').disabled,false);
+  }
+});
+
+test('initial render failure is announced without wedging the next capture', async () => {
+  class Element {
+    constructor() { this.value = ''; this.handlers = {}; this.children = []; }
+    addEventListener(name, fn) { this.handlers[name] = fn; }
+    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children = children; }
+  }
+  const ids = new Map();
+  globalThis.document = {cookie:'',getElementById:id => { if (!ids.has(id)) ids.set(id,new Element()); return ids.get(id); },createElement:() => new Element()};
+  globalThis.window = {addEventListener() {}};
+  globalThis.location = {origin:'https://openhab.test'};
+  globalThis.localStorage = {getItem:() => 'refresh'};
+  const plan = {identity:'recovered',groups:[],impacts:[],manualWork:[],yaml:''};
+  let captures = 0;
+  globalThis.fetch = async url => {
+    if (url === '/rest/auth/token') return new Response(JSON.stringify({access_token:'access',expires_in:60}));
+    if (url.endsWith('/previews')) { captures++; return new Response(JSON.stringify({plan,manualWork:[]})); }
+    return new Response(JSON.stringify({preview:plan,status:'PREVIEW',validation:'UNAVAILABLE'}));
+  };
+  await import(new URL('app.mjs?render-failure',base));
+  const root = ids.get('provider-proposals'); const replace = root.replaceChildren;
+  root.replaceChildren = function () { this.replaceChildren = replace; throw new Error('render failure'); };
+  await assert.doesNotReject(ids.get('preview').handlers.click());
+  assert.equal(ids.get('preview').disabled,false);
+  assert.equal(ids.get('error').hidden,false);
+  assert.match(ids.get('status').textContent,/Operation stopped/);
+  await ids.get('preview').handlers.click();
+  assert.equal(captures,1);
+  assert.equal(ids.get('stage').disabled,false);
+});
+
 test('view provides labelled review, group and recovery controls without inline scripts', async () => {
   const html = await readFile(new URL('index.html', base), 'utf8');
   for (const id of ['preview','identity','refresh','stage','groups','impacts','yaml','manual','rollback','status','error'])
     assert.ok(html.includes(`id="${id}"`), id);
   assert.ok(html.includes('aria-live="polite"'));
+  assert.match(html, /id="status" tabindex="-1" role="status"/);
   assert.ok(html.includes('<label for="identity"'));
   assert.ok(!/<script[^>]*>[^<]+<\/script>/.test(html));
 });

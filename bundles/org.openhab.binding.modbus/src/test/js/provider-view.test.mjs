@@ -104,7 +104,7 @@ async function fixture(name, result = proposal, managed = false) {
     if (url === '/rest/auth/token') return new Response(JSON.stringify({access_token:'access',expires_in:60}));
     if (url.endsWith('provider-previews')) return typeof result === 'function' ? result() : new Response(JSON.stringify(result));
     if (managed && url.endsWith('/previews')) return new Response(JSON.stringify({plan:{identity:'managed'},manualWork:[]}));
-    if (managed && url.endsWith('/workflows/managed')) return new Response(JSON.stringify({preview:{identity:'managed',groups:[],impacts:[]},status:'PREVIEW'}));
+    if (managed && url.endsWith('/workflows/managed')) return new Response(JSON.stringify({preview:{identity:'managed',groups:[],impacts:[],manualWork:[]},status:'PREVIEW'}));
     throw new Error('Unexpected managed mutation');
   };
   await import(new URL(`app.mjs?provider-${name}`,base));
