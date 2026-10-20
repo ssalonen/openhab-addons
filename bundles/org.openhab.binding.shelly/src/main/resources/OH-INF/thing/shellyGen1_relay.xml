@@ -343,7 +343,7 @@
 
 	<channel-group-type id="nmeter">
 		<label>Neutral Current</label>
-		<description>Based measurements based on the N clamp (has to be calibrated)</description>
+		<description>Measurements based on the N clamp (has to be calibrated)</description>
 	</channel-group-type>
 
 	<channel-group-type id="externalSensors">
@@ -494,6 +494,24 @@
 			<tag>Control</tag>
 			<tag>Brightness</tag>
 		</tags>
+	</channel-type>
+
+	<channel-type id="daliDeviceCount" advanced="true">
+		<item-type>Number</item-type>
+		<label>DALI Device Count</label>
+		<description>Number of control gears (devices) found on the DALI bus</description>
+		<category>Status</category>
+		<state readOnly="true" pattern="%d">
+		</state>
+	</channel-type>
+
+	<channel-type id="daliScanActive" advanced="true">
+		<item-type>Switch</item-type>
+		<label>DALI Scan Active</label>
+		<description>ON: A scan of the DALI bus is currently in progress</description>
+		<category>Status</category>
+		<state readOnly="true">
+		</state>
 	</channel-type>
 
 	<channel-type id="meterWatts" advanced="true">

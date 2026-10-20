@@ -1,0 +1,192 @@
+// Keep cleanup around the initial render as well as asynchronous operations.
+export async function runInteraction({ start, action, succeeded, failed, finished }) {
+  try { start(); await action(); succeeded(); }
+  catch (error) { failed(error); }
+  finally { finished(); }
+}
+
+// Resolve stable action identity against new controls without imitating a DOM in tests.
+export function restoreActionFocus(key, { focusAction, focusResult }) {
+  if (key !== undefined && !focusAction(key)) focusResult();
+}
+
+export function cutoverBlockReason(report, sourcePollerUid, comparison) {
+  if (!report) return 'Load a reviewed workflow first.';
+  if (report.status === 'STAGED' && comparison?.previewIdentity === report.preview?.identity
+      && comparison.sourcePollerUid === sourcePollerUid
+      && report.preview.groups.some(group => group.sourcePollerUid === sourcePollerUid)
+      && comparison.outcome === 'MATCH' && Array.isArray(comparison.comparisons) && comparison.comparisons.length > 0
+      && comparison.comparisons.every(entry => entry?.outcome === 'MATCH')) return '';
+  return report.readinessReason || 'Validate this exact staged group in this session before requesting cutover.';
+}
+function record(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+function stringFields(value, keys) {
+  return record(value) && keys.every(key => typeof value[key] === 'string');
+}
+function manualWorkValid(work) {
+  return Array.isArray(work) && work.every(entry => stringFields(entry, ['sourceUid','reason']));
+}
+function workflowValid(report) {
+  // Check renderer inputs, not unused backend internals or opaque profile values.
+  const plan = report?.preview;
+  return stringFields(report, ['status']) && stringFields(plan, ['identity'])
+    && (plan.yaml === undefined || typeof plan.yaml === 'string')
+    && (report.validation === undefined || typeof report.validation === 'string')
+    && (report.stagedAt == null || typeof report.stagedAt === 'string')
+    && (report.switchedLinks === undefined || (Array.isArray(report.switchedLinks)
+      && report.switchedLinks.every(link => typeof link === 'string')))
+    && Array.isArray(plan.groups) && plan.groups.every(group =>
+      stringFields(group, ['sourcePollerUid','targetPollerUid','targetBridgeUid']))
+    && Array.isArray(plan.impacts) && plan.impacts.every(impact =>
+      stringFields(impact, ['itemName','sourceChannelUid','targetChannelUid'])
+      && typeof impact.targetLinkPlanned === 'boolean')
+    && manualWorkValid(plan.manualWork);
+}
+function comparisonValid(observation) {
+  // Validate only the detached fields consumed by the renderer. Empty values and
+  // absent timestamps are legitimate UNAVAILABLE placeholders, not schema errors.
+  const timestamp = value => value == null || typeof value === 'string';
+  return stringFields(observation, ['previewIdentity','sourcePollerUid','outcome'])
+    && timestamp(observation.observedAt)
+    && Array.isArray(observation.comparisons) && observation.comparisons.every(entry =>
+      stringFields(entry, ['sourceChannelUid','targetChannelUid','address','valueType','sourceValue','targetValue','outcome','reason'])
+      && timestamp(entry.sourceObservedAt) && timestamp(entry.targetObservedAt));
+}
+function providerProposalValid(proposal) {
+  return stringFields(proposal, ['revisionDigest'])
+    && Array.isArray(proposal.fileChanges) && proposal.fileChanges.every(change =>
+      stringFields(change, ['sourcePollerUid','targetPollerUid','revisionDigest','candidateYaml','instructions'])
+      && Array.isArray(change.sources) && change.sources.every(source =>
+        stringFields(source, ['sourceUid','providerIdentity','sourceLocation'])
+        && typeof (source.configurationDigest ?? source.revisionDigest) === 'string')
+      && Array.isArray(change.linkPatches) && change.linkPatches.every(patch =>
+        stringFields(patch, ['itemName','sourceChannelUid','targetChannelUid','sourceLocation'])
+        && typeof (patch.sourceLinkProviderIdentity ?? patch.providerIdentity) === 'string'
+        && typeof (patch.sourceLinkDigest ?? patch.revisionDigest) === 'string'
+        && record(patch.sourceProfileConfiguration ?? patch.profileConfiguration)))
+    && Array.isArray(proposal.manualWork) && proposal.manualWork.every(work =>
+      stringFields(work, ['sourceUid','reason','configurationIdentity']));
+}
+export function createController({ auth, fetch = globalThis.fetch }) {
+  const state = { identity: '', report: null, comparison: null, manualWork: [], providerPreview: null, providerError: '', busy: false, uncertain: false };
+  let generation = 0;
+  let session = auth.sessionVersion?.();
+  function invalidateSession() {
+    generation++;
+    session = auth.sessionVersion?.();
+    Object.assign(state, { identity: '', report: null, comparison: null, manualWork: [], providerPreview: null, providerError: '', busy: false, uncertain: false });
+  }
+  function context() {
+    if (auth.sessionVersion?.() !== session) invalidateSession();
+    return { generation, session };
+  }
+  function current(capture) {
+    if (auth.sessionVersion?.() !== session) invalidateSession();
+    return capture.generation === generation && capture.session === session;
+  }
+  function check(capture) {
+    if (!current(capture)) throw new Error('Main UI session changed. Refetch the workflow before making changes.');
+  }
+  async function request(capture, path, method = 'GET', body) {
+    const headers = await auth.headers();
+    check(capture);
+    let response;
+    try {
+      response = await fetch(`/rest/modbus/migration/${path}`, {method,
+        headers: { ...headers, ...(body === undefined ? {} : {'Content-Type':'application/json'}) },
+        ...(body === undefined ? {} : {body: JSON.stringify(body)}), credentials:'same-origin', cache:'no-store'});
+    } catch { check(capture); throw new Error('Network request failed.'); }
+    check(capture);
+    if (response.status === 401) { auth.invalidate(); throw new Error('Session expired. Sign in again in Main UI.'); }
+    if (response.status === 403) throw new Error('Forbidden: administrator access is required.');
+    if (!response.ok) throw new Error(`Operation refused (HTTP ${response.status}).`);
+    let data;
+    try { data = await response.json(); } catch { check(capture); throw new Error('Invalid backend response.'); }
+    check(capture);
+    return data;
+  }
+  async function refresh(capture = context()) {
+    check(capture);
+    state.comparison = null;
+    if (!state.identity) throw new Error('Select a reviewed identity first.');
+    state.report = null;
+    const report = await request(capture, `workflows/${encodeURIComponent(state.identity)}`);
+    check(capture);
+    if (!workflowValid(report)) throw new Error('Invalid backend response.');
+    state.report = report;
+    state.uncertain = false;
+    return state.report;
+  }
+  async function preview() {
+    const capture = context();
+    if (state.busy) throw new Error('An operation is already in progress.');
+    state.comparison = null;
+    state.report = null;
+    state.manualWork = [];
+    state.busy = true;
+    try {
+      const review = await request(capture, 'previews', 'POST');
+      check(capture);
+      if (!stringFields(review?.plan, ['identity']) || !manualWorkValid(review.manualWork))
+        throw new Error('Invalid backend response.');
+      state.identity = review.plan.identity;
+      state.manualWork = review.manualWork || [];
+      state.report = null;
+      await refresh(capture);
+    } finally { if (current(capture)) state.busy = false; }
+  }
+  async function mutate(operation, body = {}, confirmed = false) {
+    const capture = context();
+    if (!confirmed) throw new Error('Explicit confirmation is required.');
+    if (!state.identity || !state.report || state.uncertain) throw new Error('Refetch the workflow before making changes.');
+    if (state.busy) throw new Error('An operation is already in progress.');
+    if (!['apply','validate','cutover','revert','rollback'].includes(operation)) throw new Error('Unknown operation.');
+    if (operation === 'cutover' && (state.identity !== state.report.preview.identity
+        || cutoverBlockReason(state.report, body.sourcePollerUid, state.comparison)))
+      throw new Error(cutoverBlockReason(state.report, body.sourcePollerUid, state.comparison) || 'Refetch the reviewed identity.');
+    if (['validate','cutover'].includes(operation) && !state.report.preview.groups.some(g => g.sourcePollerUid === body.sourcePollerUid))
+      throw new Error('Select an explicit reviewed poller group.');
+    state.busy = true;
+    state.comparison = null;
+    const identity = state.identity;
+    try {
+      const report = await request(capture, `workflows/${encodeURIComponent(state.identity)}/${operation}`, 'POST', body);
+      check(capture);
+      if (!workflowValid(report)) throw new Error('Invalid backend response.');
+      await refresh(capture);
+      // POST validation evidence is transient: GET readback does not collect observations.
+      // Keep it only for this successfully reconciled validation, never across an explicit refetch.
+      if (operation === 'validate' && identity === state.identity && state.report.preview.identity === identity
+          && state.report.status === 'STAGED' && report.observation?.previewIdentity === identity
+          && report.observation.sourcePollerUid === body.sourcePollerUid && comparisonValid(report.observation)) {
+        state.comparison = report.observation;
+      }
+    } catch (error) {
+      if (current(capture)) {
+        state.uncertain = true;
+        // GET reconciliation is safe; never replay the POST, even after obtaining a new token.
+        try { await refresh(capture); } catch { if (current(capture)) state.report = null; }
+      }
+      throw new Error(`${error.message} The operation outcome is uncertain. Refetch and review workflow state before retrying.`);
+    } finally { if (current(capture)) state.busy = false; }
+  }
+  async function providerPreviews() {
+    const capture = context();
+    state.comparison = null;
+    state.providerPreview = null;
+    state.providerError = '';
+    try {
+      const proposal = await request(capture, 'provider-previews');
+      check(capture);
+      if (!providerProposalValid(proposal)) throw new Error('Invalid backend response.');
+      state.providerPreview = proposal;
+      return proposal;
+    } catch (error) {
+      if (current(capture)) state.providerError = error.message;
+      throw error;
+    }
+  }
+  return { state, preview, refresh, mutate, providerPreviews, invalidateSession };
+}

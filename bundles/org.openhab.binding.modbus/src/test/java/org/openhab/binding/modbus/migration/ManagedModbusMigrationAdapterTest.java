@@ -1,0 +1,152 @@
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ */
+package org.openhab.binding.modbus.migration;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+import org.openhab.core.config.core.Configuration;
+import org.openhab.core.thing.Thing;
+import org.openhab.core.thing.ThingRegistry;
+import org.openhab.core.thing.ThingTypeUID;
+import org.openhab.core.thing.ThingUID;
+import org.openhab.core.thing.link.ItemChannelLinkRegistry;
+
+/**
+ * @author Sami Salonen - Preview identity regression coverage
+ */
+class ManagedModbusMigrationAdapterTest {
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = { "Number", "Switch", "Contact", "DateTime", "Dimmer",
+            "String", "Rollershutter" })
+    void snapshotPreservesSourceChannelItemType(String itemType) {
+        ThingUID pollerUid = new ThingUID("modbus:poller:tcp:plant");
+        Thing data = org.openhab.core.thing.binding.builder.ThingBuilder
+                .create(new ThingTypeUID("modbus", "data"), new ThingUID("modbus:data:tcp:plant:value"))
+                .withBridge(pollerUid)
+                .withChannel(org.openhab.core.thing.binding.builder.ChannelBuilder
+                        .create(new org.openhab.core.thing.ChannelUID("modbus:data:tcp:plant:value:typed"))
+                        .withAcceptedItemType(itemType).build())
+                .build();
+        ThingRegistry registry = mock(ThingRegistry.class);
+        when(registry.getAll()).thenReturn(List.of(data));
+        org.openhab.core.thing.ManagedThingProvider provider = mock(org.openhab.core.thing.ManagedThingProvider.class);
+        when(provider.get(data.getUID())).thenReturn(data);
+        Thing poller = mock(Thing.class);
+        when(poller.getThingTypeUID()).thenReturn(new ThingTypeUID("modbus", "poller"));
+        when(registry.get(pollerUid)).thenReturn(poller);
+        ItemChannelLinkRegistry links = mock(ItemChannelLinkRegistry.class);
+        when(links.getAll()).thenReturn(List.of(new org.openhab.core.thing.link.ItemChannelLink("Value",
+                new org.openhab.core.thing.ChannelUID("modbus:data:tcp:plant:value:typed"))));
+
+        assertEquals(itemType, new ManagedModbusMigrationAdapter(registry, links, provider).snapshot().data().getFirst()
+                .links().getFirst().itemType());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = { "tcp", "serial" })
+    void snapshotReportsEndpointWriteOnlyChildrenAsManualWork(String endpointType) {
+        ThingUID endpointUid = new ThingUID("modbus:" + endpointType + ":plant");
+        Thing endpoint = org.openhab.core.thing.binding.builder.BridgeBuilder
+                .create(new ThingTypeUID("modbus", endpointType), endpointUid).build();
+        Thing data = org.openhab.core.thing.binding.builder.ThingBuilder
+                .create(new ThingTypeUID("modbus", "data"), new ThingUID("modbus:data:plant:writer"))
+                .withBridge(endpointUid)
+                .withConfiguration(new org.openhab.core.config.core.Configuration(
+                        java.util.Map.of("writeStart", "100", "writeType", "holding", "writeValueType", "int16")))
+                .build();
+        ThingRegistry registry = mock(ThingRegistry.class);
+        when(registry.getAll()).thenReturn(List.of(data, endpoint));
+        when(registry.get(endpointUid)).thenReturn(endpoint);
+        org.openhab.core.thing.ManagedThingProvider provider = mock(org.openhab.core.thing.ManagedThingProvider.class);
+        when(provider.get(data.getUID())).thenReturn(data);
+        ItemChannelLinkRegistry links = mock(ItemChannelLinkRegistry.class);
+        when(links.getAll()).thenReturn(List.of());
+
+        ManagedModbusMigrationAdapter.Snapshot snapshot = new ManagedModbusMigrationAdapter(registry, links, provider)
+                .snapshot();
+
+        assertEquals(List.of(), snapshot.data());
+        assertEquals(data.getUID().toString(), snapshot.manualWork().getFirst().sourceUid());
+        assertEquals("legacy data parent is not a poller; writes require manual migration",
+                snapshot.manualWork().getFirst().reason());
+        assertFalse(snapshot.manualWork().getFirst().configurationIdentity().isBlank());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({ "tcp,id", "tcp,host", "tcp,port", "tcp,password", "serial,id",
+            "serial,port", "serial,baud", "serial,password" })
+    void previewIdentityBindsEndpointConfiguration(String endpointType, String property) {
+        ThingUID endpointUid = new ThingUID("modbus:" + endpointType + ":plant");
+        Thing endpoint = org.openhab.core.thing.binding.builder.BridgeBuilder
+                .create(new ThingTypeUID("modbus", endpointType), endpointUid)
+                .withConfiguration(new org.openhab.core.config.core.Configuration(
+                        java.util.Map.of("id", 1, "password", "endpoint-secret-before")))
+                .build();
+        Thing poller = org.openhab.core.thing.binding.builder.BridgeBuilder
+                .create(new ThingTypeUID("modbus", "poller"), new ThingUID("modbus:poller:tcp:plant"))
+                .withBridge(endpointUid)
+                .withConfiguration(new org.openhab.core.config.core.Configuration(java.util.Map.of("start", 100)))
+                .build();
+        ThingRegistry registry = mock(ThingRegistry.class);
+        when(registry.getAll()).thenReturn(List.of(poller, endpoint));
+        when(registry.get(endpointUid)).thenReturn(endpoint);
+        org.openhab.core.thing.ManagedThingProvider provider = mock(org.openhab.core.thing.ManagedThingProvider.class);
+        when(provider.get(poller.getUID())).thenReturn(poller);
+        ManagedModbusMigrationAdapter adapter = new ManagedModbusMigrationAdapter(registry,
+                mock(ItemChannelLinkRegistry.class), provider);
+        MigrationApplier applier = mock(MigrationApplier.class);
+        ModbusMigrationWorkflow workflow = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(), applier);
+        ManagedModbusMigrationAdapter.Snapshot before = adapter.snapshot();
+        MigrationPreview reviewed = workflow.preview(before.pollers(), before.data());
+
+        org.junit.jupiter.api.Assertions.assertTrue(reviewed.identity().matches("[0-9a-f]{64}"));
+        org.junit.jupiter.api.Assertions.assertFalse(before.toString().contains("endpoint-secret-before"));
+        org.junit.jupiter.api.Assertions.assertFalse(reviewed.toString().contains("endpoint-secret-before"));
+        endpoint.getConfiguration().put(property, "endpoint-secret-after");
+        ManagedModbusMigrationAdapter.Snapshot after = adapter.snapshot();
+
+        org.junit.jupiter.api.Assertions.assertFalse(reviewed.identity()
+                .equals(new ModbusMigrationPlanner().preview(after.pollers(), after.data()).identity()));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> workflow.apply(reviewed.identity(), after.pollers(), after.data()));
+        org.junit.jupiter.api.Assertions.assertFalse(after.toString().contains("endpoint-secret-after"));
+        org.mockito.Mockito.verifyNoInteractions(applier);
+    }
+
+    @Test
+    void previewRefusesAnUnmanagedLegacyPoller() {
+        Thing legacyPoller = mock(Thing.class);
+        ThingUID pollerUid = new ThingUID("modbus:poller:tcp:plant");
+        when(legacyPoller.getUID()).thenReturn(pollerUid);
+        when(legacyPoller.getThingTypeUID()).thenReturn(new ThingTypeUID("modbus", "poller"));
+        when(legacyPoller.getConfiguration()).thenReturn(new Configuration(Map.of("start", 100)));
+        ThingRegistry registry = mock(ThingRegistry.class);
+        when(registry.getAll()).thenReturn(List.of(legacyPoller));
+
+        ManagedModbusMigrationAdapter adapter = new ManagedModbusMigrationAdapter(registry,
+                mock(ItemChannelLinkRegistry.class), mock(org.openhab.core.thing.ManagedThingProvider.class));
+
+        assertEquals(pollerUid.toString(), adapter.snapshot().manualWork().getFirst().sourceUid());
+        assertEquals("legacy Thing is not managed", adapter.snapshot().manualWork().getFirst().reason());
+        assertFalse(adapter.snapshot().manualWork().getFirst().configurationIdentity().isBlank());
+        assertEquals(List.of(), adapter.snapshot().pollers());
+    }
+}

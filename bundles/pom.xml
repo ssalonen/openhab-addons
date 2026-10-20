@@ -71,9 +71,11 @@
     <module>org.openhab.binding.argoclima</module>
     <module>org.openhab.binding.astro</module>
     <module>org.openhab.binding.asuswrt</module>
+    <module>org.openhab.binding.atagone</module>
     <module>org.openhab.binding.atlona</module>
     <module>org.openhab.binding.atmofrance</module>
     <module>org.openhab.binding.autelis</module>
+    <module>org.openhab.binding.autoblind</module>
     <module>org.openhab.binding.automower</module>
     <module>org.openhab.binding.avmfritz</module>
     <module>org.openhab.binding.awattar</module>
@@ -148,6 +150,7 @@
     <module>org.openhab.binding.elerotransmitterstick</module>
     <module>org.openhab.binding.elroconnects</module>
     <module>org.openhab.binding.emby</module>
+    <module>org.openhab.binding.emerald</module>
     <module>org.openhab.binding.emotiva</module>
     <module>org.openhab.binding.energenie</module>
     <module>org.openhab.binding.energidataservice</module>
@@ -248,6 +251,7 @@
     <module>org.openhab.binding.lcn</module>
     <module>org.openhab.binding.leapmotion</module>
     <module>org.openhab.binding.lghombot</module>
+    <module>org.openhab.binding.lghorizon</module>
     <module>org.openhab.binding.lgtvserial</module>
     <module>org.openhab.binding.lgthinq</module>
     <module>org.openhab.binding.lgwebos</module>
@@ -260,6 +264,7 @@
     <module>org.openhab.binding.lirc</module>
     <module>org.openhab.binding.livisismarthome</module>
     <module>org.openhab.binding.logreader</module>
+    <module>org.openhab.binding.loqed</module>
     <module>org.openhab.binding.loxone</module>
     <module>org.openhab.binding.lutron</module>
     <module>org.openhab.binding.luxom</module>
@@ -290,6 +295,7 @@
     <module>org.openhab.binding.milight</module>
     <module>org.openhab.binding.minecraft</module>
     <module>org.openhab.binding.modbus</module>
+    <module>org.openhab.binding.modbus.ankersolix</module>
     <module>org.openhab.binding.modbus.e3dc</module>
     <module>org.openhab.binding.modbus.foxinverter</module>
     <module>org.openhab.binding.modbus.kermi</module>
@@ -363,6 +369,7 @@
     <module>org.openhab.binding.playstation</module>
     <module>org.openhab.binding.plclogo</module>
     <module>org.openhab.binding.plex</module>
+    <module>org.openhab.binding.plivo</module>
     <module>org.openhab.binding.plugwise</module>
     <module>org.openhab.binding.plugwiseha</module>
     <module>org.openhab.binding.powermax</module>
@@ -375,6 +382,7 @@
     <module>org.openhab.binding.pushsafer</module>
     <module>org.openhab.binding.qbus</module>
     <module>org.openhab.binding.qolsysiq</module>
+    <module>org.openhab.binding.rachio</module>
     <module>org.openhab.binding.radiobrowser</module>
     <module>org.openhab.binding.radiothermostat</module>
     <module>org.openhab.binding.regoheatpump</module>
@@ -454,6 +462,7 @@
     <module>org.openhab.binding.tesla</module>
     <module>org.openhab.binding.teslapowerwall</module>
     <module>org.openhab.binding.teslascope</module>
+    <module>org.openhab.binding.threedprinter</module>
     <module>org.openhab.binding.tibber</module>
     <module>org.openhab.binding.tivo</module>
     <module>org.openhab.binding.touchwand</module>
@@ -664,6 +673,37 @@
             </execution>
           </executions>
         </plugin>
+        <plugin>
+          <groupId>com.github.eirslett</groupId>
+          <artifactId>frontend-maven-plugin</artifactId>
+          <configuration>
+            <installDirectory>${project.build.directory}/node-markdownlint</installDirectory>
+          </configuration>
+          <executions>
+            <execution>
+              <id>install-node-and-npm</id>
+              <goals>
+                <goal>install-node-and-npm</goal>
+              </goals>
+              <phase>validate</phase>
+              <configuration>
+                <skip>${markdownlint.execution.skip}</skip>
+              </configuration>
+            </execution>
+            <execution>
+              <id>markdownlint</id>
+              <goals>
+                <goal>npm</goal>
+              </goals>
+              <phase>validate</phase>
+              <configuration>
+                <skip>${markdownlint.execution.skip}</skip>
+                <workingDirectory>${project.basedir}</workingDirectory>
+                <arguments>exec --yes markdownlint-cli2 -- **/*.md !**/target/** !**/node_modules/** --config ${maven.multiModuleProjectDirectory}/.github/markdownlint.yaml</arguments>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
       </plugins>
     </pluginManagement>
 
@@ -777,7 +817,7 @@
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>xml-maven-plugin</artifactId>
-        <version>1.2.1</version>
+        <version>1.2.2</version>
         <configuration>
           <validationSets>
             <validationSet>
@@ -798,41 +838,6 @@
         </executions>
       </plugin>
 
-      <!-- 4. Run markdownlint -->
-      <plugin>
-        <groupId>com.github.eirslett</groupId>
-        <artifactId>frontend-maven-plugin</artifactId>
-
-        <configuration>
-          <installDirectory>${maven.multiModuleProjectDirectory}/target/.mvn/node-markdownlint</installDirectory>
-        </configuration>
-
-        <executions>
-          <execution>
-            <id>install-node-and-npm</id>
-            <goals>
-              <goal>install-node-and-npm</goal>
-            </goals>
-            <phase>validate</phase>
-            <configuration>
-              <skip>${markdownlint.skip}</skip>
-            </configuration>
-          </execution>
-
-          <execution>
-            <id>markdownlint</id>
-            <goals>
-              <goal>npm</goal>
-            </goals>
-            <phase>validate</phase>
-            <configuration>
-              <skip>${markdownlint.skip}</skip>
-              <workingDirectory>${project.basedir}</workingDirectory>
-              <arguments>exec --yes markdownlint-cli2 -- **/*.md !**/target/** !**/node_modules/** --config ${maven.multiModuleProjectDirectory}/.github/markdownlint.yaml</arguments>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
     </plugins>
   </build>
 
@@ -875,6 +880,43 @@
                 <phase>none</phase>
               </execution>
             </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <profile>
+      <id>markdownlint</id>
+      <activation>
+        <property>
+          <name>!m2e.version</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>configure-markdownlint</id>
+                <goals>
+                  <goal>regex-property</goal>
+                </goals>
+                <phase>validate</phase>
+                <configuration>
+                  <name>markdownlint.execution.skip</name>
+                  <value>true|${markdownlint.skip}|${project.artifactId}|${session.topLevelProject.basedir}</value>
+                  <regex>^(?:(true)\|true\|.*|true\|false\|org\.openhab\.addons\.reactor\.bundles\|.*|true\|false\|.*\|\Q${project.basedir}\E|(true)\|.*)$</regex>
+                  <replacement>$1$2</replacement>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>com.github.eirslett</groupId>
+            <artifactId>frontend-maven-plugin</artifactId>
+            <inherited>true</inherited>
           </plugin>
         </plugins>
       </build>

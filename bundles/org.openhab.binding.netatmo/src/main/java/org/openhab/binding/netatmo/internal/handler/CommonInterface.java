@@ -93,7 +93,7 @@ public interface CommonInterface {
     }
 
     default ScheduledFuture<?> schedule(Runnable arg0, Duration delay) {
-        return getScheduler().schedule(arg0, delay.getSeconds(), TimeUnit.SECONDS);
+        return getScheduler().schedule(arg0, delay.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     default @Nullable ApiBridgeHandler getAccountHandler() {
@@ -122,9 +122,7 @@ public interface CommonInterface {
         return getThingConfigAs(NAThingConfiguration.class).getId();
     }
 
-    default <T> T getThingConfigAs(Class<T> configurationClass) {
-        return getThing().getConfiguration().as(configurationClass);
-    }
+    <T> T getThingConfigAs(Class<T> configurationClass);
 
     default Stream<Channel> getActiveChannels() {
         return getThing().getChannels().stream()

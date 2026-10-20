@@ -1,0 +1,39 @@
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ */
+package org.openhab.binding.modbus.migration;
+
+import java.util.Map;
+
+import org.eclipse.jdt.annotation.NonNullByDefault;
+
+/** One Item-to-channel link and its current profile configuration. */
+@NonNullByDefault
+public record LegacyLink(String itemName, String channelUid, String itemType, Map<String, Object> configuration,
+        String configurationIdentity, boolean compatible) {
+    public LegacyLink(String itemName, String channelUid, String itemType, Map<String, Object> configuration) {
+        this(itemName, channelUid, itemType,
+                MigrationReviewConfiguration.defaultProfile(configuration) ? configuration
+                        : Map.of("review", "configuration omitted; manual restoration required", "identity",
+                                ModbusMigrationPlanner.configurationIdentity(configuration)),
+                ModbusMigrationPlanner.configurationIdentity(configuration),
+                MigrationReviewConfiguration.defaultProfile(configuration));
+    }
+
+    public LegacyLink {
+        configuration = Map.copyOf(configuration);
+    }
+
+    public LegacyLink(String itemName, String channelUid, String itemType) {
+        this(itemName, channelUid, itemType, Map.of());
+    }
+}

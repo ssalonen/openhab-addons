@@ -12,10 +12,15 @@
  */
 package org.openhab.binding.modbus.handler;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
@@ -24,6 +29,10 @@ import org.openhab.binding.modbus.internal.AtomicStampedValue;
 import org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal;
 import org.openhab.binding.modbus.internal.config.ModbusPollerConfiguration;
 import org.openhab.binding.modbus.internal.handler.ModbusDataThingHandler;
+import org.openhab.binding.modbus.migration.MigrationRead;
+import org.openhab.binding.modbus.migration.MigrationReadSelection;
+import org.openhab.binding.modbus.migration.Poller2Observation;
+import org.openhab.binding.modbus.migration.Poller2ObservationCollector;
 import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
 import org.openhab.core.io.transport.modbus.AsyncModbusReadResult;
 import org.openhab.core.io.transport.modbus.ModbusCommunicationInterface;
@@ -40,6 +49,7 @@ import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingStatusInfo;
+import org.openhab.core.thing.ThingUID;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.types.Command;
@@ -54,6 +64,7 @@ import org.slf4j.LoggerFactory;
  */
 @NonNullByDefault
 public class ModbusPollerThingHandler extends BaseBridgeHandler {
+    private long callbackGeneration;
 
     /**
      * {@link ModbusReadCallback} that delegates all tasks forward.
@@ -68,24 +79,47 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
     private class ReadCallbackDelegator
             implements ModbusReadCallback, ModbusFailureCallback<ModbusReadRequestBlueprint> {
 
+        private final long generation;
+        private final @Nullable List<ModbusDataThingHandler.ReadAuthorization> authorizations;
         private volatile @Nullable AtomicStampedValue<PollResult> lastResult;
 
-        public synchronized void handleResult(PollResult result) {
-            // Ignore all incoming data and errors if configuration is not correct
-            if (hasConfigurationError() || disposed) {
+        ReadCallbackDelegator() {
+            generation = ++callbackGeneration;
+            authorizations = null;
+        }
+
+        ReadCallbackDelegator(long generation) {
+            this.generation = generation;
+            authorizations = childCallbacks.stream()
+                    .map(child -> child.captureReadAuthorization(ModbusPollerThingHandler.this)).toList();
+        }
+
+        private List<ModbusDataThingHandler.ReadAuthorization> captureAuthorizations() {
+            List<ModbusDataThingHandler.ReadAuthorization> captured = authorizations;
+            return captured != null ? captured
+                    : childCallbacks.stream()
+                            .map(child -> child.captureReadAuthorization(ModbusPollerThingHandler.this)).toList();
+        }
+
+        private void handleResult(PollResult result) {
+            // The handler monitor serializes lifecycle changes with decoding and publication.
+            if (generation != callbackGeneration || hasConfigurationError() || disposed) {
                 return;
             }
             if (config.getCacheMillis() >= 0) {
-                AtomicStampedValue<PollResult> localLastResult = this.lastResult;
+                AtomicStampedValue<PollResult> localLastResult = callbackDelegator.lastResult;
                 if (localLastResult == null) {
-                    this.lastResult = new AtomicStampedValue<>(System.currentTimeMillis(), result);
+                    callbackDelegator.lastResult = new AtomicStampedValue<>(System.currentTimeMillis(), result);
                 } else {
                     localLastResult.update(System.currentTimeMillis(), result);
-                    this.lastResult = localLastResult;
+                    callbackDelegator.lastResult = localLastResult;
                 }
             }
             logger.debug("Thing {} received response {}", thing.getUID(), result);
-            notifyChildren(result);
+            notifyChildren(result, false);
+            if (generation != callbackGeneration || disposed) {
+                return;
+            }
             if (result.failure != null) {
                 Exception error = result.failure.getCause();
                 assert error != null;
@@ -97,17 +131,24 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
         }
 
         @Override
-        public synchronized void handle(AsyncModbusReadResult result) {
-            // Casting to allow registers.orElse(null) below..
-            Optional<@Nullable ModbusRegisterArray> registers = (Optional<@Nullable ModbusRegisterArray>) result
-                    .getRegisters();
-            lastPolledDataCache.set(registers.orElse(null));
-            handleResult(new PollResult(result));
+        public void handle(AsyncModbusReadResult result) {
+            synchronized (ModbusPollerThingHandler.this) {
+                if (generation != callbackGeneration || disposed || hasConfigurationError()) {
+                    return;
+                }
+                // Casting to allow registers.orElse(null) below..
+                Optional<@Nullable ModbusRegisterArray> registers = (Optional<@Nullable ModbusRegisterArray>) result
+                        .getRegisters();
+                lastPolledDataCache.set(registers.orElse(null));
+                handleResult(new PollResult(result, captureAuthorizations()));
+            }
         }
 
         @Override
-        public synchronized void handle(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
-            handleResult(new PollResult(failure));
+        public void handle(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+            synchronized (ModbusPollerThingHandler.this) {
+                handleResult(new PollResult(failure, captureAuthorizations()));
+            }
         }
 
         private void resetCommunicationError() {
@@ -129,23 +170,32 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
             return Optional.ofNullable(this.lastResult).map(result -> result.copyIfStampAfter(oldestStamp))
                     .map(result -> {
                         logger.debug("Thing {} reusing cached data: {}", thing.getUID(), result.getValue());
-                        notifyChildren(result.getValue());
+                        notifyChildren(result.getValue(), true);
                         return true;
                     }).orElse(false);
         }
 
-        private void notifyChildren(PollResult pollResult) {
+        private void notifyChildren(PollResult pollResult, boolean cached) {
             @Nullable
             AsyncModbusReadResult result = pollResult.result;
             @Nullable
             AsyncModbusFailure<ModbusReadRequestBlueprint> failure = pollResult.failure;
-            childCallbacks.forEach(handler -> {
+            // A cached result retains its original child permissions, including failures.
+            for (ModbusDataThingHandler.ReadAuthorization authorization : pollResult.authorizations) {
                 if (result != null) {
-                    handler.onReadResult(result);
+                    authorization.deliver(result, cached);
                 } else if (failure != null) {
-                    handler.handleReadError(failure);
+                    authorization.deliver(failure);
                 }
-            });
+            }
+            if (generation != callbackGeneration || disposed) {
+                return;
+            }
+            if (result != null) {
+                onPollResult(result, cached);
+            } else if (failure != null) {
+                onPollFailure(failure);
+            }
         }
 
         /**
@@ -157,21 +207,44 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
     }
 
     /**
+     * Receives a successful poll result after it has been delivered to legacy child handlers.
+     *
+     * @param result successful Modbus read result
+     * @param cached whether this is a replay rather than a new device response
+     */
+    protected void onPollResult(AsyncModbusReadResult result, boolean cached) {
+        // Subclasses may consume poller-owned channels.
+    }
+
+    /**
+     * Receives a failed poll result after it has been delivered to legacy child handlers.
+     *
+     * @param failure failed Modbus read result
+     */
+    protected void onPollFailure(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+        // Subclasses may update poller-owned channels.
+    }
+
+    /**
      * Immutable data object to cache the results of a poll request
      */
     private class PollResult {
 
         public final @Nullable AsyncModbusReadResult result;
         public final @Nullable AsyncModbusFailure<ModbusReadRequestBlueprint> failure;
+        private final List<ModbusDataThingHandler.ReadAuthorization> authorizations;
 
-        PollResult(AsyncModbusReadResult result) {
+        PollResult(AsyncModbusReadResult result, List<ModbusDataThingHandler.ReadAuthorization> authorizations) {
             this.result = result;
             this.failure = null;
+            this.authorizations = authorizations;
         }
 
-        PollResult(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+        PollResult(AsyncModbusFailure<ModbusReadRequestBlueprint> failure,
+                List<ModbusDataThingHandler.ReadAuthorization> authorizations) {
             this.result = null;
             this.failure = failure;
+            this.authorizations = authorizations;
         }
 
         @Override
@@ -189,6 +262,32 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
     private @NonNullByDefault({}) ModbusPollerConfiguration config;
     private long cacheMillis;
     private volatile @Nullable PollTask pollTask;
+    private volatile @Nullable ReadConfiguration readConfiguration;
+
+    private record ReadConfiguration(ModbusReadRequestBlueprint request, ModbusCommunicationInterface communication,
+            ModbusEndpointThingHandler endpoint, String signature) {
+    }
+
+    private String readConfigurationSignature() {
+        Bridge endpoint = getBridge();
+        return Poller2ObservationCollector.signature(thing) + ":"
+                + (endpoint == null || endpoint.getConfiguration() == null ? ""
+                        : Poller2ObservationCollector.signature(endpoint));
+    }
+
+    /** Whether the registered transport still represents the current endpoint and poll window configuration. */
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Equal contents cannot authorize a replaced transport instance.
+    public boolean hasCurrentReadConfiguration() {
+        ReadConfiguration context = readConfiguration;
+        Bridge endpoint = getBridge();
+        if (context == null || disposed || endpoint == null || endpoint.getHandler() != context.endpoint()
+                || request != context.request() || comms != context.communication()
+                || !context.signature().equals(readConfigurationSignature())) {
+            return false;
+        }
+        return context.endpoint().getCommunicationInterface() == context.communication();
+    }
+
     private volatile @Nullable ModbusReadRequestBlueprint request;
     private volatile boolean disposed;
     private volatile List<ModbusDataThingHandler> childCallbacks = new CopyOnWriteArrayList<>();
@@ -235,6 +334,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
 
     @Override
     public synchronized void initialize() {
+        dispose();
         if (this.getThing().getStatus().equals(ThingStatus.ONLINE)) {
             // If the bridge was online then first change it to offline.
             // this ensures that children will be notified about the change
@@ -242,6 +342,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
         }
         this.callbackDelegator.resetCache();
         comms = null;
+        this.callbackDelegator = new ReadCallbackDelegator();
         request = null;
         disposed = false;
         logger.trace("Initializing {} from status {}", this.getThing().getUID(), this.getThing().getStatus());
@@ -304,6 +405,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
      */
     public synchronized void unregisterPollTask() {
         logger.trace("unregisterPollTask()");
+        this.callbackDelegator = new ReadCallbackDelegator();
         if (config == null) {
             return;
         }
@@ -356,6 +458,8 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
         ModbusReadRequestBlueprint localRequest = new ModbusReadRequestBlueprint(slaveEndpointThingHandler.getSlaveId(),
                 localFunctionCode, config.getStart(), config.getLength(), config.getMaxTries());
         this.request = localRequest;
+        readConfiguration = new ReadConfiguration(localRequest, localComms, slaveEndpointThingHandler,
+                readConfigurationSignature());
 
         if (config.getRefresh() <= 0L) {
             logger.debug("Not registering polling with ModbusManager since refresh disabled");
@@ -423,12 +527,26 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
      * If data or error was just recently received (i.e. cache is fresh), return the cached response.
      */
     public void refresh() {
+        RefreshContext context = prepareRefresh();
+        if (context != null) {
+            // Transport submission must not hold the lifecycle monitor: synchronous callbacks may acquire other locks.
+            context.communication().submitOneTimePoll(context.request(), context.callbacks(), context.callbacks());
+        }
+    }
+
+    private record RefreshContext(ModbusReadRequestBlueprint request, ModbusCommunicationInterface communication,
+            ReadCallbackDelegator callbacks) {
+    }
+
+    private synchronized @Nullable RefreshContext prepareRefresh() {
         ModbusReadRequestBlueprint localRequest = this.request;
-        if (localRequest == null) {
-            return;
+        ModbusCommunicationInterface localComms = comms;
+        ReadCallbackDelegator localCallbacks = callbackDelegator;
+        if (localRequest == null || localComms == null || disposed || hasConfigurationError()) {
+            return null;
         }
         ModbusRegisterArray possiblyMutatedCache = lastPolledDataCache.get();
-        AtomicStampedValue<PollResult> lastPollResult = callbackDelegator.lastResult;
+        AtomicStampedValue<PollResult> lastPollResult = localCallbacks.lastResult;
         if (lastPollResult != null && possiblyMutatedCache != null) {
             AsyncModbusReadResult lastSuccessfulPollResult = lastPollResult.getValue().result;
             if (lastSuccessfulPollResult != null) {
@@ -437,27 +555,128 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                 if (lastRegisters != null && !possiblyMutatedCache.equals(lastRegisters)) {
                     // Register has been mutated in between by a data thing that writes "individual bits"
                     // Invalidate cache for a fresh poll
-                    callbackDelegator.resetCache();
+                    localCallbacks.resetCache();
                 }
             }
         }
 
         long oldDataThreshold = System.currentTimeMillis() - cacheMillis;
         boolean cacheWasRecentEnoughForUpdate = cacheMillis > 0
-                && this.callbackDelegator.updateChildrenWithOldData(oldDataThreshold);
+                && localCallbacks.updateChildrenWithOldData(oldDataThreshold);
         if (cacheWasRecentEnoughForUpdate) {
             logger.debug(
                     "Poller {} received refresh() and cache was recent enough (age at most {} ms). Reusing old response",
                     getThing().getUID(), cacheMillis);
-        } else {
-            // cache expired, poll new data
-            logger.debug("Poller {} received refresh() but the cache is not applicable. Polling new data",
-                    getThing().getUID());
-            ModbusCommunicationInterface localComms = comms;
-            if (localComms != null) {
-                localComms.submitOneTimePoll(localRequest, callbackDelegator, callbackDelegator);
-            }
+            return null;
         }
+        // Captured callbacks reject results if this context is superseded before submission.
+        return new RefreshContext(localRequest, localComms, new ReadCallbackDelegator(callbackGeneration));
+    }
+
+    /**
+     * Submits a new read exclusively for migration validation, bypassing the response cache.
+     * Child permissions and parent/transport identity are captured before submission. Neither the
+     * regular callback nor REFRESH can complete this request. No lifecycle lock is held at submission.
+     */
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Equal values cannot authorize a replaced context or request.
+    public MigrationRead readForMigration() {
+        return readForMigration(new MigrationReadSelection(Map.of()));
+    }
+
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Exact registration and request identities authorize reads.
+    public MigrationRead readForMigration(MigrationReadSelection selection) {
+        final @Nullable ReadConfiguration context;
+        final long generation;
+        final String signature;
+        final List<ModbusDataThingHandler.ReadAuthorization> permissions;
+        synchronized (this) {
+            context = readConfiguration;
+            generation = callbackGeneration;
+            signature = Poller2ObservationCollector.signature(getThing());
+            permissions = childCallbacks.stream().filter(child -> selection.matches(child.getThing(), child))
+                    .map(child -> child.captureReadAuthorization(this)).toList();
+        }
+        var completion = new CompletableFuture<Map<ThingUID, Poller2Observation>>();
+        boolean ownChannels = selection.matches(getThing(), this);
+        BooleanSupplier current = () -> !completion.isCancelled() && context != null && selection.current()
+                && selection.bindings().size() == permissions.size() + (ownChannels ? 1 : 0)
+                && (!ownChannels || selection.matches(getThing(), this) && getThing().getChannels().stream()
+                        .allMatch(channel -> MigrationReadSelection
+                                .identityTransform(channel.getConfiguration().get("readTransform"))))
+                && permissions.stream().allMatch(permission -> permission.eligible(selection))
+                && context == readConfiguration && generation == callbackGeneration && hasCurrentReadConfiguration()
+                && signature.equals(Poller2ObservationCollector.signature(getThing()))
+                && permissions.stream().allMatch(permission -> permission.isCurrent());
+        var read = new MigrationRead(completion, current);
+        if (context == null || !current.getAsBoolean()) {
+            completion.completeExceptionally(new IllegalStateException("Migration read unavailable"));
+            return read;
+        }
+        var claimed = new AtomicBoolean();
+        try {
+            context.communication().submitOneTimePoll(context.request(), result -> {
+                if (completion.isDone() || !claimed.compareAndSet(false, true)) {
+                    return;
+                }
+                try {
+                    if (!current.getAsBoolean() || result.getRequest() != context.request()) {
+                        throw new IllegalStateException("Migration read superseded");
+                    }
+                    var evidence = new HashMap<ThingUID, Poller2Observation>();
+                    // Never nest parent/child monitors or run completion listeners while holding either.
+                    for (var permission : permissions) {
+                        if (!current.getAsBoolean()) {
+                            throw new IllegalStateException("Migration read superseded");
+                        }
+                        permission.observe(result, current).ifPresent(value -> evidence.put(value.thingUID(), value));
+                    }
+                    synchronized (this) {
+                        if (!current.getAsBoolean()) {
+                            throw new IllegalStateException("Migration read superseded");
+                        }
+                        if (ownChannels) {
+                            observeMigrationResult(result).ifPresent(value -> evidence.put(value.thingUID(), value));
+                        }
+                    }
+                    if (!current.getAsBoolean()) {
+                        throw new IllegalStateException("Migration read superseded");
+                    }
+                    completion.complete(Map.copyOf(evidence));
+                } catch (RuntimeException e) {
+                    completion.completeExceptionally(e);
+                }
+            }, failure -> {
+                if (claimed.compareAndSet(false, true)) {
+                    completion.completeExceptionally(failure.getCause());
+                }
+            });
+        } catch (RuntimeException e) {
+            completion.completeExceptionally(e);
+        }
+        return read;
+    }
+
+    /** Poller-owned channels override this to detach evidence from this exact successful request. */
+    protected Optional<Poller2Observation> observeMigrationResult(AsyncModbusReadResult result) {
+        return Optional.empty();
+    }
+
+    /**
+     * Schedules a poll that bypasses the read response cache.
+     */
+    protected void reconcileAfterWrite() {
+        prepareWriteReconciliation().run();
+    }
+
+    /** Captures a generation-bound reconciliation; callers must run it outside the lifecycle monitor. */
+    protected synchronized Runnable prepareWriteReconciliation() {
+        callbackDelegator.resetCache();
+        RefreshContext context = prepareRefresh();
+        return () -> {
+            if (context != null) {
+                context.communication().submitOneTimePoll(context.request(), context.callbacks(), context.callbacks());
+            }
+        };
     }
 
     public AtomicReference<@Nullable ModbusRegisterArray> getLastPolledDataCache() {

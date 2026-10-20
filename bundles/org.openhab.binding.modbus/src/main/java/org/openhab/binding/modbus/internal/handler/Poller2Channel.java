@@ -1,0 +1,149 @@
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ */
+package org.openhab.binding.modbus.internal.handler;
+
+import java.util.List;
+import java.util.Optional;
+
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.openhab.binding.modbus.internal.ModbusTransformation;
+import org.openhab.core.io.transport.modbus.ModbusBitUtilities;
+import org.openhab.core.io.transport.modbus.ModbusConstants.ValueType;
+import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
+import org.openhab.core.library.types.DecimalType;
+import org.openhab.core.types.State;
+import org.openhab.core.types.UnDefType;
+
+/**
+ * Decodes one numeric poller-owned Modbus channel.
+ *
+ * @author Sami Salonen - Initial contribution
+ */
+@NonNullByDefault
+public final class Poller2Channel {
+    private final int address;
+    private final int subAddress;
+    private final boolean hasSubAddress;
+    private final ValueType valueType;
+    private final ModbusTransformation transformation;
+    private final PollerChannelState state;
+    private org.openhab.binding.modbus.migration.ModbusReadEvidence evidence = new org.openhab.binding.modbus.migration.ModbusReadEvidence(
+            UnDefType.UNDEF, UnDefType.UNDEF,
+            org.openhab.binding.modbus.migration.ModbusReadEvidence.Provenance.DECODE_FAILURE);
+
+    public synchronized org.openhab.binding.modbus.migration.ModbusReadEvidence getReadEvidence() {
+        return evidence;
+    }
+
+    public Poller2Channel(int address, ValueType valueType, PollerReadFailurePolicy failurePolicy) {
+        this.address = address;
+        this.subAddress = 0;
+        this.hasSubAddress = false;
+        this.valueType = valueType;
+        this.transformation = new ModbusTransformation(List.of("default"));
+        this.state = new PollerChannelState(failurePolicy);
+    }
+
+    public Poller2Channel(String address, ValueType valueType, PollerReadFailurePolicy failurePolicy) {
+        this(address, valueType, failurePolicy, List.of("default"));
+    }
+
+    public Poller2Channel(String address, ValueType valueType, PollerReadFailurePolicy failurePolicy,
+            List<String> readTransform) {
+        String[] parts = address.split("\\.", -1);
+        if (parts.length > 2) {
+            throw new IllegalArgumentException("Invalid Modbus address " + address);
+        }
+        this.address = Integer.parseInt(parts[0]);
+        this.subAddress = parts.length == 2 ? Integer.parseInt(parts[1]) : 0;
+        this.hasSubAddress = parts.length == 2;
+        this.valueType = valueType;
+        this.transformation = new ModbusTransformation(readTransform);
+        this.state = new PollerChannelState(failurePolicy);
+    }
+
+    public synchronized State acceptRegisters(ModbusRegisterArray registers, int pollStart) {
+        evidence = new org.openhab.binding.modbus.migration.ModbusReadEvidence(UnDefType.UNDEF, UnDefType.UNDEF,
+                org.openhab.binding.modbus.migration.ModbusReadEvidence.Provenance.DECODE_FAILURE);
+        long registerOffset = (long) address - pollStart;
+        long index = valueType.getBits() < Short.SIZE ? registerOffset * (Short.SIZE / valueType.getBits()) + subAddress
+                : registerOffset;
+        if (index < 0 || index > Integer.MAX_VALUE) {
+            state.acceptReadFailure();
+            return state.currentState();
+        }
+
+        Optional<DecimalType> decodedValue;
+        try {
+            decodedValue = ModbusBitUtilities.extractStateFromRegisters(registers, (int) index, valueType);
+        } catch (IllegalArgumentException e) {
+            state.acceptReadFailure();
+            return state.currentState();
+        }
+        State decoded = UnDefType.UNDEF;
+        if (decodedValue.isPresent()) {
+            decoded = transform(decodedValue.get());
+        }
+        if (decodedValue.isPresent() && transformation.isIdentityTransform()) {
+            evidence = new org.openhab.binding.modbus.migration.ModbusReadEvidence(decoded, decodedValue.get(),
+                    org.openhab.binding.modbus.migration.ModbusReadEvidence.Provenance.DECODED);
+        }
+        state.acceptSuccessfulState(decoded);
+        return state.currentState();
+    }
+
+    private State transform(DecimalType decoded) {
+        if (transformation.isIdentityTransform()) {
+            return decoded;
+        }
+        Optional<org.openhab.core.types.Command> transformed = ModbusTransformation
+                .tryConvertToCommand(transformation.transform(decoded.toString()));
+        if (transformed.isPresent() && transformed.get() instanceof State transformedState) {
+            return transformedState;
+        }
+        return UnDefType.UNDEF;
+    }
+
+    public synchronized State acceptReadFailure() {
+        state.acceptReadFailure();
+        return state.currentState();
+    }
+
+    public Optional<String> validateReadRange(int pollStart, int pollLength) {
+        if (valueType.getBits() < Short.SIZE) {
+            if (!hasSubAddress) {
+                return Optional.of("Address X.Y must be used with value type %s".formatted(valueType));
+            }
+            int valuesPerRegister = Short.SIZE / valueType.getBits();
+            if (subAddress < 0 || subAddress >= valuesPerRegister) {
+                return Optional.of("Sub-address %d is invalid for value type %s".formatted(subAddress, valueType));
+            }
+        } else if (hasSubAddress) {
+            return Optional.of("Sub-address %d is invalid for value type %s".formatted(subAddress, valueType));
+        }
+
+        int pollEnd = pollStart + pollLength - 1;
+        if (address < pollStart) {
+            return Optional.of("Address %d is before poll window %d..%d".formatted(address, pollStart, pollEnd));
+        }
+        if (address > pollEnd) {
+            return Optional.of("Address %d is outside poll window %d..%d".formatted(address, pollStart, pollEnd));
+        }
+        int registersRequired = Math.max(1, valueType.getBits() / Short.SIZE);
+        if (address + registersRequired - 1 > pollEnd) {
+            return Optional.of("Address %d with value type %s exceeds poll window %d..%d".formatted(address, valueType,
+                    pollStart, pollEnd));
+        }
+        return Optional.empty();
+    }
+}

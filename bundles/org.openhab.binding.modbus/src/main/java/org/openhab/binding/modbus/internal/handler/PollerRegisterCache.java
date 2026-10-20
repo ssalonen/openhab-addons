@@ -1,0 +1,83 @@
+/*
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ */
+package org.openhab.binding.modbus.internal.handler;
+
+import java.util.Optional;
+
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.core.io.transport.modbus.ModbusRegisterArray;
+
+/**
+ * Latest successful register image for one poller read window.
+ *
+ * @author Sami Salonen - Initial contribution
+ */
+@NonNullByDefault
+public final class PollerRegisterCache {
+
+    private int start;
+    private @Nullable ModbusRegisterArray registers;
+
+    public synchronized void invalidate() {
+        registers = null;
+    }
+
+    public synchronized void acceptSuccessfulPoll(int start, ModbusRegisterArray registers) {
+        this.start = start;
+        this.registers = registers;
+    }
+
+    public synchronized Optional<ModbusRegisterArray> read(int address, int length) {
+        ModbusRegisterArray localRegisters = registers;
+        long offset = (long) address - start;
+        if (localRegisters == null || length <= 0 || offset < 0 || offset + length > localRegisters.size()) {
+            return Optional.empty();
+        }
+
+        int[] result = new int[length];
+        for (int index = 0; index < length; index++) {
+            result[index] = localRegisters.getRegister((int) offset + index);
+        }
+        return Optional.of(new ModbusRegisterArray(result));
+    }
+
+    synchronized Optional<ModbusRegisterArray> consumeRegisterBitOverlay(int address, int bit, boolean set) {
+        Optional<ModbusRegisterArray> overlay = overlayRegisterBit(address, bit, set);
+        if (overlay.isPresent()) {
+            // A second read-modify-write must wait for a new successful poll image.
+            registers = null;
+        }
+        return overlay;
+    }
+
+    public synchronized Optional<ModbusRegisterArray> overlayRegisterBit(int address, int bit, boolean set) {
+        if (bit < 0 || bit >= Short.SIZE) {
+            return Optional.empty();
+        }
+
+        Optional<ModbusRegisterArray> current = read(address, 1);
+        if (current.isEmpty()) {
+            return Optional.empty();
+        }
+
+        ModbusRegisterArray localRegisters = registers;
+        if (localRegisters == null) {
+            return Optional.empty();
+        }
+        int offset = address - start;
+        int value = localRegisters.getRegister(offset);
+        int updated = set ? value | 1 << bit : value & ~(1 << bit);
+        return Optional.of(new ModbusRegisterArray(updated));
+    }
+}

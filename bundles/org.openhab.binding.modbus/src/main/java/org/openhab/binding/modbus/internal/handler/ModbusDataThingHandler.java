@@ -16,6 +16,7 @@ import static org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Collections;
@@ -26,6 +27,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -36,6 +38,11 @@ import org.openhab.binding.modbus.internal.ModbusBindingConstantsInternal;
 import org.openhab.binding.modbus.internal.ModbusConfigurationException;
 import org.openhab.binding.modbus.internal.ModbusTransformation;
 import org.openhab.binding.modbus.internal.config.ModbusDataConfiguration;
+import org.openhab.binding.modbus.migration.MigrationReadSelection;
+import org.openhab.binding.modbus.migration.ModbusObservationSource;
+import org.openhab.binding.modbus.migration.ModbusReadEvidence;
+import org.openhab.binding.modbus.migration.Poller2Observation;
+import org.openhab.binding.modbus.migration.Poller2ObservationCollector;
 import org.openhab.core.io.transport.modbus.AsyncModbusFailure;
 import org.openhab.core.io.transport.modbus.AsyncModbusReadResult;
 import org.openhab.core.io.transport.modbus.AsyncModbusWriteResult;
@@ -93,7 +100,7 @@ import org.slf4j.LoggerFactory;
  * @author Sami Salonen - Initial contribution
  */
 @NonNullByDefault
-public class ModbusDataThingHandler extends BaseThingHandler {
+public class ModbusDataThingHandler extends BaseThingHandler implements ModbusObservationSource {
 
     private final Logger logger = LoggerFactory.getLogger(ModbusDataThingHandler.class);
 
@@ -391,6 +398,8 @@ public class ModbusDataThingHandler extends BaseThingHandler {
 
     @Override
     public synchronized void initialize() {
+        readContext = null;
+        observations.invalidate();
         // Initialize the thing. If done set status to ONLINE to indicate proper working.
         // Long running initialization should be done asynchronously in background.
         try {
@@ -444,6 +453,13 @@ public class ModbusDataThingHandler extends BaseThingHandler {
             validateAndParseWriteParameters(localConfig);
             validateMustReadOrWrite();
 
+            observationGeneration = observations.beginLifecycle(getThing());
+            ModbusPollerThingHandler parent = pollerHandler;
+            ModbusReadRequestBlueprint request = readRequest;
+            if (parent != null && request != null) {
+                readContext = new ReadContext(parent, request, parent.getCommunicationInterface(),
+                        Poller2ObservationCollector.signature(getThing()));
+            }
             updateStatusIfChanged(ThingStatus.ONLINE);
         } catch (ModbusConfigurationException | EndpointNotInitializedException e) {
             logger.debug("Thing {} '{}' initialization error: {}", getThing().getUID(), getThing().getLabel(),
@@ -456,6 +472,8 @@ public class ModbusDataThingHandler extends BaseThingHandler {
 
     @Override
     public synchronized void dispose() {
+        readContext = null;
+        observations.invalidate();
         config = null;
         readValueType = null;
         writeValueType = null;
@@ -791,12 +809,184 @@ public class ModbusDataThingHandler extends BaseThingHandler {
         return acceptedDataTypes.stream().anyMatch(clz -> clz.equals(OpenClosedType.class));
     }
 
-    public synchronized void onReadResult(AsyncModbusReadResult result) {
-        result.getRegisters().ifPresent(registers -> onRegisters(result.getRequest(), registers));
-        result.getBits().ifPresent(bits -> onBits(result.getRequest(), bits));
+    private final Poller2ObservationCollector observations = new Poller2ObservationCollector();
+    private boolean cachedObservation;
+    private long observationGeneration;
+    private volatile @Nullable ReadContext readContext;
+
+    private record ReadContext(ModbusPollerThingHandler parent, ModbusReadRequestBlueprint request,
+            @Nullable ModbusCommunicationInterface communication, String signature) {
     }
 
-    public synchronized void handleReadError(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+    // Equal request contents or bridge UIDs do not establish ownership by the same live transport registration.
+    @SuppressWarnings("PMD.CompareObjectsWithEquals")
+    private boolean isCurrent(@Nullable ReadContext context, ModbusReadRequestBlueprint request) {
+        Bridge bridge = getBridge();
+        return context != null && context == readContext && context.request() == request
+                && context.parent().getRequest() == request
+                && context.parent().getCommunicationInterface() == context.communication()
+                && context.parent().hasCurrentReadConfiguration() && bridge != null
+                && bridge.getHandler() == context.parent() && bridge.getUID().equals(getThing().getBridgeUID())
+                && context.signature().equals(Poller2ObservationCollector.signature(getThing()));
+    }
+
+    /** Immutable permission captured before a transport request is submitted. */
+    public final class ReadAuthorization {
+        private final @Nullable ReadContext context = readContext;
+        private final ModbusPollerThingHandler parent;
+
+        private ReadAuthorization(ModbusPollerThingHandler parent) {
+            this.parent = parent;
+        }
+
+        @SuppressWarnings("PMD.CompareObjectsWithEquals") // Parent instance owns the authorization.
+        public boolean isCurrent() {
+            return context != null && context.parent() == parent
+                    && ModbusDataThingHandler.this.isCurrent(context, context.request());
+        }
+
+        public boolean eligible(MigrationReadSelection selection) {
+            ModbusTransformation transformation = readTransformation;
+            return context != null && selection.matches(getThing(), ModbusDataThingHandler.this)
+                    && context.signature().equals(selection.bindings().get(getThing().getUID()).signature())
+                    && MigrationReadSelection.identityTransform(getThing().getConfiguration().get("readTransform"))
+                    && transformation != null && transformation.isIdentityTransform();
+        }
+
+        /** Decodes only this authorized response and detaches its evidence before any other callback can run. */
+        @SuppressWarnings("PMD.CompareObjectsWithEquals") // Exact submitted request owns this response.
+        public Optional<Poller2Observation> observe(AsyncModbusReadResult result, BooleanSupplier permitted) {
+            synchronized (ModbusDataThingHandler.this) {
+                if (!permitted.getAsBoolean()) {
+                    return Optional.empty();
+                }
+                ValueType migrationType = readValueType;
+                if (!isCurrent() || context == null || result.getRequest() != context.request() || !isReadEnabled
+                        || migrationType == null) {
+                    return Optional.empty();
+                }
+                State numeric;
+                if (result.getRegisters().isPresent()) {
+                    int bits = readValueType.getBits();
+                    int index = bits >= 16 ? readIndex.get() - pollStart
+                            : (readIndex.get() - pollStart) * (16 / bits) + readSubIndex.orElse(0);
+                    numeric = ModbusBitUtilities
+                            .extractStateFromRegisters(result.getRegisters().orElseThrow(), index, migrationType)
+                            .map(value -> (State) value).orElse(UnDefType.UNDEF);
+                } else if (result.getBits().isPresent()) {
+                    numeric = result.getBits().orElseThrow().getBit(readIndex.get() - pollStart)
+                            ? new DecimalType(BigDecimal.ONE)
+                            : DecimalType.ZERO;
+                } else {
+                    return Optional.empty();
+                }
+                Map<ChannelUID, State> states = processUpdatedValue(numeric, !numeric.equals(DecimalType.ZERO), true);
+                Map<ChannelUID, ModbusReadEvidence> evidence = new HashMap<>();
+                State decoded = numeric;
+                states.forEach(
+                        (uid, value) -> evidence.put(uid,
+                                new ModbusReadEvidence(value, decoded,
+                                        decoded instanceof UnDefType ? ModbusReadEvidence.Provenance.DECODE_FAILURE
+                                                : value instanceof UnDefType
+                                                        ? ModbusReadEvidence.Provenance.TRANSFORM_FAILURE
+                                                        : ModbusReadEvidence.Provenance.DECODED)));
+                return Optional.of(new Poller2Observation(getThing().getUID(), observationGeneration,
+                        Poller2ObservationCollector.signature(getThing()), Instant.now(), states, evidence));
+            }
+        }
+
+        public void deliver(AsyncModbusReadResult result, boolean cached) {
+            synchronized (ModbusDataThingHandler.this) {
+                if (isCurrent() && context != null
+                        && ModbusDataThingHandler.this.isCurrent(context, result.getRequest())) {
+                    publishReadResult(result, cached);
+                }
+            }
+        }
+
+        public void deliver(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+            synchronized (ModbusDataThingHandler.this) {
+                if (isCurrent() && context != null
+                        && ModbusDataThingHandler.this.isCurrent(context, failure.getRequest())) {
+                    publishReadError(failure);
+                }
+            }
+        }
+    }
+
+    /** Captures permission without acquiring the child lifecycle monitor. */
+    public ReadAuthorization captureReadAuthorization(ModbusPollerThingHandler parent) {
+        return new ReadAuthorization(parent);
+    }
+
+    /** Captures child provenance without waiting for its lifecycle monitor. Run the returned dispatch once. */
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Parent handler instance owns this registration.
+    public Runnable prepareReadResult(ModbusPollerThingHandler parent, AsyncModbusReadResult result, boolean cached) {
+        ReadContext context = readContext;
+        return () -> {
+            synchronized (this) {
+                if (context != null && context.parent() == parent && isCurrent(context, result.getRequest())) {
+                    publishReadResult(result, cached);
+                }
+            }
+        };
+    }
+
+    /** Captures failure provenance before dispatch can block behind a child lifecycle transition. */
+    @SuppressWarnings("PMD.CompareObjectsWithEquals") // Parent handler instance owns this registration.
+    public Runnable prepareReadError(ModbusPollerThingHandler parent,
+            AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+        ReadContext context = readContext;
+        return () -> {
+            synchronized (this) {
+                if (context != null && context.parent() == parent && isCurrent(context, failure.getRequest())) {
+                    publishReadError(failure);
+                }
+            }
+        };
+    }
+
+    @Override
+    public synchronized Optional<Poller2Observation> getObservation() {
+        ReadContext context = readContext;
+        return context != null && isCurrent(context, context.request()) ? observations.getObservation()
+                : Optional.empty();
+    }
+
+    public void onReadResult(AsyncModbusReadResult result, boolean cached) {
+        ReadContext context = readContext;
+        synchronized (this) {
+            if (isCurrent(context, result.getRequest())) {
+                publishReadResult(result, cached);
+            }
+        }
+    }
+
+    private void publishReadResult(AsyncModbusReadResult result, boolean cached) {
+        cachedObservation = cached;
+        try {
+            result.getRegisters().ifPresent(registers -> onRegisters(result.getRequest(), registers));
+            result.getBits().ifPresent(bits -> onBits(result.getRequest(), bits));
+        } finally {
+            cachedObservation = false;
+        }
+    }
+
+    public void onReadResult(AsyncModbusReadResult result) {
+        onReadResult(result, false);
+    }
+
+    public void handleReadError(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+        ReadContext context = readContext;
+        synchronized (this) {
+            if (isCurrent(context, failure.getRequest())) {
+                publishReadError(failure);
+            }
+        }
+    }
+
+    private void publishReadError(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
+        observationGeneration = observations.beginLifecycle(getThing());
         onError(failure.getRequest(), failure.getCause());
     }
 
@@ -953,6 +1143,10 @@ public class ModbusDataThingHandler extends BaseThingHandler {
      * @return updated channel data
      */
     private Map<ChannelUID, State> processUpdatedValue(State numericState, boolean boolValue) {
+        return processUpdatedValue(numericState, boolValue, false);
+    }
+
+    private Map<ChannelUID, State> processUpdatedValue(State numericState, boolean boolValue, boolean detached) {
         ModbusTransformation localReadTransformation = readTransformation;
         if (localReadTransformation == null) {
             // We should always have transformation available if thing is initalized properly
@@ -962,9 +1156,7 @@ public class ModbusDataThingHandler extends BaseThingHandler {
         Map<ChannelUID, State> states = new HashMap<>();
         CHANNEL_ID_TO_ACCEPTED_TYPES.keySet().stream().forEach(channelId -> {
             ChannelUID channelUID = getChannelUID(channelId);
-            if (!isLinked(channelUID)) {
-                return;
-            }
+
             List<Class<? extends State>> acceptedDataTypes = CHANNEL_ID_TO_ACCEPTED_TYPES.get(channelId);
             if (acceptedDataTypes.isEmpty()) {
                 return;
@@ -1013,9 +1205,24 @@ public class ModbusDataThingHandler extends BaseThingHandler {
             }
         });
 
+        if (detached) {
+            return states;
+        }
         ChannelUID lastReadSuccessUID = getChannelUID(ModbusBindingConstantsInternal.CHANNEL_LAST_READ_SUCCESS);
         if (isLinked(lastReadSuccessUID)) {
             states.put(lastReadSuccessUID, new DateTimeType());
+        }
+        if (!cachedObservation) {
+            long generation = observationGeneration;
+            Map<ChannelUID, ModbusReadEvidence> evidence = new HashMap<>();
+            states.forEach(
+                    (uid, value) -> evidence.put(uid,
+                            new ModbusReadEvidence(value, numericState,
+                                    numericState instanceof UnDefType ? ModbusReadEvidence.Provenance.DECODE_FAILURE
+                                            : value instanceof UnDefType
+                                                    ? ModbusReadEvidence.Provenance.TRANSFORM_FAILURE
+                                                    : ModbusReadEvidence.Provenance.DECODED)));
+            observations.record(generation, Instant.now(), states, evidence);
         }
         updateExpiredChannels(states);
         return states;
@@ -1026,7 +1233,11 @@ public class ModbusDataThingHandler extends BaseThingHandler {
             updateStatusIfChanged(ThingStatus.ONLINE);
             long now = System.currentTimeMillis();
             // Update channels that have not been updated in a while, or when their values has changed
-            states.forEach((uid, state) -> updateExpiredChannel(now, uid, state));
+            states.forEach((uid, state) -> {
+                if (isLinked(uid)) {
+                    updateExpiredChannel(now, uid, state);
+                }
+            });
             channelLastState = states;
         }
     }
