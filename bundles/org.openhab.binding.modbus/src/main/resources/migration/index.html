@@ -21,11 +21,19 @@
       <p>Capturing journals a review, but does not modify Things or links.</p>
       <label for="identity">Reviewed preview identity</label>
       <div class="actions"><input id="identity" type="text" autocomplete="off" spellcheck="false"><button id="refresh" type="button">Load / refetch workflow</button></div>
-      <dl id="summary"></dl>
-      <h3>Manual work</h3><ul id="manual"></ul>
-      <details open><summary>Generated YAML</summary><pre id="yaml">No reviewed plan loaded.</pre></details>
+      <h3>Review overview</h3>
+      <dl id="overview" class="overview"></dl>
+      <p id="link-coverage"></p>
+      <p>Automatic migration has a limited boundary: supported read-only Number channels with a default link profile and proven configuration. poller2 capabilities are broader than migrator coverage. A candidate read channel is not an automatically migrated Item or permission to cut over.</p>
+      <p>Manual review means the automatic converter does not cover or has not proven this case; it does not mean your configuration is invalid. Keep the existing setup while reviewing these entries.</p>
+      <details><summary>Workflow identity and technical status</summary><dl id="summary"></dl></details>
+      <h3>Manual review entries</h3>
+      <p>One review entry per source ID and server reason, with duplicates combined. A source can be a Thing or channel; these are not counts of unique Things. Profile review may coexist with candidate read channels.</p>
+      <div id="review-counts" class="case-counts" aria-label="Review entries by classification"></div>
+      <div class="table-scroll" role="region" aria-label="Manual review entries" tabindex="0"><table class="review-table"><caption>Cases outside automatic migration coverage</caption><thead><tr><th scope="col">Source</th><th scope="col">Classification</th><th scope="col">Reason</th><th scope="col">Next action</th></tr></thead><tbody id="manual"></tbody></table></div>
+      <details><summary>Generated YAML · technical details</summary><pre id="yaml">No reviewed plan loaded.</pre></details>
       <h3>Item link impact</h3>
-      <div class="table-scroll"><table><caption>Reviewed Item links and per-link recovery</caption><thead><tr><th scope="col">Item</th><th scope="col">Source channel</th><th scope="col">Target channel</th><th scope="col">Plan</th><th scope="col">Recovery</th></tr></thead><tbody id="impacts"></tbody></table></div>
+      <div class="table-scroll" role="region" aria-label="Item link impact" tabindex="0"><table><caption>Reviewed Item links and per-link recovery</caption><thead><tr><th scope="col">Item</th><th scope="col">Source channel</th><th scope="col">Target channel</th><th scope="col">Plan</th><th scope="col">Recovery</th></tr></thead><tbody id="impacts"></tbody></table></div>
     </section>
     <section aria-labelledby="provider-title">
       <h2 id="provider-title">Read-only provider-owned file proposals · manual review</h2>
