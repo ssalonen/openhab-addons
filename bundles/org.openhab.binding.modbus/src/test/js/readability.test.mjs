@@ -97,7 +97,7 @@ test('review rows deduplicate exact source plus reason deterministically, not Th
   assert.equal(rows.length, 3);
   assert.deepEqual(rows, helpers.reviewEntries([...work].reverse()));
   assert.equal(rows[0].sourceUid, 'modbus:data:b:p:a:number', 'channel ID must remain intact');
-  assert.equal(rows[0].sourceLabel, 'number', 'short label is not claimed to be a Thing ID');
+  assert.equal(rows[0].sourceLabel, 'a / number', 'mechanical suffix context is not claimed to be a Thing ID');
   const writes = rows.find(row => row.category === 'writes');
   assert.deepEqual(writes.configurationIdentities, ['revision-1','revision-2']);
   assert.equal(rows.filter(row => row.sourceUid === 'modbus:data:b:p:z').length, 2);
@@ -117,6 +117,15 @@ test('overview counts only DTO candidate groups, planned impacts and deduplicate
   assert.deepEqual(helpers.reviewOverview(null, external), {candidateGroups:null,candidateChannels:null,plannedLinks:null,manualReviewEntries:1});
   assert.deepEqual(helpers.reviewOverview({groups:[{}],impacts:[],manualWork:[]}),
     {candidateGroups:1,candidateChannels:null,plannedLinks:0,manualReviewEntries:0});
+});
+
+test('channel review labels retain distinguishing suffix context without inferring source kind', () => {
+  const rows = helpers.reviewEntries([
+    {sourceUid:'modbus:data:demo:p:KitchenTemperature:number',reason:profileReason},
+    {sourceUid:'modbus:data:demo:p:BedroomTemperature:number',reason:profileReason}
+  ]);
+  assert.deepEqual(rows.map(row => row.sourceLabel), ['BedroomTemperature / number','KitchenTemperature / number']);
+  assert.equal(new Set(rows.map(row => row.sourceUid)).size,2);
 });
 
 test('sanitized server reasons classify conservatively without inferring conversion safety', () => {

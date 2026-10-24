@@ -53,7 +53,7 @@ export function reviewEntries(...collections) {
   for (const work of collections.flat()) {
     const key = JSON.stringify([work.sourceUid, work.reason]);
     if (!grouped.has(key)) grouped.set(key, {
-      sourceUid: work.sourceUid, sourceLabel: work.sourceUid.split(':').at(-1) || work.sourceUid,
+      sourceUid: work.sourceUid, sourceLabel: work.sourceUid.split(':').slice(-2).join(' / ') || work.sourceUid,
       reason: work.reason, ...classifyReviewReason(work.reason), configurationIdentities: []
     });
     const identities = grouped.get(key).configurationIdentities;
