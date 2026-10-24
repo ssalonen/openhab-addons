@@ -1,5 +1,5 @@
 import { createAuthClient } from './auth.mjs';
-import { createController, cutoverBlockReason, runInteraction, restoreActionFocus } from './controller.mjs';
+import { createController, cutoverBlockReason, runInteraction, restoreActionFocus, reviewEntries, reviewOverview } from './controller.mjs';
 const auth = createAuthClient();
 const controller = createController({ auth });
 const $ = id => document.getElementById(id);
@@ -73,6 +73,57 @@ async function run(action, success = 'Workflow refetched from openHAB. Review th
 }
 function mutate(operation, body, message) {
   if (confirm(message)) return run(() => controller.mutate(operation, body, true));
+}
+function renderReviewRows(root, entries, emptyText) {
+  const previous = root.reviewDetails || new Map();
+  const details = new Map();
+  function detail(key, label, paragraphs) {
+    const element = node('details');
+    element.open = previous.get(key)?.open || false;
+    element.append(node('summary',label), ...paragraphs.map(text => node('p',text)));
+    details.set(key,element);
+    return element;
+  }
+  root.replaceChildren();
+  root.reviewDetails = details;
+  for (const entry of entries) {
+    const key = JSON.stringify([entry.sourceUid,entry.reason]);
+    const row = node('tr');
+    const source = node('td');
+    source.append(node('strong',entry.sourceLabel), detail(`${key}:source`, 'Full source ID',
+      [entry.sourceUid, ...entry.configurationIdentities.map(identity => `Configuration digest: ${identity}`)]));
+    const classification = node('td');
+    classification.append(node('span',entry.label,`badge badge-${entry.category}`));
+    const reason = node('td');
+    reason.append(node('p',entry.explanation), detail(`${key}:reason`, 'Exact server reason', [entry.reason]));
+    row.append(source,classification,reason,node('td',entry.nextAction));
+    root.append(row);
+  }
+  if (!entries.length) {
+    const row = node('tr'); const cell = node('td',emptyText); cell.colSpan = 4;
+    row.append(cell); root.append(row);
+  }
+}
+function renderReviewOverview(plan) {
+  const counts = reviewOverview(plan,controller.state.manualWork);
+  $('overview').replaceChildren();
+  for (const [label,value] of [['Candidate groups',counts.candidateGroups],['Candidate channels',counts.candidateChannels],
+    ['Planned Item links',counts.plannedLinks],['Manual review entries',counts.manualReviewEntries]]) {
+    $('overview').append(node('dt',label),node('dd',value === null ? 'Not reported' : value));
+  }
+  $('link-coverage').textContent = !plan ? 'Load a reviewed plan to see Item link coverage.'
+    : counts.plannedLinks === 0 ? 'No fully automatic Item migrations in this review: 0 planned Item links. Candidate channels are read proposals only; any listed Item links still require manual review.'
+    : 'Planned Item links are proposals, not completed migrations. Staging does not switch them; explicit validation and server checks still apply.';
+  const entries = reviewEntries(controller.state.manualWork,plan?.manualWork || []);
+  renderReviewRows($('manual'), entries, plan ? 'No manual review entries reported by this review.' : 'Capture or load a review to see manual review entries.');
+  $('review-counts').replaceChildren();
+  const categories = new Map();
+  for (const entry of entries) {
+    if (!categories.has(entry.category)) categories.set(entry.category,{label:entry.label,count:0});
+    categories.get(entry.category).count++;
+  }
+  for (const [category,{label,count}] of [...categories].sort(([a],[b]) => a < b ? -1 : a > b ? 1 : 0))
+    $('review-counts').append(node('span',`${label}: ${count} review entries`,`badge badge-${category}`));
 }
 function renderProviders() {
   const { providerPreview, providerError } = controller.state;
@@ -172,11 +223,7 @@ function render() {
   if (report) for (const [label, value] of [['Identity',plan.identity],['Stage',report.status],['Staged at',observedAt(report.stagedAt)],['Read-only report validation (GET does not validate)',report.validation],['Switched links',(report.switchedLinks || []).join(', ') || 'None reported']])
     $('summary').append(node('dt',label),node('dd',value));
   $('yaml').textContent = plan?.yaml || 'No reviewed plan loaded.';
-  $('manual').replaceChildren();
-  const manual = [...(controller.state.manualWork || []), ...(plan?.manualWork || [])];
-  const seen = new Set();
-  for (const work of manual) { const text = `${work.sourceUid}: ${work.reason}`; if (!seen.has(text)) { $('manual').append(node('li', text)); seen.add(text); } }
-  if (!manual.length) $('manual').append(node('li', plan ? 'No manual work reported by this review.' : 'Capture or load a review to see manual work.'));
+  renderReviewOverview(plan);
   $('readiness').textContent = 'A last explicit MATCH permits requesting cutover only for that selected staged group. The server performs new fresh reads and can refuse; retained comparisons are not authorization. Read-only GET does not validate. Refetch or another operation clears the comparison.';
   $('groups').replaceChildren();
   for (const group of plan?.groups || []) {

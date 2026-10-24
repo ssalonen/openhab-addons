@@ -19,6 +19,61 @@ export function cutoverBlockReason(report, sourcePollerUid, comparison) {
       && comparison.comparisons.every(entry => entry?.outcome === 'MATCH')) return '';
   return report.readinessReason || 'Validate this exact staged group in this session before requesting cutover.';
 }
+// Presentation only: exact sanitized server messages, never an eligibility decision.
+const reviewCategories = {
+  writes: ['Write behavior', 'The migrator does not convert command or write behavior automatically.', 'Review commands, write transforms and device behavior manually; keep the existing setup until tested.'],
+  channels: ['Multiple channel contracts', 'Distinct source channels cannot be merged into one channel contract by this migrator.', 'Review each source channel and its Item links separately.'],
+  conversion: ['Conversion unproven', 'The source type or its conversion has not been proven compatible.', 'Check channel types, Item types and conversions before designing a manual migration.'],
+  profile: ['Link profile review', 'The read may have a candidate, but this Item link profile was not proven compatible; its target link is not planned.', 'Review the owning Item link and profile configuration manually.'],
+  parent: ['Parent topology review', 'The legacy data parent is not a poller; this topology is outside automatic migration coverage.', 'Review the parent topology and any write behavior manually.'],
+  target: ['Existing target', 'A target poller2 Thing already exists; this review did not create a replacement candidate.', 'Inspect the existing target and its ownership before planning changes; do not delete it blindly.'],
+  transform: ['Read transform review', 'A custom read transform is outside automatic migration coverage.', 'Review the transform and prove equivalent decoded values manually.'],
+  unknown: ['Other manual review', 'The server reported a case this view cannot classify. No automatic conversion is implied.', 'Review the exact server reason below and the owning configuration manually.']
+};
+const reviewReasons = new Map([
+  ['writes require manual migration; configuration omitted', 'writes'],
+  ['JSON write transform requires manual migration; configuration omitted', 'writes'],
+  ['distinct source channels require manual migration; channel contracts cannot be collapsed', 'channels'],
+  ['source channel type is unknown or its conversion is not proven compatible; requires manual migration', 'conversion'],
+  ['Item link profile configuration is not proven compatible; target link was not planned', 'profile'],
+  ['legacy data parent is not a poller; writes require manual migration', 'parent'],
+  ['target poller2 Thing already exists', 'target'],
+  ['custom readTransform requires manual migration; configuration omitted', 'transform']
+]);
+export function classifyReviewReason(reason) {
+  const category = reviewReasons.get(reason) || 'unknown';
+  const [label, explanation, nextAction] = reviewCategories[category];
+  return { category, label, explanation, nextAction };
+}
+
+// Input collections have already passed the controller DTO guards. Never infer a
+// Thing UID from a source: profile review entries can identify a channel instead.
+export function reviewEntries(...collections) {
+  const grouped = new Map();
+  for (const work of collections.flat()) {
+    const key = JSON.stringify([work.sourceUid, work.reason]);
+    if (!grouped.has(key)) grouped.set(key, {
+      sourceUid: work.sourceUid, sourceLabel: work.sourceUid.split(':').slice(-2).join(' / ') || work.sourceUid,
+      reason: work.reason, ...classifyReviewReason(work.reason), configurationIdentities: []
+    });
+    const identities = grouped.get(key).configurationIdentities;
+    if (typeof work.configurationIdentity === 'string' && work.configurationIdentity && !identities.includes(work.configurationIdentity))
+      identities.push(work.configurationIdentity);
+  }
+  const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+  return [...grouped.values()].map(row => ({...row, configurationIdentities: row.configurationIdentities.sort(compare)}))
+    .sort((a,b) => compare(a.sourceUid,b.sourceUid) || compare(a.reason,b.reason));
+}
+export function reviewOverview(plan, manualWork = []) {
+  return {
+    candidateGroups: plan ? plan.groups.length : null,
+    candidateChannels: plan && plan.groups.every(group => Array.isArray(group.channels))
+      ? plan.groups.reduce((count, group) => count + group.channels.length, 0) : null,
+    plannedLinks: plan ? plan.impacts.filter(impact => impact.targetLinkPlanned).length : null,
+    manualReviewEntries: reviewEntries(manualWork, plan?.manualWork || []).length
+  };
+}
+
 function record(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
