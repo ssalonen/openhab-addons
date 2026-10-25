@@ -283,6 +283,7 @@ public class ModbusPoller2YamlOSGiTest extends JavaOSGiTest {
                               length: 1
                               type: holding
                               refresh: 0
+                              cacheMillis: 0
                             channels:
                               scaled:
                                 itemType: Number
@@ -583,12 +584,16 @@ public class ModbusPoller2YamlOSGiTest extends JavaOSGiTest {
             wire.registers.set(new int[] { 52, 89 });
             refreshState(events, items, wire, 89);
             for (String failure : new String[] { "exception", "malformed" }) {
+                var retained = requireNonNull(items.get("YamlLive")).getState();
                 wire.failure.set(failure);
                 events.post(ItemEventFactory.createCommandEvent("YamlLive", RefreshType.REFRESH));
                 waitForAssert(() -> {
                     assertEquals(ThingStatus.OFFLINE, requireNonNull(thingRegistry.get(target)).getStatus());
-                    assertEquals(org.openhab.core.types.UnDefType.UNDEF,
-                            requireNonNull(items.get("YamlLive")).getState());
+                    assertEquals(retained, requireNonNull(items.get("YamlLive")).getState());
+                    var handler = (org.openhab.binding.modbus.handler.ModbusPoller2ThingHandler) requireNonNull(
+                            thingRegistry.get(target)).getHandler();
+                    assertNotNull(handler);
+                    assertTrue(handler.getObservation().isEmpty(), "Retained state must not authorize migration");
                 });
                 wire.failure.set("");
                 wire.registers.set(new int[] { 63, "exception".equals(failure) ? 97 : 109 });

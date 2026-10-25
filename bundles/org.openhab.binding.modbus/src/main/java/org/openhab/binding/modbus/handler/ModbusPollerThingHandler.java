@@ -602,7 +602,7 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                 && selection.bindings().size() == permissions.size() + (ownChannels ? 1 : 0)
                 && (!ownChannels || selection.matches(getThing(), this) && getThing().getChannels().stream()
                         .allMatch(channel -> MigrationReadSelection
-                                .identityTransform(channel.getConfiguration().get("readTransform"))))
+                                .supportedReadTransform(channel.getConfiguration().get("readTransform"))))
                 && permissions.stream().allMatch(permission -> permission.eligible(selection))
                 && context == readConfiguration && generation == callbackGeneration && hasCurrentReadConfiguration()
                 && signature.equals(Poller2ObservationCollector.signature(getThing()))
@@ -628,7 +628,8 @@ public class ModbusPollerThingHandler extends BaseBridgeHandler {
                         if (!current.getAsBoolean()) {
                             throw new IllegalStateException("Migration read superseded");
                         }
-                        permission.observe(result, current).ifPresent(value -> evidence.put(value.thingUID(), value));
+                        permission.observe(result, current, selection)
+                                .ifPresent(value -> evidence.put(value.thingUID(), value));
                     }
                     synchronized (this) {
                         if (!current.getAsBoolean()) {

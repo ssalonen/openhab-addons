@@ -12,6 +12,7 @@
  */
 package org.openhab.binding.modbus.migration;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -64,7 +65,10 @@ public final class LiveModbusMigrationValidation implements MigrationValidation 
             ThingUID uid = new ThingUID(mapping.sourceDataUid());
             Thing source = registry.get(uid);
             if (source != null) {
-                sourceBindings.put(uid, new MigrationReadSelection.Binding(source));
+                sourceBindings.put(uid,
+                        new MigrationReadSelection.Binding(source, group.channels().stream()
+                                .filter(channel -> channel.sourceDataUid().equals(uid.toString()))
+                                .map(MigrationChannel::sourceChannelUid).collect(java.util.stream.Collectors.toSet())));
             }
         }
         var sourceSelection = new MigrationReadSelection(sourceBindings);
@@ -77,7 +81,7 @@ public final class LiveModbusMigrationValidation implements MigrationValidation 
         for (MigrationChannel mapping : group.channels()) {
             Thing source = registry.get(new ThingUID(mapping.sourceDataUid()));
             Optional<Poller2Observation> legacy = read(source, stagedAt, legacyRead, legacyValues);
-            ChannelUID sourceUid = new ChannelUID(mapping.sourceDataUid() + ":number");
+            ChannelUID sourceUid = new ChannelUID(mapping.sourceChannelUid());
             ChannelUID targetUid = new ChannelUID(group.targetPollerUid() + ":" + mapping.id());
             String address = Objects.requireNonNull(Objects.toString(mapping.configuration().get("address"), ""));
             ModbusReadEvidence left = legacy.map(value -> value.evidence().get(sourceUid)).orElse(null);
@@ -89,11 +93,8 @@ public final class LiveModbusMigrationValidation implements MigrationValidation 
                     && address.equals(Objects.toString(source.getConfiguration().get("readStart")))
                     && Objects.toString(mapping.configuration().get("valueType"))
                             .equals(Objects.toString(source.getConfiguration().get("readValueType")))
-                    && target.getChannel(mapping.id()) != null
-                    && ModbusMigrationPlanner.configurationIdentity(mapping.configuration())
-                            .equals(ModbusMigrationPlanner
-                                    .configurationIdentity(Objects.requireNonNull(target.getChannel(mapping.id()))
-                                            .getConfiguration().getProperties()));
+                    && target.getChannel(mapping.id()) != null && matchesChannelConfiguration(mapping.configuration(),
+                            Objects.requireNonNull(target.getChannel(mapping.id())).getConfiguration().getProperties());
             Outcome result = Outcome.UNAVAILABLE;
             String reason = "Fresh information-bearing evidence is missing";
             if (!config) {
@@ -102,11 +103,17 @@ public final class LiveModbusMigrationValidation implements MigrationValidation 
                 result = left.value().equals(right.value()) && left.decoded().equals(right.decoded()) ? Outcome.MATCH
                         : Outcome.MISMATCH;
                 reason = result == Outcome.MATCH ? "Fresh decoded values agree" : "Fresh decoded values differ";
+                if (result == Outcome.MATCH && mapping.configuration().containsKey("readDiagnostic")) {
+                    reason = "Fresh read-event semantics and decoded inputs agree; independent event timestamps are not compared";
+                } else if (result == Outcome.MATCH
+                        && left.provenance() == ModbusReadEvidence.Provenance.INTENTIONAL_UNDEF) {
+                    reason = "Fresh intentional UNDEF results agree with equal decoded inputs";
+                }
             }
             details.add(new Comparison(sourceUid.toString(), targetUid.toString(), address,
                     Objects.requireNonNull(Objects.toString(mapping.configuration().get("valueType"))),
-                    left == null ? "UNAVAILABLE" : left.value().toString(),
-                    right == null ? "UNAVAILABLE" : right.value().toString(),
+                    left == null || !left.informationBearing() ? "UNAVAILABLE" : left.value().toString(),
+                    right == null || !right.informationBearing() ? "UNAVAILABLE" : right.value().toString(),
                     Objects.requireNonNull(legacy.map(Poller2Observation::observedAt).orElse(Instant.EPOCH)),
                     Objects.requireNonNull(candidate.map(Poller2Observation::observedAt).orElse(Instant.EPOCH)), result,
                     reason));
@@ -129,6 +136,25 @@ public final class LiveModbusMigrationValidation implements MigrationValidation 
                                 .distinct().count()
                         && sourceBindings.entrySet().stream()
                                 .allMatch(entry -> registry.get(entry.getKey()) == entry.getValue().thing()));
+    }
+
+    private boolean matchesChannelConfiguration(Map<String, Object> planned, Map<String, Object> actual) {
+        // Core Thing JSONDB can restore the generated interval as Double (1000.0), while the immutable
+        // review restores BigDecimal (1000). Tolerate representation only for this numeric schema field,
+        // not source address strings, profiles, arbitrary configuration or the versioned review digest.
+        String interval = "updateUnchangedValuesEveryMillis";
+        Map<String, Object> comparable = new HashMap<>(actual);
+        if (planned.get(interval) instanceof Number expected && actual.get(interval) instanceof Number current) {
+            try {
+                if (new BigDecimal(expected.toString()).compareTo(new BigDecimal(current.toString())) == 0) {
+                    comparable.put(interval, expected);
+                }
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+        return ModbusMigrationPlanner.configurationIdentity(planned)
+                .equals(ModbusMigrationPlanner.configurationIdentity(comparable));
     }
 
     private boolean matches(Thing thing, MigrationGroup group) {

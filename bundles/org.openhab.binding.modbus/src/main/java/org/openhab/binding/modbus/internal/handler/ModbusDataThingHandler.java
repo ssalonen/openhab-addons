@@ -849,13 +849,14 @@ public class ModbusDataThingHandler extends BaseThingHandler implements ModbusOb
             ModbusTransformation transformation = readTransformation;
             return context != null && selection.matches(getThing(), ModbusDataThingHandler.this)
                     && context.signature().equals(selection.bindings().get(getThing().getUID()).signature())
-                    && MigrationReadSelection.identityTransform(getThing().getConfiguration().get("readTransform"))
-                    && transformation != null && transformation.isIdentityTransform();
+                    && MigrationReadSelection.supportedReadTransform(getThing().getConfiguration().get("readTransform"))
+                    && transformation != null;
         }
 
         /** Decodes only this authorized response and detaches its evidence before any other callback can run. */
         @SuppressWarnings("PMD.CompareObjectsWithEquals") // Exact submitted request owns this response.
-        public Optional<Poller2Observation> observe(AsyncModbusReadResult result, BooleanSupplier permitted) {
+        public Optional<Poller2Observation> observe(AsyncModbusReadResult result, BooleanSupplier permitted,
+                MigrationReadSelection selection) {
             synchronized (ModbusDataThingHandler.this) {
                 if (!permitted.getAsBoolean()) {
                     return Optional.empty();
@@ -880,16 +881,35 @@ public class ModbusDataThingHandler extends BaseThingHandler implements ModbusOb
                 } else {
                     return Optional.empty();
                 }
-                Map<ChannelUID, State> states = processUpdatedValue(numeric, !numeric.equals(DecimalType.ZERO), true);
+                Map<ChannelUID, State> states = new HashMap<>();
                 Map<ChannelUID, ModbusReadEvidence> evidence = new HashMap<>();
-                State decoded = numeric;
-                states.forEach(
-                        (uid, value) -> evidence.put(uid,
-                                new ModbusReadEvidence(value, decoded,
+                State decoded = Objects.requireNonNull(numeric);
+                ModbusTransformation transform = readTransformation;
+                if (transform == null || !MigrationReadSelection
+                        .supportedReadTransform(getThing().getConfiguration().get("readTransform"))) {
+                    return Optional.empty();
+                }
+                for (var channel : getThing().getChannels()) {
+                    String type = channel.getAcceptedItemType();
+                    if (selection.includes(channel.getUID()) && type != null
+                            && java.util.Set.of("Number", "Switch", "Contact").contains(type)) {
+                        ModbusReadEvidence value = ModbusReadEvidence.decode(decoded, type, transform);
+                        states.put(channel.getUID(), value.value());
+                        evidence.put(channel.getUID(), value);
+                    }
+                }
+                for (String role : List.of("lastReadSuccess", "lastReadError")) {
+                    ChannelUID uid = new ChannelUID(getThing().getUID(), role);
+                    if (selection.includes(uid) && getThing().getChannel(role) != null) {
+                        State event = new org.openhab.core.library.types.StringType(
+                                "lastReadSuccess".equals(role) ? "READ_SUCCESS" : "NO_READ_ERROR");
+                        states.put(uid, event);
+                        evidence.put(uid,
+                                new ModbusReadEvidence(event, decoded,
                                         decoded instanceof UnDefType ? ModbusReadEvidence.Provenance.DECODE_FAILURE
-                                                : value instanceof UnDefType
-                                                        ? ModbusReadEvidence.Provenance.TRANSFORM_FAILURE
-                                                        : ModbusReadEvidence.Provenance.DECODED)));
+                                                : ModbusReadEvidence.Provenance.DECODED));
+                    }
+                }
                 return Optional.of(new Poller2Observation(getThing().getUID(), observationGeneration,
                         Poller2ObservationCollector.signature(getThing()), Instant.now(), states, evidence));
             }

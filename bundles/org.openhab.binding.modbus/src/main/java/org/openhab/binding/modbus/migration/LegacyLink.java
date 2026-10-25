@@ -22,11 +22,11 @@ public record LegacyLink(String itemName, String channelUid, String itemType, Ma
         String configurationIdentity, boolean compatible) {
     public LegacyLink(String itemName, String channelUid, String itemType, Map<String, Object> configuration) {
         this(itemName, channelUid, itemType,
-                MigrationReviewConfiguration.defaultProfile(configuration) ? configuration
+                MigrationReviewConfiguration.compatibleProfile(configuration) ? configuration
                         : Map.of("review", "configuration omitted; manual restoration required", "identity",
                                 ModbusMigrationPlanner.configurationIdentity(configuration)),
                 ModbusMigrationPlanner.configurationIdentity(configuration),
-                MigrationReviewConfiguration.defaultProfile(configuration));
+                MigrationReviewConfiguration.compatibleProfile(configuration));
     }
 
     public LegacyLink {

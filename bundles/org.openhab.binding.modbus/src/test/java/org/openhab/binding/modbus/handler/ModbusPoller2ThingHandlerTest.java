@@ -41,6 +41,166 @@ import org.openhab.core.types.RefreshType;
 @NonNullByDefault
 public class ModbusPoller2ThingHandlerTest {
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = { "Switch", "Contact" })
+    public void registerChannelsPreserveLegacyBooleanConversionAndRawEvidence(String itemType)
+            throws EndpointNotInitializedException {
+        LifecycleFixture fixture = new LifecycleFixture("holding", itemType,
+                java.util.Map.of("address", "0", "valueType", "int16", "errorPolicy", "keepLast"));
+        fixture.handler.initialize();
+        for (int value : new int[] { 0, 1, 2, 32767, 32768, 65535 }) {
+            org.mockito.Mockito.clearInvocations(fixture.callback);
+            fixture.pollRegisters(value);
+            org.openhab.core.types.State expected = "Switch".equals(itemType)
+                    ? org.openhab.core.library.types.OnOffType.from(value != 0)
+                    : value == 0 ? org.openhab.core.library.types.OpenClosedType.CLOSED
+                            : org.openhab.core.library.types.OpenClosedType.OPEN;
+            verify(fixture.callback).stateUpdated(fixture.channelUID, expected);
+            var evidence = fixture.handler.getObservation().orElseThrow().evidence().get(fixture.channelUID);
+            assertEquals(expected, evidence.value());
+            assertEquals(new org.openhab.core.library.types.DecimalType((short) value), evidence.decoded());
+        }
+        fixture.handler.dispose();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({ "coil,Switch", "discrete,Contact", "coil,Number",
+            "discrete,Number" })
+    public void migrationBitReadsAreDetachedAndInformationBearing(String pollType, String itemType) throws Exception {
+        LifecycleFixture fixture = new LifecycleFixture(pollType, itemType,
+                java.util.Map.of("address", "0", "valueType", "bit", "errorPolicy", "keepLast"));
+        fixture.handler.initialize();
+        fixture.handler.getThing().setHandler(fixture.handler);
+        org.mockito.Mockito.clearInvocations(fixture.callback, fixture.communication);
+        var read = fixture.handler.readForMigration(new org.openhab.binding.modbus.migration.MigrationReadSelection(
+                java.util.Map.of(fixture.handler.getThing().getUID(),
+                        new org.openhab.binding.modbus.migration.MigrationReadSelection.Binding(
+                                fixture.handler.getThing()))));
+        var requests = ArgumentCaptor.forClass(org.openhab.core.io.transport.modbus.ModbusReadRequestBlueprint.class);
+        var reads = ArgumentCaptor.forClass(org.openhab.core.io.transport.modbus.ModbusReadCallback.class);
+        verify(fixture.communication).submitOneTimePoll(requests.capture(), reads.capture(), any());
+        reads.getValue().handle(new org.openhab.core.io.transport.modbus.AsyncModbusReadResult(requests.getValue(),
+                new org.openhab.core.io.transport.modbus.BitArray(true)));
+        var observation = read.completion().get().get(fixture.handler.getThing().getUID());
+        org.junit.jupiter.api.Assertions.assertNotNull(observation);
+        org.junit.jupiter.api.Assertions.assertTrue(observation.evidence().containsKey(fixture.channelUID));
+        var evidence = observation.evidence().get(fixture.channelUID);
+        org.junit.jupiter.api.Assertions.assertTrue(evidence.informationBearing());
+        assertEquals(new org.openhab.core.library.types.DecimalType(1), evidence.decoded());
+        assertEquals("Number".equals(itemType) ? "1" : "Contact".equals(itemType) ? "OPEN" : "ON",
+                evidence.value().toString());
+        org.mockito.Mockito.verifyNoInteractions(fixture.callback);
+        fixture.handler.dispose();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = { "lastReadSuccess", "lastReadError" })
+    public void readDiagnosticChannelsPublishOnlyTheirOwnReadEvent(String role) throws Exception {
+        LifecycleFixture fixture = new LifecycleFixture("holding", "DateTime", java.util.Map.of("address", "0",
+                "valueType", "int16", "errorPolicy", "keepLast", "readDiagnostic", role));
+        fixture.handler.initialize();
+        org.mockito.Mockito.clearInvocations(fixture.callback);
+        fixture.pollRegisters(19);
+        var values = ArgumentCaptor.forClass(org.openhab.core.types.State.class);
+        if ("lastReadSuccess".equals(role)) {
+            verify(fixture.callback).stateUpdated(org.mockito.ArgumentMatchers.eq(fixture.channelUID),
+                    values.capture());
+            org.junit.jupiter.api.Assertions.assertInstanceOf(org.openhab.core.library.types.DateTimeType.class,
+                    values.getValue());
+        } else {
+            verify(fixture.callback, org.mockito.Mockito.never()).stateUpdated(any(), any());
+        }
+        org.mockito.Mockito.clearInvocations(fixture.callback);
+        var failures = ArgumentCaptor.forClass(org.openhab.core.io.transport.modbus.ModbusFailureCallback.class);
+        verify(fixture.communication).registerRegularPoll(any(), org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyLong(), any(), failures.capture());
+        var failure = org.mockito.Mockito.mock(org.openhab.core.io.transport.modbus.AsyncModbusFailure.class);
+        org.mockito.Mockito.when(failure.getCause()).thenReturn(new IllegalStateException("fixture read failure"));
+        failures.getValue().handle(failure);
+        if ("lastReadError".equals(role)) {
+            verify(fixture.callback).stateUpdated(org.mockito.ArgumentMatchers.eq(fixture.channelUID),
+                    values.capture());
+            org.junit.jupiter.api.Assertions.assertInstanceOf(org.openhab.core.library.types.DateTimeType.class,
+                    values.getValue());
+        } else {
+            verify(fixture.callback, org.mockito.Mockito.never()).stateUpdated(any(), any());
+        }
+        org.junit.jupiter.api.Assertions.assertTrue(fixture.handler.getObservation().isEmpty());
+        fixture.handler.dispose();
+    }
+
+    @Test
+    public void migrationChannelsPreserveLegacyUnchangedValueSuppression() throws Exception {
+        LifecycleFixture fixture = new LifecycleFixture("holding", "Number", java.util.Map.of("address", "0",
+                "valueType", "int16", "errorPolicy", "keepLast", "updateUnchangedValuesEveryMillis", 1000));
+        fixture.handler.initialize();
+        org.mockito.Mockito.clearInvocations(fixture.callback);
+        fixture.pollRegisters(19);
+        fixture.pollRegisters(19);
+        verify(fixture.callback, times(1)).stateUpdated(fixture.channelUID,
+                new org.openhab.core.library.types.DecimalType(19));
+        fixture.pollRegisters(20);
+        verify(fixture.callback).stateUpdated(fixture.channelUID, new org.openhab.core.library.types.DecimalType(20));
+        fixture.handler.dispose();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = { false, true })
+    public void explicitRefreshRepublishesUnchangedValueWithoutDisablingPollSuppression(boolean cached)
+            throws Exception {
+        LifecycleFixture fixture = new LifecycleFixture("holding", "Number", java.util.Map.of("address", "0",
+                "valueType", "int16", "errorPolicy", "keepLast", "updateUnchangedValuesEveryMillis", 1000));
+        if (!cached) {
+            var thing = org.openhab.core.thing.binding.builder.BridgeBuilder
+                    .create((Bridge) fixture.handler.getThing()).withConfiguration(new Configuration(java.util.Map
+                            .of("type", "holding", "start", 0, "length", 1, "refresh", 1000, "cacheMillis", 0)))
+                    .build();
+            fixture.handler.thingUpdated(thing);
+        } else {
+            fixture.handler.initialize();
+        }
+        fixture.pollRegisters(41);
+        var observation = fixture.handler.getObservation().orElseThrow();
+        org.mockito.Mockito.clearInvocations(fixture.callback);
+        fixture.pollRegisters(41);
+        verify(fixture.callback, org.mockito.Mockito.never()).stateUpdated(any(), any());
+        observation = fixture.handler.getObservation().orElseThrow();
+
+        fixture.handler.handleCommand(fixture.channelUID, RefreshType.REFRESH);
+        if (!cached) {
+            var reads = ArgumentCaptor.forClass(org.openhab.core.io.transport.modbus.ModbusReadCallback.class);
+            verify(fixture.communication).submitOneTimePoll(any(), reads.capture(), any());
+            var refreshRead = reads.getValue();
+            fixture.handler.getThing().setHandler(fixture.handler);
+            var migration = fixture.handler
+                    .readForMigration(new org.openhab.binding.modbus.migration.MigrationReadSelection(
+                            java.util.Map.of(fixture.handler.getThing().getUID(),
+                                    new org.openhab.binding.modbus.migration.MigrationReadSelection.Binding(
+                                            fixture.handler.getThing()))));
+            verify(fixture.communication, times(2)).submitOneTimePoll(any(), reads.capture(), any());
+            reads.getValue()
+                    .handle(new org.openhab.core.io.transport.modbus.AsyncModbusReadResult(
+                            java.util.Objects.requireNonNull(fixture.handler.getRequest()),
+                            new org.openhab.core.io.transport.modbus.ModbusRegisterArray(99)));
+            assertEquals(new org.openhab.core.library.types.DecimalType(99),
+                    java.util.Objects
+                            .requireNonNull(migration.completion().get().get(fixture.handler.getThing().getUID()))
+                            .states().get(fixture.channelUID));
+            assertEquals(observation, fixture.handler.getObservation().orElseThrow());
+            verify(fixture.callback, org.mockito.Mockito.never()).stateUpdated(any(), any());
+            refreshRead.handle(new org.openhab.core.io.transport.modbus.AsyncModbusReadResult(
+                    java.util.Objects.requireNonNull(fixture.handler.getRequest()),
+                    new org.openhab.core.io.transport.modbus.ModbusRegisterArray(41)));
+        } else {
+            assertEquals(observation.observedAt(), fixture.handler.getObservation().orElseThrow().observedAt());
+        }
+        verify(fixture.callback).stateUpdated(fixture.channelUID, new org.openhab.core.library.types.DecimalType(41));
+        org.mockito.Mockito.clearInvocations(fixture.callback);
+        fixture.pollRegisters(41);
+        verify(fixture.callback, org.mockito.Mockito.never()).stateUpdated(any(), any());
+        fixture.handler.dispose();
+    }
+
     @Test
     public void reusesTheGeneratedChannelTypeWhenTheBridgeIsInitializedAgain() {
         Bridge bridge = BridgeBuilder.create(ModbusBindingConstantsInternal.THING_TYPE_MODBUS_POLLER2, "poller2")
@@ -185,9 +345,11 @@ public class ModbusPoller2ThingHandlerTest {
     public void cachedRefreshPublishesStateWithoutReauthorizingConsumedBitWrites()
             throws EndpointNotInitializedException {
         LifecycleFixture fixture = new LifecycleFixture("holding", "Number",
-                java.util.Map.of("address", "0", "valueType", "uint16", "writeStart", "0.0", "writeValueType", "bit"));
+                java.util.Map.of("address", "0", "valueType", "uint16", "writeStart", "0.0", "writeValueType", "bit",
+                        "updateUnchangedValuesEveryMillis", 1000));
         fixture.handler.initialize();
         fixture.pollRegisters(2);
+        var observed = fixture.handler.getObservation().orElseThrow();
         var command = org.openhab.binding.modbus.internal.handler.Poller2WriteRequest.holding("value",
                 org.openhab.core.library.types.OnOffType.ON);
         assertEquals(org.openhab.binding.modbus.internal.handler.Poller2WriteResult.ACCEPTED,
@@ -198,6 +360,7 @@ public class ModbusPoller2ThingHandlerTest {
 
         verify(fixture.callback).stateUpdated(fixture.channelUID, new org.openhab.core.library.types.DecimalType(2));
         verify(fixture.communication, org.mockito.Mockito.never()).submitOneTimePoll(any(), any(), any());
+        assertEquals(observed, fixture.handler.getObservation().orElseThrow());
         assertEquals(org.openhab.binding.modbus.internal.handler.Poller2WriteResult.INVALID_COMMAND,
                 fixture.handler.submitActionWrite(command));
         fixture.pollRegisters(4);

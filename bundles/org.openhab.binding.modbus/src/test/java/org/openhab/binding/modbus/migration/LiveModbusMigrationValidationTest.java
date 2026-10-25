@@ -15,6 +15,7 @@ package org.openhab.binding.modbus.migration;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -51,7 +52,9 @@ class LiveModbusMigrationValidationTest {
     private final ThingUID targetUid = new ThingUID("modbus:poller2:validation:holding");
     private final List<MigrationChannel> mappings = List.of(
             new MigrationChannel("modbus:data:validation:holding:first", "first",
-                    Map.of("address", "100", "valueType", "uint16"), "Number"),
+                    Map.of("address", "100", "valueType", "uint16", "updateUnchangedValuesEveryMillis",
+                            BigDecimal.valueOf(1000)),
+                    "Number"),
             new MigrationChannel("modbus:data:validation:holding:second", "second",
                     Map.of("address", "101", "valueType", "uint16"), "Number"));
     private final MigrationGroup group = new MigrationGroup(poller.getUID().toString(), targetUid.toString(),
@@ -224,6 +227,66 @@ class LiveModbusMigrationValidationTest {
     }
 
     @Test
+    void coreNumericRoundTripMatchesReconstructedJournalWithoutChangingReviewIdentity() {
+        var gson = new com.google.gson.Gson();
+        Map<String, Object> corePersisted = gson.fromJson(gson.toJson(mappings.getFirst().configuration()),
+                new com.google.gson.reflect.TypeToken<Map<String, Object>>() {
+                }.getType());
+        assertInstanceOf(Double.class, corePersisted.get("updateUnchangedValuesEveryMillis"));
+        target.getChannel("first").getConfiguration().setProperties(corePersisted);
+        recordCandidate(42, Instant.now());
+        Map<String, String> persisted = new HashMap<>();
+        var journal = new MigrationJournal(ManagedModbusMigrationStagingTest.storage(persisted));
+        journal.workflow(new MigrationJournal.Workflow(preview, List.of(), List.of(), "STAGED", stagedAt.toString(),
+                List.of(), List.of()));
+        var reconstructed = new MigrationJournal(ManagedModbusMigrationStagingTest.storage(persisted)).workflows()
+                .getFirst().preview();
+        assertEquals(gson.toJsonTree(preview), gson.toJsonTree(reconstructed));
+        assertEquals(BigDecimal.valueOf(1000), reconstructed.groups().getFirst().channels().getFirst().configuration()
+                .get("updateUnchangedValuesEveryMillis"));
+        assertNotEquals(ModbusMigrationPlanner.configurationIdentity(mappings.getFirst().configuration()),
+                ModbusMigrationPlanner.configurationIdentity(corePersisted),
+                "Review digest remains representation-exact");
+        var observation = validation.observe(reconstructed, reconstructed.groups().getFirst(), stagedAt);
+        assertEquals("42", observation.comparisons().getFirst().sourceValue());
+        assertEquals("42", observation.comparisons().getFirst().targetValue());
+        assertEquals(MigrationValidation.Outcome.MATCH, observation.outcome(), observation.comparisons().toString());
+    }
+
+    @Test
+    void numericRestartToleranceStillRefusesValueTypeAndOtherConfigurationDrift() {
+        for (Object changed : List.of(1001, 1000.5, new BigDecimal("1000.00000000000000000001"), "1000", true,
+                Double.NaN, Double.POSITIVE_INFINITY)) {
+            target.getChannel("first").getConfiguration().put("updateUnchangedValuesEveryMillis", changed);
+            recordCandidate(42, Instant.now());
+            assertEquals(MigrationValidation.Outcome.UNAVAILABLE, observe().comparisons().getFirst().outcome(),
+                    changed.toString());
+            assertEquals("Current mapping configuration differs from the staged plan",
+                    observe().comparisons().getFirst().reason());
+        }
+        target.getChannel("first").getConfiguration().put("updateUnchangedValuesEveryMillis", 1000.0);
+        for (String key : List.of("address", "valueType", "errorPolicy", "profile", "unknown")) {
+            var original = mappings.getFirst().configuration();
+            var changed = new HashMap<>(original);
+            changed.put("updateUnchangedValuesEveryMillis", 1000.0);
+            changed.put(key, "changed");
+            target.getChannel("first").getConfiguration().setProperties(changed);
+            recordCandidate(42, Instant.now());
+            assertEquals(MigrationValidation.Outcome.UNAVAILABLE, observe().comparisons().getFirst().outcome(), key);
+        }
+    }
+
+    @Test
+    void sourceAddressStringsRemainFormatExact() {
+        sources.getFirst().getConfiguration().put("readStart", "0100");
+        record(legacy.getFirst(), sources.getFirst(), new ChannelUID(sources.getFirst().getUID(), "number"), 42,
+                Instant.now());
+        assertEquals(MigrationValidation.Outcome.UNAVAILABLE, observe().comparisons().getFirst().outcome());
+        assertEquals("Current mapping configuration differs from the staged plan",
+                observe().comparisons().getFirst().reason());
+    }
+
+    @Test
     void refusesChangedConfigurationEvenWithFreshEqualStates() {
         target.getChannel("first").getConfiguration().put("address", "101");
         recordCandidate(42, Instant.now());
@@ -239,7 +302,18 @@ class LiveModbusMigrationValidationTest {
     }
 
     @Test
-    void twoIntentionalUndefResultsCannotAuthorizeMapping() {
+    void failedEvidenceIsReportedUnavailableRatherThanIntentionalUndef() {
+        var uid = new ChannelUID(targetUid, "first");
+        candidate.record(candidate.beginLifecycle(target), Instant.now(), Map.of(uid, UnDefType.UNDEF),
+                Map.of(uid, new ModbusReadEvidence(UnDefType.UNDEF, new DecimalType(42),
+                        ModbusReadEvidence.Provenance.TRANSFORM_FAILURE)));
+        var comparison = observe().comparisons().getFirst();
+        assertEquals(MigrationValidation.Outcome.UNAVAILABLE, comparison.outcome());
+        assertEquals("UNAVAILABLE", comparison.targetValue());
+    }
+
+    @Test
+    void intentionalUndefRequiresEqualInformationBearingInputs() {
         var undef = new ModbusReadEvidence(UnDefType.UNDEF, new DecimalType(42),
                 ModbusReadEvidence.Provenance.INTENTIONAL_UNDEF);
         var uid = new ChannelUID(targetUid, "first");
@@ -249,7 +323,11 @@ class LiveModbusMigrationValidationTest {
         var sourceUid = new ChannelUID(source.getUID(), "number");
         legacy.getFirst().record(legacy.getFirst().beginLifecycle(source), Instant.now(),
                 Map.of(sourceUid, UnDefType.UNDEF), Map.of(sourceUid, undef));
-        assertEquals(MigrationValidation.Outcome.UNAVAILABLE, observe().comparisons().getFirst().outcome());
-        assertFalse(undef.informationBearing());
+        assertEquals(MigrationValidation.Outcome.MATCH, observe().comparisons().getFirst().outcome());
+        assertTrue(undef.informationBearing());
+        legacy.getFirst().record(legacy.getFirst().beginLifecycle(source), Instant.now(),
+                Map.of(sourceUid, UnDefType.UNDEF), Map.of(sourceUid, new ModbusReadEvidence(UnDefType.UNDEF,
+                        new DecimalType(43), ModbusReadEvidence.Provenance.INTENTIONAL_UNDEF)));
+        assertEquals(MigrationValidation.Outcome.MISMATCH, observe().comparisons().getFirst().outcome());
     }
 }

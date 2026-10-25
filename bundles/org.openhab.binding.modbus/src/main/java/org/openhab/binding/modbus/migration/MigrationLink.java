@@ -36,7 +36,13 @@ public record MigrationLink(String itemName, String sourceChannelUid, String tar
 
     boolean markedDefaultTarget() {
         Object marker = targetConfiguration.get(OWNER);
-        return marker instanceof String value && !value.isBlank() && targetConfiguration.size() == 2
-                && "system:default".equals(targetConfiguration.get("profile"));
+        if (!(marker instanceof String value) || value.isBlank()
+                || !MigrationReviewConfiguration.compatibleProfile(configuration)) {
+            return false;
+        }
+        Map<String, Object> expected = new java.util.HashMap<>(configuration);
+        expected.putIfAbsent("profile", "system:default");
+        expected.put(OWNER, marker);
+        return expected.equals(targetConfiguration);
     }
 }

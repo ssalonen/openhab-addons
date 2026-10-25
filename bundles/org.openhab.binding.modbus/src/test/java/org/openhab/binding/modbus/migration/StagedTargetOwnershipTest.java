@@ -98,6 +98,10 @@ class StagedTargetOwnershipTest {
             routing.put(link.getUID(), link);
             return null;
         }).when(links).add(any());
+        return reconstructService();
+    }
+
+    private ModbusMigrationService reconstructService() {
         var storage = mock(StorageService.class);
         when(storage.<String> getStorage("modbus-migration-journal"))
                 .thenReturn(ManagedModbusMigrationStagingTest.storage(persisted));
@@ -105,7 +109,7 @@ class StagedTargetOwnershipTest {
             duringObservation.run();
             recordFreshEvidence();
             return new LiveModbusMigrationValidation(things).observe(preview, group, time);
-        });
+        }, (ManagedItemChannelLinkProvider) links.getProvider(original));
     }
 
     private void recordFreshEvidence() {
@@ -279,6 +283,59 @@ class StagedTargetOwnershipTest {
         assertThrows(IllegalArgumentException.class, () -> restarted.cutover(identity, source.toString()));
         assertThrows(IllegalStateException.class, () -> restarted.rollback(identity));
         assertEquals(Map.of(original.getUID(), original), routing);
+        verify(provider, never()).remove(target);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "unchanged", "profile-drift", "ownership-drift" })
+    void numericCorePersistenceAllowsReconstructedCutoverAndOnlyOwnedExactProfileUndo(String change) {
+        var service = service();
+        var plan = service.preview().plan();
+        String identity = plan.identity();
+        service.apply(identity);
+        var staged = Objects.requireNonNull(inventory.get(target));
+        var channel = staged.getChannels().getFirst();
+        var planned = plan.groups().getFirst().channels().getFirst().configuration();
+        assertEquals(new java.math.BigDecimal("1000"), planned.get("updateUnchangedValuesEveryMillis"));
+        // Model Core's untyped Thing JSONDB number restoration, independently of the typed journal's Gson.
+        var gson = new com.google.gson.Gson();
+        Map<String, Object> restored = gson.fromJson(gson.toJson(channel.getConfiguration().getProperties()),
+                new com.google.gson.reflect.TypeToken<Map<String, Object>>() {
+                }.getType());
+        assertEquals(1000.0, restored.get("updateUnchangedValuesEveryMillis"));
+        channel.getConfiguration().setProperties(restored);
+        replace("managed", identity);
+        var restarted = reconstructService();
+        assertEquals(gson.toJsonTree(plan), gson.toJsonTree(restarted.report(identity).preview()));
+        var observation = restarted.validate(identity, source.toString());
+        assertEquals(MigrationValidation.Outcome.MATCH, observation.outcome(), observation.comparisons().toString());
+        restarted.cutover(identity, source.toString());
+        assertFalse(routing.containsKey(original.getUID()));
+        assertEquals(1, routing.size());
+        var marked = routing.values().iterator().next();
+        assertEquals(plan.groups().getFirst().links().getFirst().targetConfiguration(),
+                marked.getConfiguration().getProperties());
+        if (change.equals("profile-drift")) {
+            var edited = new HashMap<>(marked.getConfiguration().getProperties());
+            edited.put("profile", "system:follow");
+            routing.put(marked.getUID(),
+                    new ItemChannelLink(marked.getItemName(), marked.getLinkedUID(), new Configuration(edited)));
+        } else if (change.equals("ownership-drift")) {
+            replace("unmanaged", identity);
+        }
+        var secondRestart = reconstructService();
+        if (change.equals("unchanged")) {
+            secondRestart.revert(identity, original.getItemName(), original.getLinkedUID().toString());
+            assertEquals(Map.of(original.getUID(), original), routing);
+            assertEquals(original.getConfiguration().getProperties(),
+                    routing.get(original.getUID()).getConfiguration().getProperties());
+        } else {
+            var before = Map.copyOf(routing);
+            assertThrows(IllegalStateException.class,
+                    () -> secondRestart.revert(identity, original.getItemName(), original.getLinkedUID().toString()));
+            assertEquals(before, routing);
+            assertFalse(routing.containsKey(original.getUID()));
+        }
         verify(provider, never()).remove(target);
     }
 

@@ -29,6 +29,107 @@ class ModbusMigrationPlannerTest {
     private final ModbusMigrationPlanner planner = new ModbusMigrationPlanner();
 
     @Test
+    void generatedNumericChannelRetainsLegacyLastValueOnReadFailure() {
+        var poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        var data = new LegacyData("modbus:data:tcp:plant:value", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "int16"), List.of());
+        var configuration = planner.preview(List.of(poller), List.of(data)).groups().getFirst().channels().getFirst()
+                .configuration();
+        assertEquals("keepLast", configuration.get("errorPolicy"));
+        assertEquals(java.math.BigDecimal.valueOf(1000), configuration.get("updateUnchangedValuesEveryMillis"));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.MethodSource("boundedProfiles")
+    void preservesBoundedProfilesExactly(Map<String, Object> profile) {
+        var poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        var link = new LegacyLink("Value", "modbus:data:tcp:plant:value:number", "Number", profile);
+        var data = new LegacyData("modbus:data:tcp:plant:value", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "int16"), List.of(link));
+        var links = planner.preview(List.of(poller), List.of(data)).groups().getFirst().links();
+        assertEquals(1, links.size());
+        assertEquals(profile, links.getFirst().configuration());
+        var target = new java.util.HashMap<>(links.getFirst().targetConfiguration());
+        target.remove(MigrationLink.OWNER);
+        assertEquals(profile, target);
+    }
+
+    static java.util.stream.Stream<Map<String, Object>> boundedProfiles() {
+        return java.util.stream.Stream.of(Map.of("profile", "modbus:gainOffset", "gain", "2", "pre-gain-offset", "1"),
+                Map.of("profile", "modbus:gainOffset", "gain", "0.1 W"),
+                Map.of("profile", "modbus:gainOffset", "gain", "0.1"), Map.of("profile", "transform:JS", "toItemScript",
+                        "config:js:read-value", "commandFromItemScript", "config:js:write-value"),
+                Map.of("profile", "transform:MAP", "function", "read-state.map"));
+    }
+
+    @Test
+    void unsupportedGainOffsetKeysRemainManual() {
+        assertFalse(new LegacyLink("Value", "modbus:data:tcp:plant:value:number", "Number",
+                Map.of("profile", "modbus:gainOffset", "offset", "1")).compatible());
+    }
+
+    @Test
+    void mapsDistinctNumberAndSwitchContractsWithExactSourceChannels() {
+        var poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant",
+                Map.of("start", 100, "length", 2, "type", "holding"));
+        String source = "modbus:data:tcp:plant:value";
+        var data = new LegacyData(source, poller.uid(), Map.of("readStart", "100", "readValueType", "int16"),
+                List.of(new LegacyLink("Value", source + ":number", "Number"),
+                        new LegacyLink("Flag", source + ":switch", "Switch")));
+        var preview = planner.preview(List.of(poller), List.of(data));
+        assertEquals(1, preview.groups().size());
+        var group = preview.groups().getFirst();
+        assertEquals(2, group.channels().size());
+        assertEquals(2, group.channels().stream().map(MigrationChannel::id).distinct().count());
+        assertEquals(java.util.Set.of(source + ":number", source + ":switch"),
+                group.channels().stream().map(channel -> new com.google.gson.Gson().toJsonTree(channel)
+                        .getAsJsonObject().get("sourceChannelUid").getAsString())
+                        .collect(java.util.stream.Collectors.toSet()));
+        assertEquals(2, group.links().size());
+    }
+
+    @Test
+    void reportsOverlappingWriteChannelAndProfileBlockersWithoutPlanningLinks() {
+        var poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        var data = new LegacyData("modbus:data:tcp:plant:value", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "int16", "writeStart", "100"),
+                List.of(new LegacyLink("Value", "modbus:data:tcp:plant:value:datetime", "DateTime",
+                        Map.of("profile", "custom:unknown"))));
+        var plan = planner.preview(List.of(poller), List.of(data));
+        assertTrue(plan.groups().isEmpty());
+        assertTrue(plan.manualWork().stream().anyMatch(work -> work.reason().contains("writes require")));
+        assertTrue(plan.manualWork().stream().anyMatch(work -> work.reason().contains("conversion is not proven")));
+        assertTrue(plan.manualWork().stream().anyMatch(work -> work.reason().contains("profile configuration")));
+    }
+
+    @Test
+    void bitWindowCustomThingTransformRemainsManualUntilDecoderContractIsSupported() {
+        var poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant",
+                Map.of("start", 100, "length", 1, "type", "coil"));
+        var data = new LegacyData("modbus:data:tcp:plant:value", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "bit", "readTransform", List.of("MAP(fixture.map)")),
+                List.of(new LegacyLink("Value", "modbus:data:tcp:plant:value:switch", "Switch")));
+        var plan = planner.preview(List.of(poller), List.of(data));
+        assertTrue(plan.groups().isEmpty());
+        assertFalse(plan.manualWork().isEmpty());
+    }
+
+    @Test
+    void collidingGeneratedTargetIdsRefuseTheGroupWithoutPlanningAmbiguousLinks() {
+        var poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
+        var flag = new LegacyData("modbus:data:tcp:plant:value", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "int16"),
+                List.of(new LegacyLink("Flag", "modbus:data:tcp:plant:value:switch", "Switch")));
+        var number = new LegacyData("modbus:data:tcp:plant:value-switch", poller.uid(),
+                Map.of("readStart", "100", "readValueType", "int16"),
+                List.of(new LegacyLink("Value", "modbus:data:tcp:plant:value-switch:number", "Number")));
+        var plan = planner.preview(List.of(poller), List.of(flag, number));
+        assertTrue(plan.groups().isEmpty());
+        assertTrue(plan.impacts().isEmpty());
+        assertEquals(2, plan.manualWork().size());
+    }
+
+    @Test
     void targetMarkersDoNotLoosenSourceEligibility() {
         var poller = new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant", Map.of("start", 100));
         var source = new LegacyLink("Value", "modbus:data:tcp:plant:value:number", "Number",
@@ -96,7 +197,9 @@ class ModbusMigrationPlannerTest {
         MigrationPreview preview = planner.preview(List.of(poller), List.of(data));
 
         assertEquals(1, preview.groups().size());
-        assertEquals(Map.of("address", "100", "valueType", "int16"),
+        assertEquals(
+                Map.of("address", "100", "valueType", "int16", "errorPolicy", "keepLast",
+                        "updateUnchangedValuesEveryMillis", java.math.BigDecimal.valueOf(1000)),
                 preview.groups().getFirst().channels().getFirst().configuration());
         assertTrue(preview.manualWork().isEmpty());
         assertEquals(transforms, data.configuration().get("readTransform"));
@@ -131,7 +234,9 @@ class ModbusMigrationPlannerTest {
         var preview = planner.preview(List.of(poller), List.of(data));
         assertTrue(preview.manualWork().isEmpty());
         assertEquals(values, preview.groups().getFirst().configuration());
-        assertEquals(Map.of("address", "100.1", "valueType", "bit"),
+        assertEquals(
+                Map.of("address", "100.1", "valueType", "bit", "errorPolicy", "keepLast",
+                        "updateUnchangedValuesEveryMillis", java.math.BigDecimal.valueOf(1000)),
                 preview.groups().getFirst().channels().getFirst().configuration());
         assertEquals(List.of(" default "), data.configuration().get("readTransform"));
     }
@@ -277,6 +382,8 @@ class ModbusMigrationPlannerTest {
                         itemType: Number
                         config:
                           address: "100"
+                          errorPolicy: "keepLast"
+                          updateUnchangedValuesEveryMillis: 1000
                           valueType: "int16"
                 """, planner.preview(List.of(poller), List.of(data)).yaml());
     }

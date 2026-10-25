@@ -337,6 +337,85 @@ class ModbusMigrationResourceTest {
     }
 
     @Test
+    void aggregateUnavailablePreservesExactMixedSourceChannelsWithoutAuthorizingCutover() throws Exception {
+        var sourceThings = things.getAll();
+        var poller = sourceThings.stream().filter(thing -> thing.getThingTypeUID().getId().equals("poller")).findFirst()
+                .orElseThrow();
+        var builder = org.openhab.core.thing.binding.builder.ThingBuilder
+                .create(new ThingTypeUID("modbus", "data"), new ThingUID("modbus:data:tcp:plant:value"))
+                .withBridge(poller.getUID())
+                .withConfiguration(new Configuration(Map.of("readStart", "100", "readValueType", "int16")));
+        var roles = Map.of("number", "Number", "switch", "Switch", "contact", "Contact", "lastReadSuccess", "DateTime");
+        var sourceLinks = new java.util.ArrayList<org.openhab.core.thing.link.ItemChannelLink>();
+        roles.forEach((role, itemType) -> {
+            var uid = new org.openhab.core.thing.ChannelUID("modbus:data:tcp:plant:value:" + role);
+            builder.withChannel(org.openhab.core.thing.binding.builder.ChannelBuilder.create(uid, itemType).build());
+            sourceLinks.add(new org.openhab.core.thing.link.ItemChannelLink("Value_" + role, uid));
+        });
+        var data = builder.build();
+        var otherPoller = BridgeBuilder
+                .create(new ThingTypeUID("modbus", "poller"), new ThingUID("modbus:poller:tcp:other"))
+                .withBridge(new ThingUID("modbus:tcp:plant"))
+                .withConfiguration(new Configuration(Map.of("start", 100, "length", 2, "type", "holding"))).build();
+        var otherData = org.openhab.core.thing.binding.builder.ThingBuilder
+                .create(new ThingTypeUID("modbus", "data"), new ThingUID("modbus:data:tcp:other:value"))
+                .withBridge(otherPoller.getUID())
+                .withConfiguration(new Configuration(Map.of("readStart", "100", "readValueType", "int16"))).build();
+        when(things.getAll()).thenReturn(List.of(poller, data, otherPoller, otherData));
+        when(provider.get(data.getUID())).thenReturn(data);
+        when(provider.get(otherPoller.getUID())).thenReturn(otherPoller);
+        when(provider.get(otherData.getUID())).thenReturn(otherData);
+        when(links.getAll()).thenReturn(sourceLinks);
+        String identity = capture();
+        var preview = service.report(identity).preview();
+        assertEquals(2, preview.groups().size());
+        json(request("POST", "workflows/" + identity + "/apply", ""));
+        // No handlers/fresh readings exist: real workflow freshness refusal returns an aggregate only.
+        var aggregate = service.validate(identity, poller.getUID().toString());
+        assertEquals(MigrationValidation.Outcome.UNAVAILABLE, aggregate.outcome());
+        assertEquals(java.time.Instant.EPOCH, aggregate.observedAt());
+        assertTrue(aggregate.comparisons().isEmpty());
+        var selected = ModbusMigrationResource.Observation.from(aggregate, preview);
+        var expected = roles.keySet().stream().map(role -> data.getUID() + ":" + role)
+                .collect(java.util.stream.Collectors.toSet());
+        assertEquals(expected, selected.comparisons().stream().map(ModbusMigrationResource.Comparison::sourceChannelUid)
+                .collect(java.util.stream.Collectors.toSet()));
+        assertEquals(roles.size(), selected.comparisons().size());
+        var report = json(request("POST", "workflows/" + identity + "/validate",
+                "{\"sourcePollerUid\":\"" + poller.getUID() + "\"}"));
+        assertFalse(report.get("cutoverReady").getAsBoolean());
+        var actual = report.getAsJsonObject("observation").getAsJsonArray("comparisons");
+        assertEquals(roles.size(), actual.size());
+        for (var entry : actual) {
+            var comparison = entry.getAsJsonObject();
+            String sourceUid = comparison.get("sourceChannelUid").getAsString();
+            assertTrue(expected.contains(sourceUid), sourceUid);
+            String role = new org.openhab.core.thing.ChannelUID(sourceUid).getId();
+            assertEquals("modbus:poller2:tcp:plant:value" + (role.equals("number") ? "" : "-" + role),
+                    comparison.get("targetChannelUid").getAsString());
+            assertEquals("100", comparison.get("address").getAsString());
+            assertEquals("int16", comparison.get("valueType").getAsString());
+            for (String field : List.of("outcome", "sourceValue", "targetValue")) {
+                assertEquals("UNAVAILABLE", comparison.get(field).getAsString());
+            }
+            for (String field : List.of("sourceObservedAt", "targetObservedAt")) {
+                assertEquals("1970-01-01T00:00:00Z", comparison.get(field).getAsString());
+            }
+            assertEquals("No fresh binding-owned comparison was returned for this planned channel",
+                    comparison.get("reason").getAsString());
+        }
+        for (String unselected : List.of("modbus:poller:tcp:unknown", "")) {
+            var noSelection = new MigrationValidation.Observation(identity, unselected, java.time.Instant.EPOCH,
+                    MigrationValidation.Outcome.UNAVAILABLE);
+            assertTrue(ModbusMigrationResource.Observation.from(noSelection, preview).comparisons().isEmpty());
+        }
+        assertEquals(409, request("POST", "workflows/" + identity + "/cutover",
+                "{\"sourcePollerUid\":\"" + poller.getUID() + "\"}").statusCode());
+        verify(links, never()).add(any());
+        verify(links, never()).remove(anyString());
+    }
+
+    @Test
     void coreJsonExposesEveryComparisonWithIsoStringTimestampsWithoutLifecycleTokens() throws Exception {
         String identity = capture();
         json(request("POST", "workflows/" + identity + "/apply", ""));

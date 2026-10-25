@@ -35,9 +35,23 @@ public record MigrationReadSelection(Map<ThingUID, Binding> bindings) {
     }
 
     /** Exact authoritative decoder pair and the complete configuration captured for this read. */
-    public record Binding(Thing thing, @Nullable ThingHandler handler, String signature) {
+    public record Binding(Thing thing, @Nullable ThingHandler handler, String signature,
+            java.util.Set<String> channelUids) {
+        public Binding {
+            channelUids = java.util.Set.copyOf(channelUids);
+        }
+
         public Binding(Thing thing) {
             this(thing, thing.getHandler(), Poller2ObservationCollector.signature(thing));
+        }
+
+        public Binding(Thing thing, @Nullable ThingHandler handler, String signature) {
+            this(thing, handler, signature, thing.getChannels().stream().map(channel -> channel.getUID().toString())
+                    .collect(java.util.stream.Collectors.toSet()));
+        }
+
+        public Binding(Thing thing, java.util.Set<String> channels) {
+            this(thing, thing.getHandler(), Poller2ObservationCollector.signature(thing), channels);
         }
 
         @SuppressWarnings("PMD.CompareObjectsWithEquals") // Decoder authority requires exact live instances.
@@ -61,9 +75,18 @@ public record MigrationReadSelection(Map<ThingUID, Binding> bindings) {
         return !bindings.isEmpty() && bindings.values().stream().allMatch(Binding::current);
     }
 
+    public boolean includes(org.openhab.core.thing.ChannelUID channel) {
+        Binding binding = bindings.get(channel.getThingUID());
+        return binding != null && binding.channelUids().contains(channel.toString());
+    }
+
     public static boolean identityTransform(@Nullable Object value) {
         return value == null || value instanceof String text && "default".equalsIgnoreCase(text.trim())
                 || value instanceof List<?> list && list.size() == 1 && list.getFirst() instanceof String text
                         && "default".equalsIgnoreCase(text.trim());
+    }
+
+    public static boolean supportedReadTransform(@Nullable Object value) {
+        return MigrationReviewConfiguration.supportedReadTransform(value);
     }
 }

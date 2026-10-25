@@ -18,8 +18,17 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /** A target poller channel generated from one legacy data Thing. */
 @NonNullByDefault
-public record MigrationChannel(String sourceDataUid, String id, Map<String, Object> configuration, String itemType) {
+public record MigrationChannel(String sourceDataUid, String id, Map<String, Object> configuration, String itemType,
+        String sourceChannelUid) {
+    public MigrationChannel(String sourceDataUid, String id, Map<String, Object> configuration, String itemType) {
+        this(sourceDataUid, id, configuration, itemType, sourceDataUid + ":number");
+    }
+
     public MigrationChannel {
         configuration = Map.copyOf(configuration);
+        // Old persisted reviews predate exact channel contracts and supported Number only.
+        if (sourceChannelUid == null) {
+            sourceChannelUid = sourceDataUid + ":number";
+        }
     }
 }

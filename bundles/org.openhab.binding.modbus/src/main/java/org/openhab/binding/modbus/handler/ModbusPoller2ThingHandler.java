@@ -77,6 +77,10 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler implemen
     private volatile Map<ChannelUID, Poller2BitChannel> bitChannels = Map.of();
     private volatile Map<ChannelUID, Poller2RawChannel> rawChannels = Map.of();
     private volatile Map<ChannelUID, Poller2WriteChannel> writeChannels = Map.of();
+    private volatile Map<ChannelUID, String> readDiagnostics = Map.of();
+    private final Map<ChannelUID, State> publishedStates = new LinkedHashMap<>();
+    private final Map<ChannelUID, Long> publishedAt = new LinkedHashMap<>();
+    private final Set<ChannelUID> refreshChannels = new java.util.HashSet<>();
     private final PollerRegisterCache registerCache = new PollerRegisterCache();
     private volatile int pollStart;
     private long writeGeneration;
@@ -120,7 +124,18 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler implemen
         Map<ChannelUID, Poller2RawChannel> parsedRawChannels = new LinkedHashMap<>();
         Map<ChannelUID, Poller2WriteChannel> parsedWriteChannels = new LinkedHashMap<>();
         List<String> configurationErrors = new ArrayList<>();
+        Map<ChannelUID, String> parsedDiagnostics = new LinkedHashMap<>();
         for (Channel channel : getThing().getChannels()) {
+            Object diagnostic = channel.getConfiguration().get("readDiagnostic");
+            if (diagnostic != null) {
+                if (!(diagnostic instanceof String role) || !Set.of("lastReadSuccess", "lastReadError").contains(role)
+                        || !"DateTime".equals(channel.getAcceptedItemType())
+                        || channel.getConfiguration().get("writeStart") != null) {
+                    configurationErrors.add("Invalid read diagnostic channel");
+                    continue;
+                }
+                parsedDiagnostics.put(channel.getUID(), role);
+            }
             if (registerPoller) {
                 if ("raw".equals(channel.getConfiguration().getProperties().get("valueType"))) {
                     Poller2RawChannelConfiguration parsed = Poller2RawChannelConfiguration.create(
@@ -131,8 +146,8 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler implemen
                     continue;
                 }
                 Poller2ChannelConfiguration parsed = Poller2ChannelConfiguration.create(channel.getUID().getId(),
-                        channel.getConfiguration().getProperties(), configuration.getStart(),
-                        configuration.getLength());
+                        channel.getConfiguration().getProperties(), configuration.getStart(), configuration.getLength(),
+                        Objects.requireNonNullElse(channel.getAcceptedItemType(), "Number"));
                 Optional<String> error = parsed.error();
                 if (error.isPresent()) {
                     configurationErrors.add(error.get());
@@ -168,11 +183,15 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler implemen
         bitChannels = Map.copyOf(parsedBitChannels);
         rawChannels = Map.copyOf(parsedRawChannels);
         writeChannels = Map.copyOf(parsedWriteChannels);
+        readDiagnostics = Map.copyOf(parsedDiagnostics);
         super.initialize();
     }
 
     @Override
     public synchronized void dispose() {
+        publishedStates.clear();
+        publishedAt.clear();
+        refreshChannels.clear();
         writeGeneration++;
         registerCache.invalidate();
         observations.invalidate();
@@ -201,6 +220,10 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler implemen
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
         if (command == RefreshType.REFRESH) {
+            synchronized (this) {
+                // An unlinked publication must not suppress the initial value of a newly linked Item.
+                refreshChannels.add(channelUID);
+            }
             refresh();
             return;
         }
@@ -304,9 +327,31 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler implemen
         if (!cached) {
             Map<ChannelUID, ModbusReadEvidence> evidence = new LinkedHashMap<>();
             channels.forEach((uid, channel) -> evidence.put(uid, channel.getReadEvidence()));
+            bitChannels.forEach((uid, channel) -> evidence.put(uid, channel.getReadEvidence()));
+            diagnosticEvidence(evidence);
             observations.record(generation, observedAt, states, evidence);
         }
-        states.forEach(this::updateState);
+        readDiagnostics.forEach((uid, role) -> {
+            if ("lastReadSuccess".equals(role)) {
+                states.put(uid, new org.openhab.core.library.types.DateTimeType());
+            } else {
+                states.remove(uid);
+            }
+        });
+        states.forEach(this::publishChannelState);
+    }
+
+    private synchronized void publishChannelState(ChannelUID uid, State value) {
+        Channel channel = getThing().getChannel(uid.getId());
+        Object configured = channel == null ? null : channel.getConfiguration().get("updateUnchangedValuesEveryMillis");
+        long interval = configured instanceof Number number ? number.longValue() : 0;
+        long now = System.currentTimeMillis();
+        if (refreshChannels.remove(uid) || interval <= 0 || !value.equals(publishedStates.get(uid))
+                || now - publishedAt.getOrDefault(uid, 0L) > interval) {
+            updateState(uid, value);
+            publishedStates.put(uid, value);
+            publishedAt.put(uid, now);
+        }
     }
 
     @Override
@@ -317,15 +362,26 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler implemen
         for (Channel channel : getThing().getChannels()) {
             if (result.getRegisters().isPresent()) {
                 var parsed = Poller2ChannelConfiguration.create(channel.getUID().getId(),
-                        channel.getConfiguration().getProperties(), pollStart, getRequest().getDataLength());
+                        channel.getConfiguration().getProperties(), pollStart, getRequest().getDataLength(),
+                        Objects.requireNonNullElse(channel.getAcceptedItemType(), "Number"));
                 if (parsed.channel().isPresent()) {
                     var decoder = parsed.channel().orElseThrow();
                     states.put(channel.getUID(),
                             decoder.acceptRegisters(result.getRegisters().orElseThrow(), pollStart));
                     evidence.put(channel.getUID(), decoder.getReadEvidence());
                 }
+            } else if (result.getBits().isPresent()) {
+                var parsed = Poller2BitChannelConfiguration.create(channel.getUID().getId(),
+                        channel.getConfiguration().getProperties(), pollStart, getRequest().getDataLength(),
+                        Objects.requireNonNullElse(channel.getAcceptedItemType(), "Switch"));
+                if (parsed.channel().isPresent()) {
+                    var decoder = parsed.channel().orElseThrow();
+                    states.put(channel.getUID(), decoder.acceptBits(result.getBits().orElseThrow(), pollStart));
+                    evidence.put(channel.getUID(), decoder.getReadEvidence());
+                }
             }
         }
+        diagnosticEvidence(evidence);
         return Optional.of(new Poller2Observation(getThing().getUID(), observationGeneration,
                 Poller2ObservationCollector.signature(getThing()), Instant.now(), states, evidence));
     }
@@ -339,8 +395,36 @@ public class ModbusPoller2ThingHandler extends ModbusPollerThingHandler implemen
     protected void onPollFailure(AsyncModbusFailure<ModbusReadRequestBlueprint> failure) {
         observations.invalidate();
         observationGeneration = 0;
-        channels.forEach((uid, channel) -> updateState(uid, channel.acceptReadFailure()));
-        bitChannels.forEach((uid, channel) -> updateState(uid, channel.acceptReadFailure()));
+        channels.forEach((uid, channel) -> {
+            State state = channel.acceptReadFailure();
+            if (!readDiagnostics.containsKey(uid)) {
+                updateState(uid, state);
+            }
+        });
+        bitChannels.forEach((uid, channel) -> {
+            State state = channel.acceptReadFailure();
+            if (!readDiagnostics.containsKey(uid)) {
+                updateState(uid, state);
+            }
+        });
+        readDiagnostics.forEach((uid, role) -> {
+            if ("lastReadError".equals(role)) {
+                updateState(uid, new org.openhab.core.library.types.DateTimeType());
+            }
+        });
         rawChannels.forEach((uid, channel) -> updateState(uid, channel.acceptReadFailure()));
+    }
+
+    private void diagnosticEvidence(Map<ChannelUID, ModbusReadEvidence> evidence) {
+        readDiagnostics.forEach((uid, role) -> {
+            ModbusReadEvidence raw = evidence.get(uid);
+            if (raw != null && raw.informationBearing()) {
+                evidence.put(uid,
+                        new ModbusReadEvidence(
+                                new org.openhab.core.library.types.StringType(
+                                        "lastReadSuccess".equals(role) ? "READ_SUCCESS" : "NO_READ_ERROR"),
+                                raw.decoded(), ModbusReadEvidence.Provenance.DECODED));
+            }
+        });
     }
 }

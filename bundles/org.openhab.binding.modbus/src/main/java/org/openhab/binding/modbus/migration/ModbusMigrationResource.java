@@ -311,7 +311,7 @@ public class ModbusMigrationResource implements RESTResource {
                 comparisons = preview.groups().stream()
                         .filter(group -> group.sourcePollerUid().equals(observation.sourcePollerUid()))
                         .flatMap(group -> group.channels().stream().map(channel -> new Comparison(
-                                channel.sourceDataUid() + ":number", group.targetPollerUid() + ":" + channel.id(),
+                                channel.sourceChannelUid(), group.targetPollerUid() + ":" + channel.id(),
                                 Objects.requireNonNull(Objects.toString(channel.configuration().get("address"), "")),
                                 Objects.requireNonNull(Objects.toString(channel.configuration().get("valueType"), "")),
                                 "UNAVAILABLE", "UNAVAILABLE", "1970-01-01T00:00:00Z", "1970-01-01T00:00:00Z",

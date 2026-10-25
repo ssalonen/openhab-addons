@@ -62,37 +62,75 @@ public final class ModbusMigrationPlanner {
             List<MigrationLink> links = new ArrayList<>();
             for (LegacyData data : children) {
                 Optional<String> unsupportedReason = unsupportedReason(data);
+                if (unsupportedReason.isEmpty()
+                        && ("coil".equals(poller.configuration().get("type"))
+                                || "discrete".equals(poller.configuration().get("type")))
+                        && !MigrationReadSelection.identityTransform(data.configuration().get("readTransform"))) {
+                    unsupportedReason = Optional.of("custom bit-window readTransform requires manual migration");
+                }
 
                 if (unsupportedReason.isPresent()) {
                     manualWork.add(new ManualMigrationWork(data.uid(), unsupportedReason.get()));
+                    if (!data.omissionReason().isEmpty() && !data.omissionReason().equals(unsupportedReason.get())) {
+                        manualWork.add(new ManualMigrationWork(data.uid(), data.omissionReason()));
+                    }
+                    data.links().stream().filter(link -> !link.compatible())
+                            .forEach(link -> manualWork.add(new ManualMigrationWork(link.channelUid(),
+                                    "Item link profile configuration is not proven compatible; target link was not planned")));
                     continue;
                 }
-                String channelId = data.uid().substring(data.uid().lastIndexOf(':') + 1);
-                String itemType = data.links().isEmpty() ? "Number" : data.links().getFirst().itemType();
-                Object readStart = Objects.requireNonNull(data.configuration().get("readStart"));
-                Object readValueType = Objects.requireNonNull(data.configuration().get("readValueType"));
-                Map<String, Object> channelConfiguration = Map.of("address", readStart, "valueType", readValueType);
-                channels.add(new MigrationChannel(data.uid(), channelId, channelConfiguration, itemType));
-                String targetChannelUid = targetPollerUid(poller.uid()) + ":" + channelId;
-                data.links().stream()
-                        .sorted(Comparator.comparing(LegacyLink::channelUid).thenComparing(LegacyLink::itemName))
-                        .forEach(link -> {
-                            boolean compatible = link.compatible();
-                            impacts.add(new MigrationImpact(link.itemName(), link.channelUid(), targetChannelUid,
-                                    link.configuration(), compatible));
-                            if (compatible) {
-                                links.add(new MigrationLink(link.itemName(), link.channelUid(), targetChannelUid,
-                                        link.configuration(),
-                                        Map.of("profile", "system:default", MigrationLink.OWNER,
-                                                configurationIdentity(List.of("modbus-link-owner-v1", ownershipSeed,
-                                                        link.itemName(), link.channelUid(), targetChannelUid)))));
-                            } else {
-                                manualWork.add(new ManualMigrationWork(link.channelUid(),
-                                        "Item link profile configuration is not proven compatible; target link was not planned"));
-                            }
-                        });
+                List<String> sourceChannels = data.links().isEmpty() ? List.of(data.uid() + ":number")
+                        : data.links().stream().map(LegacyLink::channelUid).distinct().sorted().toList();
+                for (String sourceChannel : sourceChannels) {
+                    String baseId = data.uid().substring(data.uid().lastIndexOf(':') + 1);
+                    String role = new org.openhab.core.thing.ChannelUID(sourceChannel).getId();
+                    String channelId = "number".equals(role) ? baseId : baseId + "-" + role;
+                    String itemType = Objects.requireNonNull(
+                            data.links().stream().filter(link -> sourceChannel.equals(link.channelUid()))
+                                    .map(LegacyLink::itemType).findFirst().orElse("Number"));
+                    Object readStart = Objects.requireNonNull(data.configuration().get("readStart"));
+                    Object readValueType = Objects.requireNonNull(data.configuration().get("readValueType"));
+                    Map<String, Object> channelConfiguration = new java.util.HashMap<>(
+                            Map.of("address", readStart, "valueType", readValueType, "errorPolicy", "keepLast",
+                                    "updateUnchangedValuesEveryMillis", java.math.BigDecimal.valueOf(1000)));
+                    if ("lastReadSuccess".equals(role) || "lastReadError".equals(role)) {
+                        channelConfiguration.put("readDiagnostic", role);
+                    } else if (data.configuration().containsKey("readTransform")
+                            && !MigrationReadSelection.identityTransform(data.configuration().get("readTransform"))) {
+                        channelConfiguration.put("readTransform",
+                                Objects.requireNonNull(data.configuration().get("readTransform")));
+                    }
+                    channels.add(
+                            new MigrationChannel(data.uid(), channelId, channelConfiguration, itemType, sourceChannel));
+                    String targetChannelUid = targetPollerUid(poller.uid()) + ":" + channelId;
+                    data.links().stream().filter(link -> sourceChannel.equals(link.channelUid()))
+                            .sorted(Comparator.comparing(LegacyLink::channelUid).thenComparing(LegacyLink::itemName))
+                            .forEach(link -> {
+                                boolean compatible = link.compatible();
+                                impacts.add(new MigrationImpact(link.itemName(), link.channelUid(), targetChannelUid,
+                                        link.configuration(), compatible));
+                                if (compatible) {
+                                    Map<String, Object> targetConfiguration = new java.util.HashMap<>(
+                                            link.configuration());
+                                    targetConfiguration.putIfAbsent("profile", "system:default");
+                                    targetConfiguration.put(MigrationLink.OWNER,
+                                            configurationIdentity(List.of("modbus-link-owner-v1", ownershipSeed,
+                                                    link.itemName(), link.channelUid(), targetChannelUid)));
+                                    links.add(new MigrationLink(link.itemName(), link.channelUid(), targetChannelUid,
+                                            link.configuration(), targetConfiguration));
+                                } else {
+                                    manualWork.add(new ManualMigrationWork(link.channelUid(),
+                                            "Item link profile configuration is not proven compatible; target link was not planned"));
+                                }
+                            });
+                }
             }
-            if (!channels.isEmpty()) {
+            if (channels.stream().map(MigrationChannel::id).distinct().count() != channels.size()) {
+                channels.stream().map(MigrationChannel::sourceDataUid).distinct()
+                        .forEach(uid -> manualWork.add(new ManualMigrationWork(uid,
+                                "target channel identifiers collide; group requires manual migration")));
+                impacts.removeIf(impact -> impact.targetChannelUid().startsWith(targetPollerUid(poller.uid()) + ":"));
+            } else if (!channels.isEmpty()) {
                 groups.add(new MigrationGroup(poller.uid(), targetPollerUid(poller.uid()), poller.bridgeUid(),
                         poller.configuration(), channels, links));
             }
@@ -107,11 +145,7 @@ public final class ModbusMigrationPlanner {
     }
 
     private static Optional<String> unsupportedReason(LegacyData data) {
-        if (data.links().stream().map(LegacyLink::channelUid).distinct().count() > 1) {
-            return Optional
-                    .of("distinct source channels require manual migration; channel contracts cannot be collapsed");
-        }
-        if (data.links().stream().anyMatch(link -> !"Number".equals(link.itemType()))) {
+        if (data.links().stream().anyMatch(link -> !supportedContract(data.uid(), link))) {
             return Optional.of(
                     "source channel type is unknown or its conversion is not proven compatible; requires manual migration");
         }
@@ -123,6 +157,14 @@ public final class ModbusMigrationPlanner {
             return Optional.of("readStart and readValueType are required for migration");
         }
         return Optional.empty();
+    }
+
+    private static boolean supportedContract(String uid, LegacyLink link) {
+        return (uid + ":number").equals(link.channelUid()) && "Number".equals(link.itemType())
+                || (uid + ":switch").equals(link.channelUid()) && "Switch".equals(link.itemType())
+                || (uid + ":contact").equals(link.channelUid()) && "Contact".equals(link.itemType())
+                || ((uid + ":lastReadSuccess").equals(link.channelUid())
+                        || (uid + ":lastReadError").equals(link.channelUid())) && "DateTime".equals(link.itemType());
     }
 
     private static String targetPollerUid(String sourceUid) {
@@ -180,9 +222,9 @@ public final class ModbusMigrationPlanner {
         List<String> mappings = new ArrayList<>();
         for (MigrationGroup group : groups) {
             for (MigrationChannel channel : group.channels()) {
-                mappings.add("{\"sourceThing\":\"" + json(channel.sourceDataUid()) + "\",\"targetPoller\":\""
-                        + json(group.targetPollerUid()) + "\",\"targetChannel\":\""
-                        + json(group.targetPollerUid() + ":" + channel.id()) + "\"}");
+                mappings.add("{\"sourceThing\":\"" + json(channel.sourceDataUid()) + "\",\"sourceChannel\":\""
+                        + json(channel.sourceChannelUid()) + "\",\"targetPoller\":\"" + json(group.targetPollerUid())
+                        + "\",\"targetChannel\":\"" + json(group.targetPollerUid() + ":" + channel.id()) + "\"}");
             }
             for (MigrationLink link : group.links()) {
                 mappings.add("{\"item\":\"" + json(link.itemName()) + "\",\"sourceLink\":\""
@@ -206,6 +248,10 @@ public final class ModbusMigrationPlanner {
     }
 
     private static String yamlValue(Object value) {
+        if (value instanceof List<?> values) {
+            return values.stream().map(ModbusMigrationPlanner::yamlValue)
+                    .collect(java.util.stream.Collectors.joining(", ", "[", "]"));
+        }
         return value instanceof Number || value instanceof Boolean ? value.toString()
                 : "\"" + value.toString().replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
@@ -233,15 +279,15 @@ public final class ModbusMigrationPlanner {
                                         .sorted().toList()))
                 .toList();
         List<?> targets = groups.stream().map(group -> {
-            List<?> channels = group.channels().stream().map(channel -> List.of(channel.sourceDataUid(), channel.id(),
-                    channel.itemType(), channel.configuration())).toList();
+            List<?> channels = group.channels().stream().map(channel -> List.of(channel.sourceDataUid(),
+                    channel.sourceChannelUid(), channel.id(), channel.itemType(), channel.configuration())).toList();
             List<?> links = group.links().stream().map(link -> List.of(link.itemName(), link.sourceChannelUid(),
                     link.targetChannelUid(), link.configuration(), link.targetConfiguration())).toList();
             return List.of(group.targetPollerUid(), group.targetBridgeUid(), group.configuration(), channels, links);
         }).toList();
         List<?> manual = manualWork.stream()
                 .map(work -> List.of(work.sourceUid(), work.reason(), work.configurationIdentity())).toList();
-        return configurationIdentity(List.of("modbus-migration-preview-v4", sources, data, targets, manual));
+        return configurationIdentity(List.of("modbus-migration-preview-v5", sources, data, targets, manual));
     }
 
     static String configurationIdentity(Object value) {

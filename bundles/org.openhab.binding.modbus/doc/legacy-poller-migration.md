@@ -11,8 +11,9 @@ The legacy configuration remains supported until you explicitly remove it.
 
 1. Back up or export the current Thing and Item/link configuration using your normal openHAB backup process. Retain a copy outside the runtime.
 1. Record the current legacy Thing UIDs, linked Items, values, and any known device commands so you can compare them after migration.
-1. Read the [legacy-only reference](legacy-poller.md) and identify custom `readTransform`, all write configuration, and JSON-producing write transforms.
-   The migration deliberately leaves these for manual work.
+1. Read the [legacy-only reference](legacy-poller.md) and identify all read transformations, link profiles, and write configuration.
+   Automatic migration is limited to qualified read-only contracts.
+   Write-configured Things, write diagnostics, JSON write transforms, arbitrary transformation chains, and unknown profiles remain manual work.
 
 ## Preview and review
 
@@ -23,7 +24,7 @@ openhab> modbus migrate preview
 ```
 
 The command prints a preview identity, proposed YAML, and `MANUAL:` notices.
-It only reads the legacy configuration; it does not create, delete, or relink anything.
+It captures an immutable journal review without creating, deleting, or relinking Things or Item links.
 Save the complete console output with the backup.
 Review every target poller, channel, and replacement link, and resolve every `MANUAL:` entry yourself.
 Do not change the legacy source configuration between preview and apply.
@@ -34,7 +35,7 @@ Administrator clients can read `GET /rest/modbus/migration/provider-previews`.
 This returns a detached proposal without writing the migration journal, Things, or links.
 Eligible file-backed mappings include unlinked native YAML candidates, source/target link instructions, safe provider implementation names, and revision digests.
 The public provider API does not expose a source filename, so the proposal explicitly reports `UNKNOWN_MANUAL_LOCATION` rather than inventing a path.
-Unknown ownership, unsupported conversions, transformations, and non-default profiles remain manual work.
+Unknown ownership, unsupported conversions, unqualified transformations, and unqualified profile configurations remain manual work.
 A proposal may cover only part of a legacy poller's consumers.
 Keep that legacy poller active until **every** residual consumer is resolved; migrating the eligible subset does not authorize whole-poller shutdown.
 These proposals are not managed workflow groups and cannot be applied or cut over through the managed migration operations.
@@ -88,7 +89,10 @@ Hosted renderer tests use DTO fixtures; they are not proof of a live browser ses
 Validation details are transient: explicit workflow refetch and logout clear them, and they do not override backend cutover readiness.
 
 Explicit cutover removes each eligible legacy Item-channel link **before** adding its reviewed replacement.
-Only empty or exactly `system:default` profile configurations are eligible; other profiles and rule/widget rewrites remain manual.
+Eligible links preserve their complete qualified profile configuration.
+Empty or exact `system:default` links, bounded `modbus:gainOffset` settings, JS profiles referencing qualified script files/configuration UIDs, and MAP profiles referencing qualified map files are supported.
+Unknown profile parameters, inline scripts, arbitrary profile types, and rule/widget rewrites remain manual.
+Preserving a profile reference does not copy or rewrite the transformation resource; keep its owning provider and resource available.
 The switch is per poller, and legacy Things remain online.
 Source configuration drift or an existing target link refuses the operation.
 A partial switch is compensated; failed compensation retains a Core storage journal for explicit revert or rollback, including after a component/runtime restart.
@@ -99,8 +103,10 @@ With both configurations still available:
 
 1. Confirm each new `poller2` Thing is online and has the expected channels.
 1. Compare representative live values with the retained legacy Item values, including address boundaries and byte/word order where applicable.
-1. For commandable migrated channels, perform a controlled command and verify the physical device and the next poll result.
-   Do not assume action acceptance means that a device write succeeded.
+1. Exercise a read failure and recovery.
+   Generated migration channels retain the last Item value, while missing or failed validation evidence remains `UNAVAILABLE`.
+   Do not issue device commands as part of read-only migration acceptance.
+   Any separately designed manual write migration requires its own controlled device verification.
 1. Check logs and Thing status for configuration or communication errors before considering the migration accepted.
 
 ## Revert one link, roll back, or clean up
@@ -119,10 +125,11 @@ Repeated revert is harmless once its link recovery record has been resolved.
 
 ### Replacement-link ownership and restart recovery
 
-Each newly created managed replacement uses the explicit `system:default` profile and an opaque per-link `modbusMigrationOwner` configuration value.
+Each newly created managed replacement retains the exact qualified source profile configuration and adds an opaque per-link `modbusMigrationOwner` configuration value.
+A source with implicit default configuration receives an explicit `system:default` on the replacement; undo restores the original empty configuration.
 The reviewed plan identity, manifest and recovery intent include this exact target configuration separately from the original source configuration.
-The source remains eligible only when its configuration is empty or exactly `{ "profile": "system:default" }`.
-An existing source carrying extra configuration, even a migration marker, is not automatically eligible.
+Eligibility is determined by the bounded profile contract, not the presence of a marker.
+A source carrying unqualified extra configuration, including an existing migration marker, is not automatically eligible.
 Source configuration is never decorated or rewritten, and provider-owned files are never modified.
 
 Recovery distinguishes intent to remove a source, checked source removal, attempted target addition and confirmed target addition.
@@ -146,6 +153,18 @@ A deliberately copied identical marker, Item/channel identity and full configura
 Detecting that kind of clone would require a stronger Core revision/metadata contract.
 Standalone runtime-local appliers learn their managed owner during cutover; durable service recovery uses the injected managed link provider and authoritative Thing registry instead of guessing an owner.
 
+### Reviews created before this read-only contract
+
+Reviews created under an older safety contract are `QUARANTINED` for apply, validation and cutover.
+A successful fresh read cannot authorize an old target lacking the reviewed legacy-compatible failure policy.
+Capture and review a new proposal instead of upgrading or editing the stored old target in place.
+
+Known historical reviews retain their original ownership and recovery records.
+Use the console revert or rollback commands below with the saved identity and original Item/source-channel selection; the backend still verifies exact ownership before recovery.
+Quarantined reports withhold configuration artifacts, and the hosted view does not offer automatic cutover for them.
+Unknown future record versions, corrupt records and ambiguous ownership require manual recovery rather than guessed schema conversion.
+Recovery must not promote an old review to the current safety version, including after subsequent reconstruction.
+
 ### Roll back the complete staged migration
 
 If verification fails, restore switched legacy links and remove only migration-owned candidates:
@@ -165,8 +184,15 @@ Treat cleanup as a separate, irreversible change: export again immediately befor
 
 ## Scope and limitations
 
-The migration plans safe legacy read topology only.
-It does not automatically convert custom read transforms, write configuration, or JSON-producing write transforms; those appear as manual work and are excluded from generated YAML and apply.
+The migration plans eligible polled read-only contracts only.
+It maps exact source channels independently, including multiple qualified value/read-diagnostic links on one data Thing.
+Register-backed Number/Switch/Contact and coil/discrete bit contracts are qualified separately; bit-backed Number channels preserve numeric 0/1 states.
+A bounded single Thing-level MAP transformation is preserved before channel type conversion, including scalar and single-element-list configuration forms.
+Arbitrary Thing-level scripts/chains, transformed coil/discrete contracts, write configuration, write diagnostics, and direct-endpoint write-only topology remain manual.
+Generated channels explicitly use `errorPolicy=keepLast` to preserve legacy read-failure retention; ordinary poller2 channels retain their separately configured/default failure policy.
+Validation requires fresh request-bound decoded inputs as well as equal final values.
+A transform failure is unavailable evidence; intentionally transformed UNDEF can agree only when both successful reads also have equal information-bearing decoded inputs.
+Read diagnostic validation compares event contracts rather than requiring wall-clock timestamps from separate polls to be identical.
 It never removes legacy resources during preview or apply.
 The console requires the official Core `StorageService` and stores its versioned journal in `modbus-migration-journal`.
 Before provider mutation it stores an immutable reviewed source revision/configuration, original links/profiles, target manifest, and write-ahead ownership/link intent.
@@ -180,5 +206,5 @@ The standard JSON backend defers disk commits, so abrupt process termination or 
 Normal component/runtime restart recovery is supported, but a crash-consistent transactional migration is **not** claimed.
 Retain the independent configuration backup and saved preview identity for that failure boundary.
 Full candidate configuration validation and automatic provider-owned file mutation are not implemented.
-Managed preview YAML describes the eventual linked configuration; importing it directly is not the unlinked console staging operation.
-Provider-owned proposal YAML instead describes unlinked candidates for manual review and editing.
+Both managed preview YAML and provider-owned proposal YAML describe unlinked candidates.
+The link manifest/instructions are separate; importing YAML alone does not switch Items or establish managed journal ownership.

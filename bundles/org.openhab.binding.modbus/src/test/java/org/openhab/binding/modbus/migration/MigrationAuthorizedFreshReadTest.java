@@ -64,6 +64,34 @@ class MigrationAuthorizedFreshReadTest {
     private int reloadPhase;
     private boolean manualSibling;
     private int beforeObservation;
+    private String contract = "number";
+    private List<String> readTransform = List.of("default");
+    private final AtomicInteger boundedTransformCalls = new AtomicInteger();
+
+    @Test
+    void boundedThingMapUsesFreshDetachedTransformedAndRawEvidence() throws Exception {
+        contract = "switch";
+        readTransform = List.of("MAP(fixture.map)");
+        try (var helper = mockStatic(org.openhab.core.transform.TransformationHelper.class)) {
+            var transform = mock(org.openhab.core.transform.TransformationService.class);
+            helper.when(() -> org.openhab.core.transform.TransformationHelper.getTransformationService("MAP"))
+                    .thenReturn(transform);
+            when(transform.transform(anyString(), anyString())).thenAnswer(call -> {
+                boundedTransformCalls.incrementAndGet();
+                return "ON";
+            });
+            validationSubmitsNewReadsInsteadOfReusingPeriodicEvidence(false);
+            assertEquals(2, boundedTransformCalls.get(),
+                    "Only the exact selected legacy channel and target may transform");
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "switch", "contact", "lastReadSuccess", "lastReadError" })
+    void exactReadonlySourceContractsValidateWithoutOperationalPublication(String role) throws Exception {
+        contract = role;
+        validationSubmitsNewReadsInsteadOfReusingPeriodicEvidence(false);
+    }
 
     @ParameterizedTest
     @ValueSource(ints = { 1, 2, 3, 4 })
@@ -191,12 +219,22 @@ class MigrationAuthorizedFreshReadTest {
         // Model a transport execution whose response is withheld until after child reload and re-review.
         var oldResponse = new AsyncModbusReadResult(requests.getValue(), new ModbusRegisterArray(42, 42));
         var sourceUid = new ThingUID("modbus:data:delayed:holding:value");
-        var sourceChannel = new ChannelUID(sourceUid, "number");
+        var sourceChannel = new ChannelUID(sourceUid, contract);
         Thing source = ThingBuilder.create(new ThingTypeUID("modbus", "data"), sourceUid)
                 .withBridge(pollerThing.getUID())
                 .withConfiguration(new Configuration(
-                        Map.of("readStart", "100", "readValueType", "uint16", "readTransform", List.of("default"))))
-                .withChannel(ChannelBuilder.create(sourceChannel).withAcceptedItemType("Number").build()).build();
+                        Map.of("readStart", "100", "readValueType", "uint16", "readTransform", readTransform)))
+                .withChannel(ChannelBuilder.create(sourceChannel).withAcceptedItemType(switch (contract) {
+                    case "switch" -> "Switch";
+                    case "contact" -> "Contact";
+                    case "lastReadSuccess", "lastReadError" -> "DateTime";
+                    default -> "Number";
+                }).build()).build();
+        if (!MigrationReadSelection.identityTransform(readTransform)) {
+            source = ThingBuilder.create(source).withChannel(
+                    ChannelBuilder.create(new ChannelUID(sourceUid, "number")).withAcceptedItemType("Number").build())
+                    .build();
+        }
         var child = new ModbusDataThingHandler(source) {
             @Override
             protected @Nullable Bridge getBridge() {
@@ -250,10 +288,13 @@ class MigrationAuthorizedFreshReadTest {
             assertEquals(1, before.groups().size());
             service.apply(before.identity());
             oldPeriodicCallback.handle(new AsyncModbusReadResult(requests.getValue(), new ModbusRegisterArray(7, 8)));
-            assertEquals("7", child.getObservation().orElseThrow().evidence().get(sourceChannel).value().toString());
+            if (MigrationReadSelection.identityTransform(readTransform)) {
+                assertEquals("7", child.getObservation().orElseThrow().evidence()
+                        .get(new ChannelUID(sourceUid, "number")).value().toString());
+            }
             Thing changed = ThingBuilder.create(source)
                     .withConfiguration(new Configuration(
-                            Map.of("readStart", "101", "readValueType", "uint16", "readTransform", List.of("default"))))
+                            Map.of("readStart", "101", "readValueType", "uint16", "readTransform", readTransform)))
                     .build();
             child.thingUpdated(changed);
             child.getThing().setHandler(child);
@@ -297,6 +338,7 @@ class MigrationAuthorizedFreshReadTest {
             oldPeriodicCallback.handle(oldResponse);
             clearInvocations(childCallback, candidateCallback);
             customTransforms.set(0);
+            boundedTransformCalls.set(0);
             var legacyBeforeValidation = child.getObservation();
             var candidateBeforeValidation = candidate.getObservation();
             clearInvocations(communication);

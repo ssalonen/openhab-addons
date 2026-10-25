@@ -1,0 +1,3185 @@
+{
+  "description": "Synthetic topology for inventory-independent read-only migration conformance. All identifiers, endpoints and transform references are synthetic; no private scripts or labels are included.",
+  "expectedCounts": {
+    "dataThings": 34,
+    "items": 40,
+    "links": 40,
+    "readOnlyLinks": 18,
+    "readOnlyThings": 16,
+    "readWriteLinks": 13,
+    "readWriteThings": 11,
+    "things": 37,
+    "writeOnlyLinks": 9,
+    "writeOnlyThings": 7
+  },
+  "expectedPartitions": {
+    "readOnly": {
+      "items": [
+        "FixtureItem01",
+        "FixtureItem06",
+        "FixtureItem07",
+        "FixtureItem09",
+        "FixtureItem10",
+        "FixtureItem14",
+        "FixtureItem18",
+        "FixtureItem20",
+        "FixtureItem22",
+        "FixtureItem23",
+        "FixtureItem29",
+        "FixtureItem30",
+        "FixtureItem32",
+        "FixtureItem34",
+        "FixtureItem35",
+        "FixtureItem36",
+        "FixtureItem38",
+        "FixtureItem39"
+      ],
+      "things": [
+        "modbus:data:fixture:window1:data02",
+        "modbus:data:fixture:window1:data03",
+        "modbus:data:fixture:window1:data04",
+        "modbus:data:fixture:window1:data05",
+        "modbus:data:fixture:window1:data06",
+        "modbus:data:fixture:window1:data07",
+        "modbus:data:fixture:window2:data12",
+        "modbus:data:fixture:window2:data14",
+        "modbus:data:fixture:window2:data17",
+        "modbus:data:fixture:window2:data20",
+        "modbus:data:fixture:window2:data22",
+        "modbus:data:fixture:window2:data23",
+        "modbus:data:fixture:window2:data26",
+        "modbus:data:fixture:window2:data28",
+        "modbus:data:fixture:window2:data29",
+        "modbus:data:fixture:window2:data31"
+      ]
+    },
+    "readWrite": {
+      "items": [
+        "FixtureItem04",
+        "FixtureItem05",
+        "FixtureItem08",
+        "FixtureItem13",
+        "FixtureItem17",
+        "FixtureItem19",
+        "FixtureItem21",
+        "FixtureItem24",
+        "FixtureItem25",
+        "FixtureItem26",
+        "FixtureItem33",
+        "FixtureItem37",
+        "FixtureItem40"
+      ],
+      "things": [
+        "modbus:data:fixture:window2:data01",
+        "modbus:data:fixture:window2:data09",
+        "modbus:data:fixture:window2:data10",
+        "modbus:data:fixture:window2:data13",
+        "modbus:data:fixture:window2:data16",
+        "modbus:data:fixture:window2:data19",
+        "modbus:data:fixture:window2:data21",
+        "modbus:data:fixture:window2:data24",
+        "modbus:data:fixture:window2:data27",
+        "modbus:data:fixture:window2:data30",
+        "modbus:data:fixture:window2:data32"
+      ]
+    },
+    "writeOnly": {
+      "items": [
+        "FixtureItem02",
+        "FixtureItem03",
+        "FixtureItem11",
+        "FixtureItem12",
+        "FixtureItem15",
+        "FixtureItem16",
+        "FixtureItem27",
+        "FixtureItem28",
+        "FixtureItem31"
+      ],
+      "things": [
+        "modbus:data:fixture:data11",
+        "modbus:data:fixture:data18",
+        "modbus:data:fixture:data33",
+        "modbus:data:fixture:data34",
+        "modbus:data:fixture:window2:data08",
+        "modbus:data:fixture:window2:data15",
+        "modbus:data:fixture:window2:data25"
+      ]
+    }
+  },
+  "items": [
+    {
+      "name": "FixtureItem01",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem02",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem03",
+      "type": "Number:Temperature"
+    },
+    {
+      "name": "FixtureItem04",
+      "type": "Number:Temperature"
+    },
+    {
+      "name": "FixtureItem05",
+      "type": "Number:Temperature"
+    },
+    {
+      "name": "FixtureItem06",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem07",
+      "type": "Number:Temperature"
+    },
+    {
+      "name": "FixtureItem08",
+      "type": "Number:Temperature"
+    },
+    {
+      "name": "FixtureItem09",
+      "type": "Number:Temperature"
+    },
+    {
+      "name": "FixtureItem10",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem11",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem12",
+      "type": "Number:Temperature"
+    },
+    {
+      "name": "FixtureItem13",
+      "type": "Number:Temperature"
+    },
+    {
+      "name": "FixtureItem14",
+      "type": "Number:Temperature"
+    },
+    {
+      "name": "FixtureItem15",
+      "type": "Number:Temperature"
+    },
+    {
+      "name": "FixtureItem16",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem17",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem18",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem19",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem20",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem21",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem22",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem23",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem24",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem25",
+      "type": "DateTime"
+    },
+    {
+      "name": "FixtureItem26",
+      "type": "DateTime"
+    },
+    {
+      "name": "FixtureItem27",
+      "type": "DateTime"
+    },
+    {
+      "name": "FixtureItem28",
+      "type": "DateTime"
+    },
+    {
+      "name": "FixtureItem29",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem30",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem31",
+      "type": "Number"
+    },
+    {
+      "name": "FixtureItem32",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem33",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem34",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem35",
+      "type": "Number:Temperature"
+    },
+    {
+      "name": "FixtureItem36",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem37",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem38",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem39",
+      "type": "Switch"
+    },
+    {
+      "name": "FixtureItem40",
+      "type": "Switch"
+    }
+  ],
+  "links": [
+    {
+      "channelUID": "modbus:data:fixture:window1:data02:switch",
+      "configuration": {},
+      "itemName": "FixtureItem01",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:data11:switch",
+      "configuration": {},
+      "itemName": "FixtureItem02",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data08:number",
+      "configuration": {
+        "gain": "0.1",
+        "profile": "modbus:gainOffset"
+      },
+      "itemName": "FixtureItem03",
+      "sourceAcceptedType": "Number"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data09:number",
+      "configuration": {
+        "commandFromItemScript": "config:js:fixtureFromItem",
+        "profile": "transform:JS",
+        "toItemScript": "config:js:fixtureToItem"
+      },
+      "itemName": "FixtureItem04",
+      "sourceAcceptedType": "Number"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data10:number",
+      "configuration": {
+        "profile": "transform:JS",
+        "toItemScript": "config:js:fixtureToItem"
+      },
+      "itemName": "FixtureItem05",
+      "sourceAcceptedType": "Number"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window1:data03:switch",
+      "configuration": {},
+      "itemName": "FixtureItem06",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data12:number",
+      "configuration": {
+        "commandFromItemScript": "config:js:fixtureFromItem",
+        "profile": "transform:JS",
+        "toItemScript": "config:js:fixtureToItem"
+      },
+      "itemName": "FixtureItem07",
+      "sourceAcceptedType": "Number"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data13:number",
+      "configuration": {
+        "commandFromItemScript": "config:js:fixtureFromItem",
+        "profile": "transform:JS",
+        "toItemScript": "config:js:fixtureToItem"
+      },
+      "itemName": "FixtureItem08",
+      "sourceAcceptedType": "Number"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data14:number",
+      "configuration": {
+        "profile": "transform:JS",
+        "toItemScript": "config:js:fixtureToItem"
+      },
+      "itemName": "FixtureItem09",
+      "sourceAcceptedType": "Number"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window1:data04:switch",
+      "configuration": {},
+      "itemName": "FixtureItem10",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:data18:switch",
+      "configuration": {},
+      "itemName": "FixtureItem11",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data15:number",
+      "configuration": {
+        "gain": "0.1",
+        "profile": "modbus:gainOffset"
+      },
+      "itemName": "FixtureItem12",
+      "sourceAcceptedType": "Number"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data16:number",
+      "configuration": {
+        "commandFromItemScript": "config:js:fixtureFromItem",
+        "profile": "transform:JS",
+        "toItemScript": "config:js:fixtureToItem"
+      },
+      "itemName": "FixtureItem13",
+      "sourceAcceptedType": "Number"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data17:number",
+      "configuration": {
+        "profile": "transform:JS",
+        "toItemScript": "config:js:fixtureToItem"
+      },
+      "itemName": "FixtureItem14",
+      "sourceAcceptedType": "Number"
+    },
+    {
+      "channelUID": "modbus:data:fixture:data33:number",
+      "configuration": {
+        "gain": "0.1",
+        "profile": "modbus:gainOffset"
+      },
+      "itemName": "FixtureItem15",
+      "sourceAcceptedType": "Number"
+    },
+    {
+      "channelUID": "modbus:data:fixture:data34:switch",
+      "configuration": {},
+      "itemName": "FixtureItem16",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data01:switch",
+      "configuration": {},
+      "itemName": "FixtureItem17",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window1:data05:switch",
+      "configuration": {},
+      "itemName": "FixtureItem18",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data19:switch",
+      "configuration": {},
+      "itemName": "FixtureItem19",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data20:switch",
+      "configuration": {},
+      "itemName": "FixtureItem20",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data21:switch",
+      "configuration": {},
+      "itemName": "FixtureItem21",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data22:switch",
+      "configuration": {},
+      "itemName": "FixtureItem22",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data23:switch",
+      "configuration": {},
+      "itemName": "FixtureItem23",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data24:switch",
+      "configuration": {},
+      "itemName": "FixtureItem24",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data01:lastReadError",
+      "configuration": {},
+      "itemName": "FixtureItem25",
+      "sourceAcceptedType": "DateTime"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data01:lastReadSuccess",
+      "configuration": {},
+      "itemName": "FixtureItem26",
+      "sourceAcceptedType": "DateTime"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data25:lastWriteError",
+      "configuration": {},
+      "itemName": "FixtureItem27",
+      "sourceAcceptedType": "DateTime"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data25:lastWriteSuccess",
+      "configuration": {},
+      "itemName": "FixtureItem28",
+      "sourceAcceptedType": "DateTime"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window1:data03:lastReadSuccess",
+      "configuration": {
+        "function": "fixture-availability.map",
+        "profile": "transform:MAP"
+      },
+      "itemName": "FixtureItem29",
+      "sourceAcceptedType": "DateTime"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data14:lastReadSuccess",
+      "configuration": {
+        "function": "fixture-availability.map",
+        "profile": "transform:MAP"
+      },
+      "itemName": "FixtureItem30",
+      "sourceAcceptedType": "DateTime"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data25:number",
+      "configuration": {},
+      "itemName": "FixtureItem31",
+      "sourceAcceptedType": "Number"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data26:switch",
+      "configuration": {},
+      "itemName": "FixtureItem32",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data27:switch",
+      "configuration": {},
+      "itemName": "FixtureItem33",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data28:switch",
+      "configuration": {},
+      "itemName": "FixtureItem34",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data29:number",
+      "configuration": {
+        "commandFromItemScript": "config:js:fixtureFromItem",
+        "profile": "transform:JS",
+        "toItemScript": "config:js:fixtureToItem"
+      },
+      "itemName": "FixtureItem35",
+      "sourceAcceptedType": "Number"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window1:data06:switch",
+      "configuration": {},
+      "itemName": "FixtureItem36",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data30:switch",
+      "configuration": {},
+      "itemName": "FixtureItem37",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window1:data07:switch",
+      "configuration": {},
+      "itemName": "FixtureItem38",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data31:switch",
+      "configuration": {},
+      "itemName": "FixtureItem39",
+      "sourceAcceptedType": "Switch"
+    },
+    {
+      "channelUID": "modbus:data:fixture:window2:data32:switch",
+      "configuration": {},
+      "itemName": "FixtureItem40",
+      "sourceAcceptedType": "Switch"
+    }
+  ],
+  "things": [
+    {
+      "UID": "modbus:data:fixture:data11",
+      "bridgeUID": "modbus:tcp:fixture",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:data11:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:data11:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:data11:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:data11:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data11:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:data11:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:data11:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data11:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data11:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data11:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data11:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readTransform": [
+          "default"
+        ],
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "13",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:data18",
+      "bridgeUID": "modbus:tcp:fixture",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:data18:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:data18:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:data18:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:data18:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data18:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:data18:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:data18:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data18:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data18:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data18:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data18:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readTransform": [
+          "default"
+        ],
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "21",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:data33",
+      "bridgeUID": "modbus:tcp:fixture",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:data33:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:data33:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:data33:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:data33:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data33:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:data33:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:data33:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data33:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data33:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data33:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data33:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readTransform": [
+          "default"
+        ],
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "47",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:data34",
+      "bridgeUID": "modbus:tcp:fixture",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:data34:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:data34:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:data34:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:data34:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data34:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:data34:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:data34:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data34:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data34:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data34:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:data34:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readTransform": [
+          "default"
+        ],
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "48",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window1:data02",
+      "bridgeUID": "modbus:poller:fixture:window1",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window1:data02:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window1:data02:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window1:data02:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window1:data02:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data02:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window1:data02:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window1:data02:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data02:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data02:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data02:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data02:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "1",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "bit",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window1:data03",
+      "bridgeUID": "modbus:poller:fixture:window1",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window1:data03:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window1:data03:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window1:data03:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window1:data03:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data03:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window1:data03:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window1:data03:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data03:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data03:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data03:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data03:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "0",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "bit",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window1:data04",
+      "bridgeUID": "modbus:poller:fixture:window1",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window1:data04:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window1:data04:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window1:data04:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window1:data04:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data04:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window1:data04:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window1:data04:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data04:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data04:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data04:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data04:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "2",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "bit",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window1:data05",
+      "bridgeUID": "modbus:poller:fixture:window1",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window1:data05:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window1:data05:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window1:data05:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window1:data05:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data05:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window1:data05:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window1:data05:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data05:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data05:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data05:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data05:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "5",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "bit",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window1:data06",
+      "bridgeUID": "modbus:poller:fixture:window1",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window1:data06:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window1:data06:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window1:data06:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window1:data06:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data06:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window1:data06:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window1:data06:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data06:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data06:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data06:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data06:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "3",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "bit",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window1:data07",
+      "bridgeUID": "modbus:poller:fixture:window1",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window1:data07:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window1:data07:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window1:data07:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window1:data07:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data07:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window1:data07:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window1:data07:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data07:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data07:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data07:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window1:data07:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "4",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "bit",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data01",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data01:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data01:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data01:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data01:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data01:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data01:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data01:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data01:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data01:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data01:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data01:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "2",
+        "readTransform": [
+          "MAP(fixture-invert.map)"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "2",
+        "writeTransform": [
+          "MAP(fixture-invert.map)"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data08",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data08:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data08:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data08:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data08:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data08:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data08:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data08:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data08:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data08:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data08:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data08:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readTransform": [
+          "default"
+        ],
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "11",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data09",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data09:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data09:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data09:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data09:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data09:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data09:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data09:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data09:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data09:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data09:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data09:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "16",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "16",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data10",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data10:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data10:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data10:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data10:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data10:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data10:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data10:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data10:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data10:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data10:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data10:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "45",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "45",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data12",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data12:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data12:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data12:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data12:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data12:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data12:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data12:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data12:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data12:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data12:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data12:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "3",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data13",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data13:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data13:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data13:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data13:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data13:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data13:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data13:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data13:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data13:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data13:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data13:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "8",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "8",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data14",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data14:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data14:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data14:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data14:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data14:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data14:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data14:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data14:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data14:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data14:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data14:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "44",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data15",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data15:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data15:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data15:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data15:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data15:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data15:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data15:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data15:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data15:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data15:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data15:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readTransform": [
+          "default"
+        ],
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 1,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "19",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data16",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data16:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data16:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data16:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data16:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data16:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data16:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data16:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data16:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data16:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data16:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data16:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "24",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "24",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data17",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data17:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data17:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data17:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data17:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data17:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data17:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data17:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data17:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data17:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data17:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data17:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "46",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data19",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data19:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data19:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data19:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data19:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data19:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data19:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data19:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data19:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data19:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data19:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data19:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "43",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "43",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data20",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data20:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data20:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data20:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data20:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data20:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data20:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data20:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data20:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data20:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data20:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data20:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "54",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data21",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data21:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data21:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data21:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data21:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data21:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data21:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data21:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data21:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data21:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data21:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data21:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "50",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "50",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data22",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data22:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data22:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data22:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data22:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data22:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data22:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data22:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data22:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data22:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data22:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data22:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "57",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data23",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data23:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data23:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data23:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data23:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data23:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data23:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data23:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data23:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data23:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data23:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data23:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "53",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data24",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data24:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data24:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data24:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data24:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data24:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data24:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data24:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data24:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data24:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data24:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data24:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "49",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "49",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data25",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data25:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data25:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data25:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data25:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data25:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data25:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data25:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data25:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data25:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data25:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data25:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readTransform": [
+          "default"
+        ],
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "0",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data26",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data26:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data26:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data26:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data26:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data26:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data26:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data26:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data26:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data26:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data26:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data26:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "61",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data27",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data27:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data27:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data27:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data27:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data27:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data27:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data27:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data27:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data27:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data27:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data27:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "58",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "58",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data28",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data28:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data28:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data28:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data28:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data28:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data28:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data28:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data28:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data28:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data28:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data28:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "70",
+        "readTransform": [
+          "MAP(fixture-invert.map)"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data29",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data29:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data29:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data29:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data29:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data29:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data29:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data29:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data29:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data29:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data29:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data29:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "60",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data30",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data30:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data30:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data30:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data30:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data30:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data30:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data30:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data30:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data30:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data30:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data30:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "30",
+        "readTransform": [
+          "MAP(fixture-invert.map)"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "30",
+        "writeTransform": [
+          "MAP(fixture-invert.map)"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data31",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data31:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data31:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data31:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data31:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data31:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data31:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data31:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data31:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data31:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data31:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data31:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "55",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 3,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeTransform": [
+          "default"
+        ]
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:data:fixture:window2:data32",
+      "bridgeUID": "modbus:poller:fixture:window2",
+      "channels": [
+        {
+          "id": "number",
+          "itemType": "Number",
+          "uid": "modbus:data:fixture:window2:data32:number"
+        },
+        {
+          "id": "switch",
+          "itemType": "Switch",
+          "uid": "modbus:data:fixture:window2:data32:switch"
+        },
+        {
+          "id": "contact",
+          "itemType": "Contact",
+          "uid": "modbus:data:fixture:window2:data32:contact"
+        },
+        {
+          "id": "dimmer",
+          "itemType": "Dimmer",
+          "uid": "modbus:data:fixture:window2:data32:dimmer"
+        },
+        {
+          "id": "datetime",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data32:datetime"
+        },
+        {
+          "id": "string",
+          "itemType": "String",
+          "uid": "modbus:data:fixture:window2:data32:string"
+        },
+        {
+          "id": "rollershutter",
+          "itemType": "Rollershutter",
+          "uid": "modbus:data:fixture:window2:data32:rollershutter"
+        },
+        {
+          "id": "lastReadSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data32:lastReadSuccess"
+        },
+        {
+          "id": "lastReadError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data32:lastReadError"
+        },
+        {
+          "id": "lastWriteSuccess",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data32:lastWriteSuccess"
+        },
+        {
+          "id": "lastWriteError",
+          "itemType": "DateTime",
+          "uid": "modbus:data:fixture:window2:data32:lastWriteError"
+        }
+      ],
+      "configuration": {
+        "readStart": "51",
+        "readTransform": [
+          "default"
+        ],
+        "readValueType": "int16",
+        "updateUnchangedValuesEveryMillis": 1000,
+        "writeMaxTries": 10,
+        "writeMultipleEvenWithSingleRegisterOrCoil": false,
+        "writeStart": "51",
+        "writeTransform": [
+          "default"
+        ],
+        "writeType": "holding",
+        "writeValueType": "int16"
+      },
+      "thingTypeUID": "modbus:data"
+    },
+    {
+      "UID": "modbus:poller:fixture:window1",
+      "bridgeUID": "modbus:tcp:fixture",
+      "configuration": {
+        "cacheMillis": 50,
+        "length": 6,
+        "maxTries": 3,
+        "refresh": 1000,
+        "start": 0,
+        "type": "coil"
+      },
+      "thingTypeUID": "modbus:poller"
+    },
+    {
+      "UID": "modbus:poller:fixture:window2",
+      "bridgeUID": "modbus:tcp:fixture",
+      "configuration": {
+        "cacheMillis": 50,
+        "length": 71,
+        "maxTries": 5,
+        "refresh": 1000,
+        "start": 0,
+        "type": "holding"
+      },
+      "thingTypeUID": "modbus:poller"
+    },
+    {
+      "UID": "modbus:tcp:fixture",
+      "configuration": {
+        "host": "127.0.0.1",
+        "id": 1,
+        "port": 15040,
+        "reconnectAfterMillis": 0
+      },
+      "thingTypeUID": "modbus:tcp"
+    }
+  ]
+}

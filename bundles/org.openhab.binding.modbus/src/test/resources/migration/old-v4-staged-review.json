@@ -1,0 +1,100 @@
+{
+  "preview": {
+    "identity": "3722d6bb591e0e91f3da44d2366093fa5d5a86fc70cfb0bc299ba56b722c7d25",
+    "groups": [
+      {
+        "sourcePollerUid": "modbus:poller:tcp:plant",
+        "targetPollerUid": "modbus:poller2:tcp:plant",
+        "targetBridgeUid": "modbus:tcp:plant",
+        "configuration": {
+          "start": 100,
+          "type": "holding",
+          "length": 2
+        },
+        "channels": [
+          {
+            "sourceDataUid": "modbus:data:tcp:plant:temperature",
+            "id": "temperature",
+            "configuration": {
+              "valueType": "int16",
+              "address": "100"
+            },
+            "itemType": "Number"
+          }
+        ],
+        "links": [
+          {
+            "itemName": "Temperature",
+            "sourceChannelUid": "modbus:data:tcp:plant:temperature:number",
+            "targetChannelUid": "modbus:poller2:tcp:plant:temperature",
+            "configuration": {
+              "profile": "system:default"
+            },
+            "targetConfiguration": {
+              "modbusMigrationOwner": "e26b760c58605009cb1a9734132a72dbdce096dafbe70ca1f71eae8929363941",
+              "profile": "system:default"
+            }
+          }
+        ]
+      }
+    ],
+    "manualWork": [],
+    "impacts": [
+      {
+        "itemName": "Temperature",
+        "sourceChannelUid": "modbus:data:tcp:plant:temperature:number",
+        "targetChannelUid": "modbus:poller2:tcp:plant:temperature",
+        "profileConfiguration": {
+          "profile": "system:default"
+        },
+        "targetLinkPlanned": true
+      }
+    ],
+    "yaml": "version: 1\nthings:\n  modbus:poller2:tcp:plant:\n    bridge: modbus:tcp:plant\n    config:\n      length: 2\n      start: 100\n      type: \"holding\"\n    channels:\n      temperature:\n        itemType: Number\n        config:\n          address: \"100\"\n          valueType: \"int16\"\n",
+    "manifestJson": "{\"version\":1,\"mappings\":[{\"sourceThing\":\"modbus:data:tcp:plant:temperature\",\"targetPoller\":\"modbus:poller2:tcp:plant\",\"targetChannel\":\"modbus:poller2:tcp:plant:temperature\"},{\"item\":\"Temperature\",\"sourceLink\":\"modbus:data:tcp:plant:temperature:number\",\"targetLink\":\"modbus:poller2:tcp:plant:temperature\",\"profileConfiguration\":{\"profile\":\"system:default\"},\"targetConfiguration\":{\"modbusMigrationOwner\":\"e26b760c58605009cb1a9734132a72dbdce096dafbe70ca1f71eae8929363941\",\"profile\":\"system:default\"}}],\"manualWork\":[],\"impacts\":[{\"item\":\"Temperature\",\"sourceChannel\":\"modbus:data:tcp:plant:temperature:number\",\"targetChannel\":\"modbus:poller2:tcp:plant:temperature\",\"profileConfiguration\":{\"profile\":\"system:default\"},\"targetLinkPlanned\":true}]}",
+    "impactReport": "IMPACT ASSESSMENT (review only; no rules, scripts, widgets, or profiles are rewritten)\n- Item: Temperature\n  Source channel: modbus:data:tcp:plant:temperature:number\n  Target channel: modbus:poller2:tcp:plant:temperature\n  Profile configuration: {\"profile\":\"system:default\"}\n  Target link action: CREATE\n  Developer Sidebar search queries (literal terms):\n    - Temperature\n    - modbus:data:tcp:plant:temperature\n    - modbus:poller2:tcp:plant\nNOTE: Developer Sidebar search is a user review aid, not authoritative dependency detection. Review dynamic, group, tag, external references, and scripts, widgets, and profiles manually.\n"
+  },
+  "pollers": [
+    {
+      "uid": "modbus:poller:tcp:plant",
+      "bridgeUid": "modbus:tcp:plant",
+      "configuration": {
+        "start": 100,
+        "type": "holding",
+        "length": 2
+      },
+      "endpointConfigurationIdentity": "",
+      "configurationIdentity": "c4aeb87fd29b7665d34d2c8ffa1c7117a3b67ca6e250d39ccdd210ac4bb5f767",
+      "configurationOmitted": false
+    }
+  ],
+  "data": [
+    {
+      "uid": "modbus:data:tcp:plant:temperature",
+      "pollerUid": "modbus:poller:tcp:plant",
+      "configuration": {
+        "readStart": "100",
+        "readValueType": "int16"
+      },
+      "links": [
+        {
+          "itemName": "Temperature",
+          "channelUid": "modbus:data:tcp:plant:temperature:number",
+          "itemType": "Number",
+          "configuration": {
+            "profile": "system:default"
+          },
+          "configurationIdentity": "543de901596743483d0ce966e7a790f4ea1f17f5f14f47aacda9065fbe97ced5",
+          "compatible": true
+        }
+      ],
+      "configurationIdentity": "91151fb207f1e290c5f3a1aa783d93886b527d5bc90fd640e4ada62dcb75d7d8",
+      "omissionReason": ""
+    }
+  ],
+  "outcome": "STAGED",
+  "stagedAt": "2026-01-01T00:00:00Z",
+  "switched": [],
+  "providerWork": [],
+  "reviewSafetyVersion": 1
+}

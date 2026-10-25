@@ -54,13 +54,48 @@ final class MigrationReviewConfiguration {
         return source.isEmpty() || Map.of("profile", "system:default").equals(source);
     }
 
+    static boolean compatibleProfile(Map<String, Object> source) {
+        if (defaultProfile(source)) {
+            return true;
+        }
+        Object profile = source.get("profile");
+        if ("modbus:gainOffset".equals(profile)) {
+            return source.keySet().stream().allMatch(Set.of("profile", "gain", "pre-gain-offset")::contains)
+                    && source.entrySet().stream().allMatch(entry -> "profile".equals(entry.getKey())
+                            || quantity(entry.getValue(), "pre-gain-offset".equals(entry.getKey())));
+        }
+        if ("transform:JS".equals(profile)) {
+            return source.containsKey("toItemScript")
+                    && source.keySet().stream()
+                            .allMatch(Set.of("profile", "toItemScript", "commandFromItemScript")::contains)
+                    && source.entrySet().stream().allMatch(
+                            entry -> "profile".equals(entry.getKey()) || entry.getValue() instanceof String text
+                                    && (text.matches("config:js:[A-Za-z0-9_-]{1,128}")
+                                            || text.matches("[A-Za-z0-9_-]{1,128}\\.js")));
+        }
+        return "transform:MAP".equals(profile) && source.size() == 2 && source.get("function") instanceof String text
+                && text.matches("[A-Za-z0-9_-]{1,128}\\.map");
+    }
+
+    private static boolean quantity(Object value, boolean dimensionless) {
+        if (!(value instanceof BigDecimal || value instanceof String) || value.toString().length() > 128) {
+            return false;
+        }
+        try {
+            var quantity = new org.openhab.core.library.types.QuantityType<>(value.toString());
+            return !dimensionless || quantity.toUnit(org.openhab.core.library.unit.Units.ONE) != null;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
     static Map<String, Object> data(Map<String, Object> source) {
         Map<String, Object> safe = new HashMap<>();
         source.forEach((key, value) -> {
             if ("readStart".equals(key) && (value instanceof Number || value instanceof String)
                     && value.toString().matches("[0-9]+(\\.[0-9]{1,2})?")
                     || "readValueType".equals(key) && VALUE_TYPES.contains(value)
-                    || "readTransform".equals(key) && identityTransform(value)) {
+                    || "readTransform".equals(key) && supportedReadTransform(value)) {
                 safe.put(key, value instanceof List<?> list ? List.copyOf(list) : value);
             }
         });
@@ -71,6 +106,15 @@ final class MigrationReviewConfiguration {
         return value instanceof String text && (text.isBlank() || "default".equals(text))
                 || value instanceof List<?> values && values.size() == 1 && values.getFirst() instanceof String entry
                         && "default".equalsIgnoreCase(entry.trim());
+    }
+
+    static boolean supportedReadTransform(@Nullable Object value) {
+        if (value == null || identityTransform(value)) {
+            return true;
+        }
+        Object single = value instanceof List<?> list && list.size() == 1 ? list.getFirst() : value;
+        return single instanceof String text && (text.matches("MAP\\([A-Za-z0-9_-]{1,128}\\.map\\)")
+                || text.matches("MAP:[A-Za-z0-9_-]{1,128}\\.map"));
     }
 
     // Core injects these defaults even without a write destination. Validate them separately from the
@@ -103,7 +147,7 @@ final class MigrationReviewConfiguration {
                     ? "JSON write transform requires manual migration; configuration omitted"
                     : "writes require manual migration; configuration omitted";
         }
-        if (source.containsKey("readTransform") && !identityTransform(source.get("readTransform"))) {
+        if (source.containsKey("readTransform") && !supportedReadTransform(source.get("readTransform"))) {
             return "custom readTransform requires manual migration; configuration omitted";
         }
         Map<String, Object> readable = data(source);

@@ -210,8 +210,8 @@ public final class ManagedModbusMigrationApplier implements MigrationApplier {
             if (!link.markedDefaultTarget()) {
                 throw new IllegalStateException("Unmarked target plan requires a new review; no automatic cutover");
             }
-            if (!(link.configuration().isEmpty() || link.configuration().equals(Map.of("profile", "system:default")))) {
-                throw new IllegalStateException("Non-default profiles require manual migration");
+            if (!MigrationReviewConfiguration.compatibleProfile(link.configuration())) {
+                throw new IllegalStateException("Unknown profile configuration requires manual migration");
             }
             ItemChannelLink source = linkRegistry.get(sourceLink(link).getUID());
             if (source == null || !source.getConfiguration().getProperties().equals(link.configuration())) {

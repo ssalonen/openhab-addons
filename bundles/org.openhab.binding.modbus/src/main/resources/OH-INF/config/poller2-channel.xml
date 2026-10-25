@@ -25,6 +25,25 @@
 				<option value="keepLast">Keep Last Successful Value</option>
 			</options>
 		</parameter>
+		<parameter name="readTransform" type="text" multiple="true">
+			<label>Read Transformation</label>
+			<description>Transform the decoded value before converting it to the channel's accepted state type.</description>
+			<advanced>true</advanced>
+		</parameter>
+		<parameter name="readDiagnostic" type="text">
+			<label>Read Diagnostic Event</label>
+			<description>For DateTime channels only. Keep the last success or failure time independently of the value channels.</description>
+			<options>
+				<option value="lastReadSuccess">Last Read Success</option>
+				<option value="lastReadError">Last Read Error</option>
+			</options>
+			<advanced>true</advanced>
+		</parameter>
+		<parameter name="updateUnchangedValuesEveryMillis" type="integer" min="0" unit="ms">
+			<label>Unchanged Value Update Interval</label>
+			<description>Optional minimum interval between equal state updates. Zero or an absent value publishes every response.</description>
+			<advanced>true</advanced>
+		</parameter>
 		<parameter name="writeStart" type="text">
 			<label>Write Address</label>
 			<description>Optional zero-based write address. Holding-register bits use X.Y notation.</description>

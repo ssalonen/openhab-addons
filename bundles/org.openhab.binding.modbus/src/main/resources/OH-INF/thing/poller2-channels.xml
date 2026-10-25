@@ -27,4 +27,10 @@
 		<description>Bit value rendered as OPEN or CLOSED.</description>
 		<config-description-ref uri="channel-type:modbus:poller2-value"/>
 	</channel-type>
+	<channel-type id="poller2-datetime">
+		<item-type>DateTime</item-type>
+		<label>Read Diagnostic Time</label>
+		<description>Time of the configured read success or read failure event.</description>
+		<config-description-ref uri="channel-type:modbus:poller2-value"/>
+	</channel-type>
 </thing:thing-descriptions>

@@ -47,6 +47,7 @@ public final class ModbusMigrationWorkflow {
     private final Map<String, MigrationPreview> previews = new HashMap<>();
     private final Set<String> recovery = new HashSet<>();
     private final Set<String> quarantined = new HashSet<>();
+    private final Set<String> unknownReviewVersions = new HashSet<>();
     private final Set<String> applied = new HashSet<>();
 
     public ModbusMigrationWorkflow(ModbusMigrationPlanner planner, MigrationApplier applier) {
@@ -70,8 +71,12 @@ public final class ModbusMigrationWorkflow {
         for (MigrationJournal.Workflow entry : journal.workflows()) {
             String identity = entry.preview().identity();
             previews.put(identity, entry.preview());
-            if (entry.reviewSafetyVersion() != 1) {
+            if (entry.reviewSafetyVersion() != MigrationJournal.REVIEW_SAFETY_VERSION) {
                 quarantined.add(identity);
+            }
+            if (entry.reviewSafetyVersion() < 0
+                    || entry.reviewSafetyVersion() > MigrationJournal.REVIEW_SAFETY_VERSION) {
+                unknownReviewVersions.add(identity);
             }
             sources.put(identity, new Sources(entry.pollers(), entry.data(), entry.providerWork()));
             if (entry.outcome().equals("STAGED")) {
@@ -301,6 +306,9 @@ public final class ModbusMigrationWorkflow {
     }
 
     private MigrationPreview appliedPreview(String previewIdentity) {
+        if (unknownReviewVersions.contains(previewIdentity)) {
+            throw new IllegalStateException("Unknown review version; manual recovery required");
+        }
         if (!applied.contains(previewIdentity) && !recovery.contains(previewIdentity)) {
             throw new IllegalStateException("the preview has not been applied");
         }

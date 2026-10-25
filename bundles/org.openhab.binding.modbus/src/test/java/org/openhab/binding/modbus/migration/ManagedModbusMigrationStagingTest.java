@@ -284,8 +284,9 @@ class ManagedModbusMigrationStagingTest {
         verify(provider, times(2)).remove(target);
     }
 
-    @Test
-    void restartRevertRestoresExactProfileWithoutRemovingCandidatesOrUnrelatedLinks() {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.MethodSource("recoverableProfiles")
+    void restartRevertRestoresExactProfileWithoutRemovingCandidatesOrUnrelatedLinks(Map<String, Object> profile) {
         Map<String, String> persisted = new HashMap<>();
         Map<String, ItemChannelLink> routing = new HashMap<>();
         ManagedThingProvider provider = mock(ManagedThingProvider.class);
@@ -301,7 +302,6 @@ class ManagedModbusMigrationStagingTest {
         }).when(links).add(any());
         var pollers = List.of(new LegacyPoller("modbus:poller:tcp:plant", "modbus:tcp:plant",
                 Map.of("start", 100, "length", 2, "type", "holding")));
-        var profile = Map.<String, Object> of("profile", "system:default");
         var data = List.of(new LegacyData("modbus:data:tcp:plant:temperature", "modbus:poller:tcp:plant",
                 Map.of("readStart", "100", "readValueType", "int16"),
                 List.of(new LegacyLink("Temperature", "modbus:data:tcp:plant:temperature:number", "Number", profile),
@@ -326,7 +326,12 @@ class ManagedModbusMigrationStagingTest {
         routing.put(original.getUID(), original);
         routing.put(unrelated.getUID(), unrelated);
         workflow.apply(preview.identity(), pollers, data);
-        workflow.cutover(preview.identity(), pollers.getFirst().uid(), pollers, data);
+        Assertions.assertDoesNotThrow(
+                () -> workflow.cutover(preview.identity(), pollers.getFirst().uid(), pollers, data));
+        Assertions.assertEquals(mapping.targetConfiguration(),
+                Objects.requireNonNull(routing.get(
+                        new ItemChannelLink(mapping.itemName(), new ChannelUID(mapping.targetChannelUid())).getUID()))
+                        .getConfiguration().getProperties());
         MigrationJournal recovered = new MigrationJournal(storage(persisted));
         ModbusMigrationWorkflow restarted = new ModbusMigrationWorkflow(new ModbusMigrationPlanner(),
                 new ManagedModbusMigrationApplier(provider, links, recovered, things,
@@ -343,6 +348,11 @@ class ManagedModbusMigrationStagingTest {
         verify(provider, never()).remove(any());
         Assertions.assertEquals(MigrationValidation.Outcome.UNAVAILABLE,
                 restarted.validate(preview.identity(), pollers.getFirst().uid()).outcome());
+    }
+
+    static java.util.stream.Stream<Map<String, Object>> recoverableProfiles() {
+        return java.util.stream.Stream.concat(java.util.stream.Stream.of(Map.of("profile", "system:default")),
+                ModbusMigrationPlannerTest.boundedProfiles());
     }
 
     static Storage<String> storage(Map<String, String> values) {

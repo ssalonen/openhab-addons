@@ -76,7 +76,9 @@ class RuntimeDefaultMigrationClassificationTest {
 
         assertEquals(1, plan.groups().size(), plan.manualWork().toString());
         assertTrue(plan.manualWork().isEmpty());
-        assertEquals(Map.of("address", "100", "valueType", "uint16"),
+        assertEquals(
+                Map.of("address", "100", "valueType", "uint16", "errorPolicy", "keepLast",
+                        "updateUnchangedValuesEveryMillis", java.math.BigDecimal.valueOf(1000)),
                 plan.groups().getFirst().channels().getFirst().configuration());
         assertEquals(1, plan.groups().getFirst().links().size());
         assertEquals("", captured.omissionReason());

@@ -88,7 +88,7 @@ class ProviderOwnedMigrationPreviewTest {
     }
 
     @Test
-    void unsupportedContactConversionRemainsManual() {
+    void supportedContactConversionProducesDetachedFileProposal() {
         var adapter = adapter();
         Thing contact = ThingBuilder.create(data.getThingTypeUID(), data.getUID()).withBridge(poller.getUID())
                 .withConfiguration(new Configuration(Map.of("readStart", "100.0", "readValueType", "bit")))
@@ -101,17 +101,18 @@ class ProviderOwnedMigrationPreviewTest {
         when(links.getAll()).thenReturn(List.of(contactLink));
         when(links.getProvider(contactLink)).thenReturn(linkOwner);
         var preview = adapter.preview();
-        assertTrue(preview.fileChanges().isEmpty());
-        assertTrue(preview.manualWork().stream()
-                .anyMatch(work -> work.reason().contains("conversion is not proven compatible")));
+        assertEquals(1, preview.fileChanges().size());
+        assertTrue(preview.fileChanges().getFirst().candidateYaml().contains("itemType: Contact"));
+        assertTrue(preview.fileChanges().getFirst().candidateYaml().contains("errorPolicy: \"keepLast\""));
+        assertEquals(1, preview.fileChanges().getFirst().linkPatches().size());
         verifyNoInteractions(owner, linkOwner);
     }
 
     @Test
     void allManualContactConfigurationDriftInvalidatesReviewWithoutExposingValues() {
         var adapter = adapter();
-        Thing contact = contact("contact");
-        ItemChannelLink contactLink = new ItemChannelLink("ContactValue", new ChannelUID(contact.getUID(), "contact"),
+        Thing contact = manualDimmer("dimmer");
+        ItemChannelLink contactLink = new ItemChannelLink("ContactValue", new ChannelUID(contact.getUID(), "dimmer"),
                 new Configuration(Map.of("profile", "custom:contact", "ordinary", "SENTINEL-profile")));
         when(things.getAll()).thenReturn(List.of(contact, endpoint, poller));
         when(things.getProvider(contact)).thenReturn(owner);
@@ -128,10 +129,10 @@ class ProviderOwnedMigrationPreviewTest {
     @Test
     void allManualContactEndpointCredentialsDriftInvalidatesReview() {
         var adapter = adapter();
-        Thing contact = contact("contact");
+        Thing contact = manualDimmer("dimmer");
         when(things.getAll()).thenReturn(List.of(contact, endpoint, poller));
         when(things.getProvider(contact)).thenReturn(owner);
-        ItemChannelLink contactLink = new ItemChannelLink("ContactValue", new ChannelUID(contact.getUID(), "contact"));
+        ItemChannelLink contactLink = new ItemChannelLink("ContactValue", new ChannelUID(contact.getUID(), "dimmer"));
         when(links.getAll()).thenReturn(List.of(contactLink));
         when(links.getProvider(contactLink)).thenReturn(linkOwner);
         var before = adapter.preview();
@@ -145,8 +146,8 @@ class ProviderOwnedMigrationPreviewTest {
     @Test
     void allManualContactLinkConfigurationDriftInvalidatesReview() {
         var adapter = adapter();
-        Thing contact = contact("contact");
-        ItemChannelLink contactLink = new ItemChannelLink("ContactValue", new ChannelUID(contact.getUID(), "contact"),
+        Thing contact = manualDimmer("dimmer");
+        ItemChannelLink contactLink = new ItemChannelLink("ContactValue", new ChannelUID(contact.getUID(), "dimmer"),
                 new Configuration(Map.of("profile", "custom:contact", "ordinary", "SENTINEL-old")));
         when(things.getAll()).thenReturn(List.of(contact, endpoint, poller));
         when(things.getProvider(contact)).thenReturn(owner);
@@ -163,8 +164,8 @@ class ProviderOwnedMigrationPreviewTest {
     @Test
     void allManualContactProviderDriftInvalidatesReview() {
         var adapter = adapter();
-        Thing contact = contact("contact");
-        ItemChannelLink contactLink = new ItemChannelLink("ContactValue", new ChannelUID(contact.getUID(), "contact"));
+        Thing contact = manualDimmer("dimmer");
+        ItemChannelLink contactLink = new ItemChannelLink("ContactValue", new ChannelUID(contact.getUID(), "dimmer"));
         when(things.getAll()).thenReturn(List.of(contact, endpoint, poller));
         when(things.getProvider(contact)).thenReturn(owner);
         when(links.getAll()).thenReturn(List.of(contactLink));
@@ -178,8 +179,8 @@ class ProviderOwnedMigrationPreviewTest {
     @Test
     void allManualContactPollerConfigurationDriftInvalidatesReview() {
         var adapter = adapter();
-        Thing contact = contact("contact");
-        ItemChannelLink contactLink = new ItemChannelLink("ContactValue", new ChannelUID(contact.getUID(), "contact"));
+        Thing contact = manualDimmer("dimmer");
+        ItemChannelLink contactLink = new ItemChannelLink("ContactValue", new ChannelUID(contact.getUID(), "dimmer"));
         when(things.getAll()).thenReturn(List.of(contact, endpoint, poller));
         when(things.getProvider(contact)).thenReturn(owner);
         when(links.getAll()).thenReturn(List.of(contactLink));
@@ -250,7 +251,7 @@ class ProviderOwnedMigrationPreviewTest {
     @Test
     void partialCandidateKeepsLegacyPollingForContactTransformedAndManagedConsumers() {
         var adapter = adapter();
-        Thing contact = contact("contact");
+        Thing contact = manualDimmer("dimmer");
         Thing transformed = number("transformed", poller.getUID());
         transformed.getConfiguration().put("readTransform", "JS(SENTINEL-transform)");
         Thing managed = number("managed", poller.getUID());
@@ -258,7 +259,7 @@ class ProviderOwnedMigrationPreviewTest {
         when(things.getProvider(contact)).thenReturn(owner);
         when(things.getProvider(transformed)).thenReturn(owner);
         when(things.getProvider(managed)).thenReturn(mock(org.openhab.core.thing.ManagedThingProvider.class));
-        ItemChannelLink contactLink = new ItemChannelLink("ContactValue", new ChannelUID(contact.getUID(), "contact"));
+        ItemChannelLink contactLink = new ItemChannelLink("ContactValue", new ChannelUID(contact.getUID(), "dimmer"));
         when(links.getAll()).thenReturn(List.of(link, contactLink));
         when(links.getProvider(contactLink)).thenReturn(linkOwner);
         var preview = adapter.preview();
@@ -315,12 +316,12 @@ class ProviderOwnedMigrationPreviewTest {
         assertEquals(profileDrift, adapter.preview());
     }
 
-    private Thing contact(String id) {
+    private Thing manualDimmer(String id) {
         return ThingBuilder.create(data.getThingTypeUID(), new ThingUID("modbus:data:plant:holding:" + id))
                 .withBridge(poller.getUID())
                 .withConfiguration(new Configuration(Map.of("readStart", "100.0", "readValueType", "bit")))
-                .withChannel(ChannelBuilder.create(new ChannelUID("modbus:data:plant:holding:" + id + ":contact"))
-                        .withAcceptedItemType("Contact").build())
+                .withChannel(ChannelBuilder.create(new ChannelUID("modbus:data:plant:holding:" + id + ":dimmer"))
+                        .withAcceptedItemType("Dimmer").build())
                 .build();
     }
 

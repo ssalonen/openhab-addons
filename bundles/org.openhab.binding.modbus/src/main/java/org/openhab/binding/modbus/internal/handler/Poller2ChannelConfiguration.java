@@ -38,6 +38,11 @@ public final class Poller2ChannelConfiguration {
 
     public static Poller2ChannelConfiguration create(String channelId, Map<String, Object> configuration, int pollStart,
             int pollLength) {
+        return create(channelId, configuration, pollStart, pollLength, "Number");
+    }
+
+    public static Poller2ChannelConfiguration create(String channelId, Map<String, Object> configuration, int pollStart,
+            int pollLength, String itemType) {
         Object address = configuration.get("address");
         if (!(address instanceof String addressText) || addressText.isBlank()) {
             return error("Channel '%s' is missing required configuration 'address'".formatted(channelId));
@@ -68,7 +73,7 @@ public final class Poller2ChannelConfiguration {
         final Poller2Channel channel;
         try {
             channel = new Poller2Channel(addressText, parsedValueType, parsedErrorPolicy,
-                    transformation(configuration.get("readTransform")));
+                    transformation(configuration.get("readTransform")), itemType);
         } catch (IllegalArgumentException e) {
             return error("Channel '%s' has invalid address '%s'; expected X or X.Y".formatted(channelId, addressText));
         }

@@ -37,6 +37,7 @@ public final class Poller2Channel {
     private final ValueType valueType;
     private final ModbusTransformation transformation;
     private final PollerChannelState state;
+    private String itemType = "Number";
     private org.openhab.binding.modbus.migration.ModbusReadEvidence evidence = new org.openhab.binding.modbus.migration.ModbusReadEvidence(
             UnDefType.UNDEF, UnDefType.UNDEF,
             org.openhab.binding.modbus.migration.ModbusReadEvidence.Provenance.DECODE_FAILURE);
@@ -90,31 +91,27 @@ public final class Poller2Channel {
             state.acceptReadFailure();
             return state.currentState();
         }
-        State decoded = UnDefType.UNDEF;
-        if (decodedValue.isPresent()) {
-            decoded = transform(decodedValue.get());
+        evidence = org.openhab.binding.modbus.migration.ModbusReadEvidence.decode(
+                java.util.Objects.requireNonNull(decodedValue.<State> map(value -> value).orElse(UnDefType.UNDEF)),
+                itemType, transformation);
+        if (evidence
+                .provenance() == org.openhab.binding.modbus.migration.ModbusReadEvidence.Provenance.TRANSFORM_FAILURE) {
+            state.acceptReadFailure();
+        } else {
+            state.acceptSuccessfulState(evidence.value());
         }
-        if (decodedValue.isPresent() && transformation.isIdentityTransform()) {
-            evidence = new org.openhab.binding.modbus.migration.ModbusReadEvidence(decoded, decodedValue.get(),
-                    org.openhab.binding.modbus.migration.ModbusReadEvidence.Provenance.DECODED);
-        }
-        state.acceptSuccessfulState(decoded);
         return state.currentState();
     }
 
-    private State transform(DecimalType decoded) {
-        if (transformation.isIdentityTransform()) {
-            return decoded;
-        }
-        Optional<org.openhab.core.types.Command> transformed = ModbusTransformation
-                .tryConvertToCommand(transformation.transform(decoded.toString()));
-        if (transformed.isPresent() && transformed.get() instanceof State transformedState) {
-            return transformedState;
-        }
-        return UnDefType.UNDEF;
+    public Poller2Channel(String address, ValueType valueType, PollerReadFailurePolicy failurePolicy,
+            List<String> readTransform, String itemType) {
+        this(address, valueType, failurePolicy, readTransform);
+        this.itemType = itemType;
     }
 
     public synchronized State acceptReadFailure() {
+        evidence = new org.openhab.binding.modbus.migration.ModbusReadEvidence(UnDefType.UNDEF, UnDefType.UNDEF,
+                org.openhab.binding.modbus.migration.ModbusReadEvidence.Provenance.TRANSPORT_FAILURE);
         state.acceptReadFailure();
         return state.currentState();
     }

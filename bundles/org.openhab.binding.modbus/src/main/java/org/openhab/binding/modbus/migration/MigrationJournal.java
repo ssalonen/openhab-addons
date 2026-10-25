@@ -33,11 +33,14 @@ import com.google.gson.reflect.TypeToken;
  */
 @NonNullByDefault
 final class MigrationJournal {
+    // Version 2 requires the reviewed target's explicit legacy-compatible read failure policy.
+    static final int REVIEW_SAFETY_VERSION = 2;
+
     record Workflow(MigrationPreview preview, List<LegacyPoller> pollers, List<LegacyData> data, String outcome,
             String stagedAt, List<String> switched, List<ManualMigrationWork> providerWork, int reviewSafetyVersion) {
         Workflow(MigrationPreview preview, List<LegacyPoller> pollers, List<LegacyData> data, String outcome,
                 String stagedAt, List<String> switched, List<ManualMigrationWork> providerWork) {
-            this(preview, pollers, data, outcome, stagedAt, switched, providerWork, 1);
+            this(preview, pollers, data, outcome, stagedAt, switched, providerWork, REVIEW_SAFETY_VERSION);
         }
     }
 
@@ -68,7 +71,11 @@ final class MigrationJournal {
     void workflow(Workflow workflow) {
         String reviewKey = "v1:review:" + workflow.preview().identity();
         if (!local.containsKey(reviewKey)) {
-            put(reviewKey, gson.toJson(workflow));
+            // Recovery may reconstruct a missing immutable review, but must never upgrade its stored contract.
+            String persisted = local.get("v1:workflow:" + workflow.preview().identity());
+            Workflow original = persisted == null ? workflow
+                    : Objects.requireNonNull(gson.fromJson(persisted, Workflow.class));
+            put(reviewKey, gson.toJson(original));
         }
         Workflow review = Objects.requireNonNull(gson.fromJson(local.get(reviewKey), Workflow.class));
         Workflow outcome = new Workflow(review.preview(), review.pollers(), review.data(), workflow.outcome(),
